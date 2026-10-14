@@ -78,7 +78,8 @@ button { font-family: inherit; }
 
 /* ── Cards ───────────────────────────────────── */
 #hand { position: absolute; left: 50%; bottom: 0; width: 0; height: 0; z-index: 20; }
-.card { position: absolute; width: var(--card-w); height: var(--card-h); left: calc(var(--card-w) / -2); bottom: 0; transform-origin: 50% 100%; transition: transform .18s ease-out, filter .18s; cursor: grab; touch-action: none; }
+/* --card-h is recomputed per card so a local --card-w (previews, rewards) keeps the proportions. */
+.card { --card-h: calc(var(--card-w) * 1.42); position: absolute; width: var(--card-w); height: var(--card-h); left: calc(var(--card-w) / -2); bottom: 0; transform-origin: 50% 100%; transition: transform .18s ease-out, filter .18s; cursor: grab; touch-action: none; }
 .card-frame { position: absolute; inset: 0; border-radius: 9px; background: linear-gradient(160deg, #4a3a28, #231910 55%, #3a2a1a); border: 2px solid #c79a46; box-shadow: inset 0 0 0 2px #2a1c0c, 0 6px 14px #000c; overflow: hidden; }
 .card.spell .card-frame { background: linear-gradient(160deg, #2c3448, #141822 55%, #262e40); border-color: #9ab4d8; }
 .card-art { position: absolute; left: 7%; right: 7%; top: 6%; height: 44%; border-radius: 40% 40% 6px 6px / 22% 22% 6px 6px; background: #1a1410 center 25% / cover no-repeat; border: 2px solid #1a1008; box-shadow: inset 0 -12px 18px #0008; }
@@ -148,11 +149,19 @@ button { font-family: inherit; }
 
 .card.in-hand { transform: translate(var(--x), var(--y)) rotate(var(--r)); }
 .card.in-hand.hover { transform: translate(var(--x), calc(var(--card-h) * -0.5)) scale(1.6); z-index: 50 !important; }
-.card.in-hand.aiming { transform: translate(var(--x), calc(var(--card-h) * -1.1)) scale(1.25); z-index: 60 !important; }
+/* The card being aimed stays in the hand, dimmed; its large copy sits on the left (#aim-preview). */
+.card.in-hand.aiming { transform: translate(var(--x), calc(var(--y) - var(--card-h) * 0.12)) rotate(var(--r)); opacity: .45; z-index: 60 !important; }
+.card.dragging { opacity: .9; }
+#aim-preview { position: absolute; left: calc(2vh + env(safe-area-inset-left)); top: 46%; transform: translateY(-50%); display: none; gap: 1.2vh; align-items: flex-start; pointer-events: none; z-index: 61; }
+#aim-preview.show { display: flex; }
+#aim-preview .card { position: relative; left: 0; --card-w: min(22vh, 230px); animation: previewIn .18s ease-out; }
+#aim-preview .card .card-frame { box-shadow: inset 0 0 0 2px #2a1c0c, 0 0 0 3px #6dff9a, 0 0 22px #3aff8a; }
+#aim-preview .notes { width: 22vh; display: flex; flex-direction: column; gap: .8vh; }
+@keyframes previewIn { from { opacity: 0; translate: -30px 0; scale: .9; } }
 .card.shake { animation: shake .3s; }
 @keyframes shake { 25% { translate: -6px 0; } 75% { translate: 6px 0; } }
-#played-card { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(1); z-index: 65; pointer-events: none; }
-#played-card .card { position: relative; left: 0; --card-w: min(20vh, 210px); }
+#played-card { position: fixed; left: calc(2vh + env(safe-area-inset-left)); top: 46%; transform: translateY(-50%); z-index: 65; pointer-events: none; }
+#played-card .card { position: relative; left: 0; --card-w: min(22vh, 230px); }
 
 /* Short landscape screens (phones): bigger cards and HUD relative to height. */
 @media (max-height: 520px) {
@@ -169,8 +178,13 @@ button { font-family: inherit; }
   #inspect .notes { width: 34vh; }
   #stage-plaque { padding: .6vh 1.6vh; }
   #stage-title { font-size: 13px; }
-  #stage-sub,   /* A tapped card lifts high and large enough to read. */
-  .card.in-hand.aiming { transform: translate(var(--x), calc(var(--card-h) * -1.25)) scale(1.9); }
+  #stage-sub { font-size: 11px; }
+  #enemy-frame { width: 13vh; height: 13vh; }
+  #enemy-info { font-size: 11px; }
+  /* The card being played is shown large on the left. */
+  #aim-preview { top: 50%; }
+  #aim-preview .card, #played-card .card { --card-w: 32vh; }
+  #aim-preview .notes { width: 30vh; }
   .card.in-hand.hover:not(.aiming) { transform: translate(var(--x), var(--y)) rotate(var(--r)); }
   .bundle { width: min(29vw, 300px); padding: 1vh .8vh; }
   .bundle .card, .deck-grid .card { --card-w: min(8.6vw, 20vh); }

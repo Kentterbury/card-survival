@@ -685,14 +685,17 @@ class App {
 
   private startAim(aim: Aim) {
     this.aim = aim;
+    $('inspect').classList.remove('show');
     if (aim.kind === 'card') {
+      // The card being played is shown large on the left, out of the board's way.
       aim.el.classList.add('aiming');
-      const notes = keywordNotes(aim.el.dataset.defId!);
-      const inspect = $('inspect');
-      inspect.innerHTML = notes ? `<div class="notes">${notes}</div>` : '';
-      inspect.classList.toggle('show', !!notes);
-    } else {
-      $('inspect').classList.remove('show');
+      const defId = aim.el.dataset.defId!;
+      const preview = $('aim-preview');
+      preview.innerHTML = '';
+      preview.appendChild(createCardElement(defId));
+      const notes = keywordNotes(defId);
+      if (notes) preview.insertAdjacentHTML('beforeend', `<div class="notes">${notes}</div>`);
+      preview.classList.add('show');
     }
     this.updateAimVisuals();
   }
@@ -706,6 +709,7 @@ class App {
     }
     this.aim = null;
     $('inspect').classList.remove('show');
+    $('aim-preview').classList.remove('show');
     $('arrow-path').setAttribute('d', '');
     $('enemy-frame').classList.remove('targetable', 'hover');
     this.renderThreats();
@@ -809,10 +813,11 @@ class App {
       if (aim.el.classList.contains('dragging')) {
         const tx = x - window.innerWidth / 2;
         const ty = y - window.innerHeight + aim.el.offsetHeight / 2;
-        aim.el.style.transform = `translate(${tx}px, ${ty}px) scale(${this.overHand(y) ? 1.1 : 0.85})`;
+        // A small ghost follows the pointer; the full card is shown on the left.
+        aim.el.style.transform = `translate(${tx}px, ${ty}px) scale(${this.overHand(y) ? 0.9 : 0.5})`;
       } else if (kind !== 'slot' && kind !== 'none') {
-        const r = aim.el.getBoundingClientRect();
-        from = { x: r.left + r.width / 2, y: r.top + r.height * 0.15 };
+        const r = $('aim-preview').querySelector('.card')!.getBoundingClientRect();
+        from = { x: r.right, y: r.top + r.height * 0.4 };
       }
     } else {
       const r = $('hero-power').getBoundingClientRect();
