@@ -111,6 +111,7 @@ export type GameEvent =
   | { type: 'wardBroken'; uid: number }
   | { type: 'heal'; target: HitTarget; amount: number }
   | { type: 'wardGained'; uid: number }
+  | { type: 'explosion'; lane: number; row: number }
   | { type: 'buff'; uid: number; attack: number; health: number }
   | { type: 'freeze'; uid: number }
   | { type: 'death'; uid: number }

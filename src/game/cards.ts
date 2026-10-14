@@ -1,5 +1,5 @@
 import type { Rng } from './rng';
-import type { Keyword, ModelId, Side, Target, TargetKind, Unit } from './types';
+import { forward, LAST_ROW, type Keyword, type ModelId, type Side, type Target, type TargetKind, type Unit } from './types';
 
 /** What card effects may do. Everything is relative to the side that plays the card. */
 export interface EffectApi {
@@ -29,6 +29,10 @@ export interface EffectApi {
   /** Summon on the caster's home row (no-op if that cell is taken). */
   summon(defId: string, lane: number): void;
   freeHomeLanes(): number[];
+  /** Every living unit (either side) in the 8 cells around a cell. */
+  unitsAround(lane: number, row: number): Unit[];
+  /** Purely visual: an explosion at a cell. */
+  explode(lane: number, row: number): void;
 }
 
 export type Rarity = 'basic' | 'common' | 'rare' | 'epic';
@@ -139,8 +143,14 @@ const CARD_LIST: CardDef[] = [
   },
   {
     id: 'bomber', name: '화염 폭탄병', type: 'minion', cost: 3, rarity: 'common', attack: 2, health: 3, model: 'Barbarian', scale: 0.95,
-    text: '<b>파괴 시:</b> 이 줄의 적 모두에게 피해 2.',
-    onDeath: (api, self) => { for (const m of api.foesInLane(self.lane)) api.damage({ kind: 'unit', uid: m.uid }, 2); },
+    text: '<b>파괴 시:</b> 주변 1칸의 모든 캐릭터에게 피해 2(적 영웅 바로 앞이면 영웅도).',
+    onDeath: (api, self) => {
+      api.explode(self.lane, self.row);
+      for (const u of api.unitsAround(self.lane, self.row)) api.damage({ kind: 'unit', uid: u.uid }, 2);
+      // On the foe's last row the opposing hero is right next to it.
+      const next = self.row + forward(api.side);
+      if (next < 0 || next > LAST_ROW) api.damageFoeHero(2);
+    },
   },
   {
     id: 'siege_mage', name: '공성 마법사', type: 'minion', cost: 5, rarity: 'rare', attack: 2, health: 5, model: 'Mage', keywords: ['ranged'], speed: 0, scale: 1.1,

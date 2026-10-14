@@ -306,6 +306,14 @@ class App {
         await wait(0.15);
         return;
       }
+      case 'explosion': {
+        const at = cellPos(e.lane, e.row).setY(0.8);
+        this.fx.burst(at, 0xff7a1a, 40, 6);
+        this.fx.burst(at, 0xffd34d, 20, 4);
+        this.board.addShake(0.45);
+        await wait(0.25);
+        return;
+      }
       case 'wardGained':
         this.views.get(e.uid)?.setWard(true);
         await wait(0.08);

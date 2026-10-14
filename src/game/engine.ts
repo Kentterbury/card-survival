@@ -497,6 +497,9 @@ export class Game {
       advance: (uid, rows) => this.shove(uid, rows, dir),
       summon: (defId, lane) => this.summonUnit(side, defId, lane),
       freeHomeLanes: () => this.freeHomeLanes(side),
+      unitsAround: (lane, row) => this.state.units.filter((u) =>
+        u.health > 0 && Math.abs(u.lane - lane) <= 1 && Math.abs(u.row - row) <= 1 && !(u.lane === lane && u.row === row)),
+      explode: (lane, row) => this.emit({ type: 'explosion', lane, row }),
     };
   }
 }

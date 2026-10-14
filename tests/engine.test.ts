@@ -185,16 +185,36 @@ describe('new cards', () => {
     return g;
   };
 
-  it('화염 폭탄병 hits every foe in its lane when it dies', () => {
+  it('화염 폭탄병 blasts every character around it when it dies', () => {
     const g = freshGame(Array(10).fill('squire'));
     const bomber = place(g, 'bomber', 'player', 2, 2);
     bomber.health = 1;
-    const a = place(g, 'sk_warrior', 'enemy', 2, 3);
-    const b = place(g, 'sk_minion', 'enemy', 2, 5);
+    const front = place(g, 'sk_warrior', 'enemy', 2, 3);
+    const diag = place(g, 'sk_minion', 'enemy', 3, 3);
+    const ally = place(g, 'shieldbearer', 'player', 1, 2);
+    const far = place(g, 'sk_minion', 'enemy', 2, 5);
+    const hp = g.side('enemy').hero.health;
     g.side('enemy').hand = [];
     g.endTurn();
-    expect(b.health).toBeLessThanOrEqual(0);
-    expect(a.health).toBeLessThan(4);
+    expect(diag.health).toBeLessThanOrEqual(0);
+    expect(front.health).toBeLessThan(4);
+    expect(ally.keywords.has('ward')).toBe(false); // ally caught in the blast (ward soaked it)
+    expect(far.health).toBe(2);
+    expect(g.side('enemy').hero.health).toBe(hp);
+  });
+
+  it('화염 폭탄병 on the last row also hits the enemy hero', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const bomber = place(g, 'bomber', 'player', 1, LAST_ROW);
+    bomber.health = 1;
+    const hp = g.side('enemy').hero.health;
+    // The enemy kills it with a curse on its own turn.
+    g.state.phase = 'enemy';
+    g.side('enemy').hand = [{ iid: 1, defId: 'e_curse' }];
+    g.side('enemy').mana = 1;
+    expect(g.playCardAs('enemy', 0, { kind: 'unit', uid: bomber.uid })).toBe(true);
+    expect(g.unit(bomber.uid)).toBeUndefined();
+    expect(g.side('enemy').hero.health).toBe(hp - 2);
   });
 
   it('공성 마법사 holds its ground and burns the enemy hero each turn', () => {
