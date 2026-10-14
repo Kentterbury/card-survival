@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>카드 서바이벌</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <div id="badges"></div>
+    <div id="float-layer"></div>
+    <svg id="arrow-layer"><defs>
+      <marker id="arrowhead" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M0 0 10 5 0 10z" fill="#ffd34d" />
+      </marker></defs>
+      <path id="arrow-path" d="" />
+    </svg>
+
+    <div id="hud" class="hidden">
+      <div id="stage-plaque">
+        <div id="stage-title"></div>
+        <div id="stage-sub"></div>
+      </div>
+      <div id="next-wave"></div>
+      <div id="hero-frame">
+        <div id="hero-portrait"></div>
+        <div id="hero-hp"></div>
+        <button id="hero-power" title="">
+          <span class="hp-cost">2</span>
+          <span class="hp-icon"></span>
+        </button>
+      </div>
+      <div id="deck-info">
+        <button id="deck-btn" title="덱 보기"><span id="deck-count">0</span></button>
+        <div id="discard-count" title="버린 카드"></div>
+      </div>
+      <button id="end-turn"><span>턴 종료</span></button>
+      <div id="mana-bar"><div id="mana-text"></div><div id="mana-gems"></div></div>
+      <div id="hand"></div>
+      <div id="inspect"></div>
+    </div>
+
+    <div id="banner"></div>
+    <div id="modal" class="hidden"></div>
+    <div id="loading">
+      <div class="loading-title">카드 서바이벌</div>
+      <div class="loading-bar"><div id="loading-fill"></div></div>
+      <div id="loading-text">에셋 불러오는 중…</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

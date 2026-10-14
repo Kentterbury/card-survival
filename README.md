@@ -1,0 +1,63 @@
+# 카드 서바이벌 (Card Survival)
+
+하스스톤식 카드 운영과 디펜스를 섞은 **턴제 HTML5 게임**입니다. 브라우저에서 바로 돌아가며, Three.js로 3D 보드를 그리고 카드·HUD는 DOM으로 구성했습니다.
+
+- 정해진 스테이지 5개(마지막은 보스). 몬스터는 전방의 성문에서 나와 5개 줄을 따라 다가옵니다.
+- 손패·마나·하수인·주문 구조는 하스스톤과 비슷하지만, 규칙과 용어, 카드 디자인은 독자적으로 만들었습니다. 자세한 내용은 [docs/DESIGN.md](docs/DESIGN.md)를 보세요.
+- 스테이지를 클리어하면 카드 꾸러미(3장) 하나를 골라 덱에 추가합니다(던전 런 방식).
+
+## 실행
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm run build      # dist/ 에 정적 파일 생성
+npm test           # 규칙 엔진 테스트 + 봇 시뮬레이션
+```
+
+`?speed=4` 쿼리를 붙이면 모든 연출이 빨라집니다(테스트용).
+
+## 조작
+
+| 동작 | 방법 |
+|---|---|
+| 카드 사용 | 카드를 끌어다 놓기, 또는 카드 클릭 후 대상 클릭 |
+| 하수인 공격 | 아군 하수인을 끌어 몬스터에 놓기(또는 클릭 → 클릭) |
+| 영웅 능력 | 왼쪽 아래 번개 버튼 → 몬스터 |
+| 취소 | 우클릭 / ESC |
+| 턴 종료 | 오른쪽 버튼 / Space |
+
+## 구조
+
+```
+src/
+  game/        규칙 엔진 (렌더링과 무관한 순수 TS — 테스트 대상)
+    engine.ts    턴 진행, 전투, 스테이지/보상 흐름, 이벤트 발행
+    cards.ts     카드 정의와 효과
+    monsters.ts  몬스터 정의
+    stages.ts    스테이지별 웨이브 스크립트
+    rewards.ts   보상 꾸러미
+  render/      Three.js (보드, 유닛, 이펙트, 초상화 렌더링)
+  ui/          카드 DOM, 아이콘
+  sim/bot.ts   밸런스 확인용 자동 플레이 봇
+  main.ts      게임 ↔ 3D ↔ UI 연결, 입력, 이벤트 연출 재생
+tests/         vitest
+tools/optimize-assets.mjs   에셋 최적화 스크립트
+```
+
+규칙 엔진은 행동마다 `GameEvent[]`를 반환하고, `main.ts`가 이 이벤트를 순서대로 연출한 뒤 최종 상태와 화면을 동기화합니다. 규칙을 바꿀 때 렌더링 코드를 건드릴 필요가 없습니다.
+
+## 에셋
+
+3D 모델과 애니메이션은 모두 [KayKit](https://kaylousberg.com)의 **CC0(퍼블릭 도메인)** 팩입니다. 공개 저장소에 올려도 문제가 없습니다. 출처는 [public/assets/LICENSES.md](public/assets/LICENSES.md)에 정리했습니다.
+
+- Adventurers(아군 하수인), Skeletons(몬스터), Dungeon Remastered(배경)
+- 모든 캐릭터가 같은 리그를 쓰기 때문에, 애니메이션은 공용 라이브러리 파일 두 개로 분리했습니다. 원본 37MB를 3MB로 줄였습니다.
+
+에셋을 다시 만들려면 KayKit 저장소들을 한 폴더에 받은 뒤 다음을 실행합니다.
+
+```bash
+node tools/optimize-assets.mjs <KayKit 저장소들이 있는 폴더>
+```
+
+> Synty 등 유료 에셋은 원본 파일이 그대로 공개되면 안 되므로, 이 공개 저장소에는 넣지 않았습니다.
