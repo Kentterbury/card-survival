@@ -7,14 +7,18 @@ export function playTurn(game: Game) {
   if (game.state.phase === 'player') game.endTurn();
 }
 
-export function playRun(game: Game, maxTurns = 600): { stagesCleared: number; won: boolean; turns: number } {
-  game.startRun();
+export function playRun(game: Game, maxTurns = 600, hero = 'captain'): { stagesCleared: number; won: boolean; turns: number } {
+  game.startRun(undefined, hero);
   let turns = 0;
   while (turns < maxTurns) {
     const s = game.state;
     if (s.phase === 'victory' || s.phase === 'defeat') break;
     if (s.phase === 'reward') {
       game.chooseReward(0);
+      continue;
+    }
+    if (s.phase === 'camp') {
+      game.campRest();
       continue;
     }
     playTurn(game);

@@ -257,3 +257,19 @@ button { font-family: inherit; }
 .deck-grid { gap: 3.2vh 2.6vh; padding: 0 1.5vh 1.5vh; }
 .bundle .mini-cards { gap: 1.8vw; padding: 0 1vh 1.6vh; }
 #inspect .card, #aim-preview .card, #played-card .card { margin: 0 1.4vh 2.6vh; }
+
+/* ── Hero select & camp ──────────────────────── */
+.heroes { display: flex; flex-wrap: wrap; justify-content: center; gap: 2vw; margin: 2vh 0; }
+.hero-pick { width: min(26vw, 280px); padding: 1.6vh 1.4vh; background: #0009; border: 2px solid #4a3818; border-radius: 12px; cursor: pointer; transition: transform .15s, border-color .15s; }
+.hero-pick:hover { transform: translateY(-6px); border-color: var(--gold); box-shadow: 0 0 24px #f2c35b55; }
+.hero-face { width: 13vh; height: 13vh; margin: 0 auto 1vh; border-radius: 50%; border: 3px solid var(--gold); background: #241a12 center 20% / 150% no-repeat; }
+.hero-pick h3 { margin: 0; font-family: 'Gowun Batang', serif; color: var(--gold); font-size: clamp(16px, 2.6vh, 26px); }
+.hero-pick .theme { font-size: clamp(11px, 1.6vh, 15px); opacity: .85; margin-bottom: 1vh; }
+.hero-power-desc, .hero-blurb { font-size: clamp(11px, 1.6vh, 15px); line-height: 1.4; margin-top: .8vh; }
+.hero-power-desc b { color: var(--gold); }
+.bundle.disabled { opacity: .4; pointer-events: none; }
+#resume-btn { margin-bottom: .4vh; }
+@media (max-height: 520px) {
+  .hero-face { width: 16vh; height: 16vh; }
+  .hero-pick { padding: 1vh; }
+}

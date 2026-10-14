@@ -1,5 +1,6 @@
 import { aiTakeTurn } from './ai';
-import { card, CARDS, STARTER_DECK, type EffectApi, type MinionCard } from './cards';
+import { heroDef, POWERS, type HeroPower } from './heroes';
+import { card, CARDS, type EffectApi, type MinionCard } from './cards';
 import { rollRewards } from './rewards';
 import { Rng } from './rng';
 import { STAGES, type EnemyPower } from './stages';
@@ -11,9 +12,18 @@ import {
 } from './types';
 
 export const HERO_MAX_HEALTH = 30;
-export const HEAL_BETWEEN_STAGES = 10;
+/** Health restored by resting at the camp between stages. */
+export const CAMP_HEAL = 12;
 export const HERO_POWER_DAMAGE = 1;
-export const PLAYER_HERO = { name: '수비대장', model: 'Knight' as const, scale: 1.3 };
+
+/** Where a saved run resumes: the start of `stage`, with this deck and health. */
+export interface RunSave {
+  hero: string;
+  deck: string[];
+  stage: number;
+  stagesCleared: number;
+  health: number;
+}
 
 export interface GameState {
   phase: Phase;
@@ -28,6 +38,8 @@ export interface GameState {
   rewards: RewardBundle[];
   /** Set while a 탐색 pick is waiting for an answer. */
   choice: PendingChoice | null;
+  /** The player's hero (see heroes.ts). */
+  heroId: string;
 }
 
 export class Game {
@@ -44,17 +56,37 @@ export class Game {
 
   // ── Run / stage flow ─────────────────────────────────────────
 
-  startRun(deck: string[] = STARTER_DECK): GameEvent[] {
+  /**
+   * Starts a run. `deck` overrides the hero's starter deck (tests); `resume`
+   * continues a saved run at the start of its stage.
+   */
+  startRun(deck?: string[], heroId = 'captain', resume?: RunSave): GameEvent[] {
+    const hero = heroDef(resume?.hero ?? heroId);
+    const maxHealth = hero.health;
     this.state = {
-      phase: 'player', stage: 0, turn: 0, stagesCleared: 0,
-      deckList: [...deck],
+      phase: 'player', stage: resume?.stage ?? 0, turn: 0, stagesCleared: resume?.stagesCleared ?? 0,
+      deckList: [...(resume?.deck ?? deck ?? hero.deck)],
+      heroId: hero.id,
       sides: {
-        player: this.emptySide({ ...PLAYER_HERO, health: HERO_MAX_HEALTH, maxHealth: HERO_MAX_HEALTH }),
-        enemy: this.emptySide({ ...PLAYER_HERO, health: 1, maxHealth: 1 }),
+        player: this.emptySide({ name: hero.name, model: hero.model, scale: 1.3, health: resume?.health ?? maxHealth, maxHealth }),
+        enemy: this.emptySide({ name: '', model: 'Skeleton_Minion', scale: 1, health: 1, maxHealth: 1 }),
       },
       units: [], rewards: [], choice: null,
     };
     return this.collect(() => this.beginStage());
+  }
+
+  /** Snapshot for saving: resumes at the start of the next (or current) stage. */
+  saveData(): RunSave {
+    const s = this.state;
+    // At the camp the reward is already in the deck, so resume at the next stage.
+    const stage = s.phase === 'camp' ? s.stage + 1 : s.stage;
+    return { hero: s.heroId, deck: [...s.deckList], stage, stagesCleared: s.stagesCleared, health: s.sides.player.hero.health };
+  }
+
+  /** The 지휘술 a side uses. */
+  powerOf(side: Side): HeroPower {
+    return side === 'player' ? POWERS[heroDef(this.state.heroId).power] : POWERS[this.stageDef.power];
   }
 
   chooseReward(index: number): GameEvent[] {
@@ -64,6 +96,25 @@ export class Game {
     if (!bundle) return [];
     s.deckList.push(...bundle.cards);
     s.rewards = [];
+    s.phase = 'camp';
+    return [];
+  }
+
+  /** Camp option: rest and recover health, then move on. */
+  campRest(): GameEvent[] {
+    const s = this.state;
+    if (s.phase !== 'camp') return [];
+    const hero = s.sides.player.hero;
+    hero.health = Math.min(hero.maxHealth, hero.health + CAMP_HEAL);
+    s.stage++;
+    return this.collect(() => this.beginStage());
+  }
+
+  /** Camp option: remove one card from the deck, then move on. */
+  campRemove(deckIndex: number): GameEvent[] {
+    const s = this.state;
+    if (s.phase !== 'camp' || !s.deckList[deckIndex] || s.deckList.length <= 5) return [];
+    s.deckList.splice(deckIndex, 1);
     s.stage++;
     return this.collect(() => this.beginStage());
   }
@@ -79,7 +130,7 @@ export class Game {
   /** True once the stage is decided (win, loss or reward screen). */
   get over(): boolean {
     const p = this.state.phase;
-    return p === 'reward' || p === 'victory' || p === 'defeat';
+    return p === 'reward' || p === 'camp' || p === 'victory' || p === 'defeat';
   }
 
   side(side: Side): SideState {
@@ -250,9 +301,8 @@ export class Game {
 
   heroPowerTargets(side: Side = 'player'): Target[] {
     const me = this.side(side);
-    if (this.state.phase !== side || me.powerUsed || me.mana < HERO_POWER_COST) return [];
-    const kind = side === 'enemy' && this.enemyPower === 'summon' ? 'slot' : 'foe';
-    return this.targetsOfKind(side, kind);
+    if (this.state.phase !== side || this.state.choice || me.powerUsed || me.mana < HERO_POWER_COST) return [];
+    return this.targetsOfKind(side, this.powerOf(side).target);
   }
 
   canUseHeroPower(): boolean {
@@ -269,8 +319,7 @@ export class Game {
     me.mana -= HERO_POWER_COST;
     me.powerUsed = true;
     this.emit({ type: 'heroPower', side, target });
-    if (target.kind === 'slot') this.summonUnit(side, 'sk_minion', target.lane);
-    else this.damage(target, HERO_POWER_DAMAGE);
+    this.powerOf(side).cast(this.apis[side], target);
     this.resolveDeaths();
     this.checkOutcome();
     return true;
@@ -290,8 +339,22 @@ export class Game {
       if (u.fresh && !u.keywords.has('swift')) continue;
       if (u.attack <= 0) continue;
       const target = this.targetAhead(u);
-      if (target) this.strike(u, target.hit, target.dist);
-      else this.advance(u);
+      if (target) {
+        const victim = typeof target.hit === 'string' ? null : target.hit;
+        const cell = victim ? { lane: victim.lane, row: victim.row } : null;
+        this.strike(u, target.hit, target.dist);
+        this.resolveDeaths();
+        if (this.checkOutcome()) return;
+        // 돌파: a melee kill lets the attacker step into the cell it cleared,
+        // so a stream of cheap blockers cannot stall a lane forever.
+        if (cell && victim!.health <= 0 && target.dist === 1 && u.health > 0 && u.speed > 0 && !this.unitAt(cell.lane, cell.row)) {
+          const from = u.row;
+          u.row = cell.row;
+          this.emit({ type: 'move', uid: u.uid, lane: u.lane, from, to: u.row });
+        }
+      } else {
+        this.advance(u);
+      }
       this.resolveDeaths();
       if (this.checkOutcome()) return;
     }
@@ -486,8 +549,6 @@ export class Game {
     if (s.sides.enemy.hero.health <= 0) {
       s.stagesCleared++;
       this.emit({ type: 'stageClear', stage: s.stage });
-      const hero = s.sides.player.hero;
-      hero.health = Math.min(hero.maxHealth, hero.health + HEAL_BETWEEN_STAGES);
       if (s.stage >= STAGES.length - 1) {
         s.phase = 'victory';
         this.emit({ type: 'victory' });

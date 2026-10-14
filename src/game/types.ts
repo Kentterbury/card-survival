@@ -107,7 +107,8 @@ export interface SideState {
   discard: CardInstance[];
 }
 
-export type Phase = 'player' | 'enemy' | 'reward' | 'victory' | 'defeat';
+/** `camp`: between stages, after picking a reward bundle (rest or trim the deck). */
+export type Phase = 'player' | 'enemy' | 'reward' | 'camp' | 'victory' | 'defeat';
 
 export interface RewardBundle {
   id: string;

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { card, CARDS, STARTER_DECK, type MinionCard } from '../src/game/cards';
-import { Game, HERO_MAX_HEALTH, unitSpeed } from '../src/game/engine';
+import { Game, unitSpeed } from '../src/game/engine';
+import { heroDef } from '../src/game/heroes';
 import { STAGES } from '../src/game/stages';
 import { LAST_ROW, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
+
+const START_HP = heroDef('captain').health;
 
 function freshGame(deck: string[]) {
   const g = new Game(42);
@@ -43,7 +46,7 @@ describe('turn structure', () => {
     expect(g.side('player').mana).toBe(1);
     expect(g.side('player').hand).toHaveLength(4);
     expect(g.side('enemy').hero.health).toBe(STAGES[0].hero.health);
-    expect(g.side('player').hero.health).toBe(HERO_MAX_HEALTH);
+    expect(g.side('player').hero.health).toBe(START_HP);
   });
 
   it('starter deck is mostly spells', () => {
@@ -90,6 +93,14 @@ describe('lane combat', () => {
     expect(mine.health).toBe(0);
   });
 
+  it('돌파: a melee kill moves the attacker into the cleared cell', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const b = place(g, 'berserker', 'player', 2, 3);
+    place(g, 'sk_minion', 'enemy', 2, 4).frozen = true;
+    passTurn(g);
+    expect(b.row).toBe(4);
+  });
+
   it('ranged units shoot the first foe ahead, over allies, without retaliation', () => {
     const g = freshGame(Array(10).fill('squire'));
     const xbow = place(g, 'crossbowman', 'player', 0, 0);
@@ -122,7 +133,7 @@ describe('lane combat', () => {
     place(g, 'sk_warrior', 'enemy', 3, 0);
     g.side('enemy').hand = [];
     g.endTurn();
-    expect(g.side('player').hero.health).toBe(HERO_MAX_HEALTH - 3);
+    expect(g.side('player').hero.health).toBe(START_HP - 3);
   });
 
   it('ward absorbs the first hit', () => {
@@ -155,6 +166,8 @@ describe('spells', () => {
     const size = g.state.deckList.length;
     g.chooseReward(0);
     expect(g.state.deckList).toHaveLength(size + 3);
+    expect(g.state.phase).toBe('camp');
+    g.campRest();
     expect(g.state.stage).toBe(1);
     expect(g.state.phase).toBe('player');
   });
@@ -481,7 +494,7 @@ describe('utility cards', () => {
   it('피의 계약 costs 3 health and draws 2', () => {
     const g = setup('blood_pact');
     g.playCard(0, { kind: 'none' });
-    expect(g.side('player').hero.health).toBe(HERO_MAX_HEALTH - 3);
+    expect(g.side('player').hero.health).toBe(START_HP - 3);
     expect(g.side('player').hand).toHaveLength(2);
   });
 
@@ -584,10 +597,74 @@ describe('utility cards', () => {
   });
 });
 
+describe('heroes, camp and saves', () => {
+  it('each hero starts with its own deck, health and 지휘술', async () => {
+    const { HEROES } = await import('../src/game/heroes');
+    for (const h of HEROES) {
+      const g = new Game(3);
+      g.startRun(undefined, h.id);
+      expect(g.side('player').hero.health).toBe(h.health);
+      expect([...g.state.deckList].sort()).toEqual([...h.deck].sort());
+      expect(g.powerOf('player').id).toBe(h.power);
+    }
+  });
+
+  it('비전 통찰 draws a card and 돌격 명령 gives an ally +1/+1 and pushes it forward', () => {
+    const a = new Game(4);
+    a.startRun(undefined, 'arcanist');
+    a.side('player').mana = 2;
+    const before = a.side('player').hand.length;
+    a.heroPower({ kind: 'none' });
+    expect(a.side('player').hand.length).toBe(before + 1);
+
+    const w = new Game(4);
+    w.startRun(undefined, 'warchief');
+    w.state.units = [];
+    w.side('player').mana = 2;
+    const u = place(w, 'squire', 'player', 2, 1);
+    w.heroPower({ kind: 'unit', uid: u.uid });
+    expect(u.attack).toBe(2);
+    expect(u.health).toBe(4);
+    expect(u.row).toBe(2);
+  });
+
+  it('the camp can trim a card instead of resting', () => {
+    const g = freshGame(Array(10).fill('pyroblast'));
+    g.side('player').mana = 10;
+    g.side('enemy').hero.health = 1;
+    g.playCard(0, { kind: 'hero', side: 'enemy' });
+    g.chooseReward(0);
+    const n = g.state.deckList.length;
+    const hp = g.side('player').hero.health;
+    g.campRemove(0);
+    expect(g.state.deckList).toHaveLength(n - 1);
+    expect(g.side('player').hero.health).toBe(hp);
+    expect(g.state.stage).toBe(1);
+  });
+
+  it('a save made at the camp resumes at the next stage with the same deck and health', () => {
+    const g = freshGame(Array(10).fill('pyroblast'));
+    g.side('player').mana = 10;
+    g.side('player').hero.health = 17;
+    g.side('enemy').hero.health = 1;
+    g.playCard(0, { kind: 'hero', side: 'enemy' });
+    g.chooseReward(0);
+    const save = JSON.parse(JSON.stringify(g.saveData()));
+    const r = new Game(9);
+    r.startRun(undefined, 'captain', save);
+    expect(r.state.stage).toBe(1);
+    expect(r.side('player').hero.health).toBe(17);
+    expect(r.state.deckList).toEqual(g.state.deckList);
+    expect(r.side('enemy').hero.name).toBe(STAGES[1].hero.name);
+  });
+});
+
 describe('data and simulation', () => {
   it('every referenced card exists', () => {
     for (const s of STAGES) for (const id of s.deck) expect(CARDS[id]).toBeDefined();
     for (const id of STARTER_DECK) expect(CARDS[id]).toBeDefined();
+    // every hero deck card exists too
+    void import('../src/game/heroes').then(({ HEROES }) => { for (const h of HEROES) for (const id of h.deck) expect(CARDS[id]).toBeDefined(); });
   });
 
   it('the bot can play whole runs without getting stuck', () => {

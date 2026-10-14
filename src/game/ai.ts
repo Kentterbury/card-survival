@@ -163,6 +163,13 @@ function resolvePendingChoice(g: Game, side: Side) {
 function pickPowerTarget(g: Game, side: Side): Target | null {
   const targets = g.heroPowerTargets(side);
   if (targets.length === 0) return null;
+  const kind = g.powerOf(side).target;
+  if (kind === 'none') return g.side(side).hand.length < 7 ? targets[0] : null;
+  if (kind === 'ally') {
+    const allies = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : [])).filter((u) => u.attack > 0);
+    const best = allies.sort((a, b) => b.attack - a.attack)[0];
+    return best ? { kind: 'unit', uid: best.uid } : null;
+  }
   if (targets[0].kind === 'slot') {
     const lanes = targets.flatMap((t) => (t.kind === 'slot' ? [t.lane] : []));
     return { kind: 'slot', lane: pickLane(g, side, lanes) };

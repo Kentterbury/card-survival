@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import './style.css';
 import { card, KEYWORD_INFO, type MinionCard } from './game/cards';
-import { Game, HEAL_BETWEEN_STAGES, HERO_MAX_HEALTH, HERO_POWER_DAMAGE, PLAYER_HERO, sameTarget } from './game/engine';
+import { CAMP_HEAL, Game, HERO_MAX_HEALTH, sameTarget, type RunSave } from './game/engine';
+import { heroDef, HEROES, POWERS } from './game/heroes';
 import { STAGES } from './game/stages';
 import {
   HERO_POWER_COST, LAST_ROW, MAX_MANA, RANGED_RANGE, ROWS,
@@ -54,10 +55,10 @@ class App {
     $('loading-text').textContent = '초상화 그리는 중…';
     setPortraits(await renderPortraits([...CHARACTER_MODELS, 'barrier']));
     await this.board.buildEnvironment();
-    $('hero-portrait').style.backgroundImage = `url(${portrait(PLAYER_HERO.model)})`;
-    $('hero-power').querySelector<HTMLElement>('.hp-icon')!.innerHTML = spellIconSvg('bolt');
-    this.bindTooltip($('hero-power'), () =>
-      `<b>지휘술 · 지휘의 번개</b> (${HERO_POWER_COST} 마나)<br>적 하나(영웅 포함)에게 피해를 ${HERO_POWER_DAMAGE} 줍니다. 턴마다 한 번 쓸 수 있습니다.`);
+    this.bindTooltip($('hero-power'), () => {
+      const p = this.game.state ? this.game.powerOf('player') : POWERS.bolt;
+      return `<b>지휘술 · ${p.name}</b> (${HERO_POWER_COST} 마나)<br>${p.text} 턴마다 한 번 쓸 수 있습니다.`;
+    });
     this.board.clearHighlights();
     this.bindInput();
     window.addEventListener('resize', () => {
@@ -99,12 +100,41 @@ class App {
 
   // ── Run flow ─────────────────────────────────────────────────
 
-  async startRun() {
+  async startRun(heroId: string, resume?: RunSave) {
     this.closeModal();
     void enterMobileFullscreen();
     this.game = new Game(Date.now() & 0x7fffffff);
+    const hero = heroDef(resume?.hero ?? heroId);
+    $('hero-portrait').style.backgroundImage = `url(${portrait(hero.model)})`;
+    const icon = { bolt: 'bolt', insight: 'scroll', charge: 'sword' } as const;
+    $('hero-power').querySelector<HTMLElement>('.hp-icon')!.innerHTML = spellIconSvg(icon[hero.power as keyof typeof icon] ?? 'bolt');
     $('hud').classList.remove('hidden');
-    await this.play(this.game.startRun());
+    await this.play(this.game.startRun(undefined, hero.id, resume));
+  }
+
+  // ── Save (per stage, in this browser) ────────────────────────
+
+  private static readonly SAVE_KEY = 'card-survival-save-v1';
+
+  private writeSave() {
+    try {
+      localStorage.setItem(App.SAVE_KEY, JSON.stringify(this.game.saveData()));
+    } catch {
+      // Storage may be unavailable (private mode); the run simply is not saved.
+    }
+  }
+
+  private readSave(): RunSave | null {
+    try {
+      const raw = localStorage.getItem(App.SAVE_KEY);
+      return raw ? (JSON.parse(raw) as RunSave) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private clearSave() {
+    try { localStorage.removeItem(App.SAVE_KEY); } catch { /* ignore */ }
   }
 
   async play(events: GameEvent[]) {
@@ -190,6 +220,7 @@ class App {
         $('history').innerHTML = '';
         await this.setupEnemyHero();
         this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };
+        this.writeSave();
         const st = STAGES[e.stage];
         this.renderHud();
         await this.banner(`스테이지 ${e.stage + 1} · ${st.hero.name}`, `${st.name} — ${st.subtitle}`, 1.8);
@@ -385,14 +416,21 @@ class App {
           await this.castingGlow();
           void this.enemyHero?.playOnce('Spellcast_Raise', 1);
         }
-        if (e.target.kind === 'unit' || e.target.kind === 'hero') {
+        if (e.target.kind === 'hero' || (e.target.kind === 'unit' && this.game.powerOf(e.side).target !== 'ally')) {
           await this.fx.projectile(this.casterPos(e.side), this.targetPos(e.target), e.side === 'player' ? 'hero' : 'curse', 22);
+        } else if (e.target.kind === 'unit') {
+          const v = this.views.get(e.target.uid);
+          if (v) this.fx.burst(v.group.position.clone().setY(1), 0xffd34d, 20, 2.5);
+          await wait(0.15);
+        } else if (e.target.kind === 'none') {
+          this.fx.burst(this.casterPos(e.side), 0x9ad8ff, 20, 2);
+          await wait(0.15);
         }
         return;
       case 'stageClear':
         for (const v of this.views.values()) if (v.side === 'player') void v.playOnce('Cheer', 1);
         if (this.enemyHero) await this.enemyHero.die();
-        await this.banner('승리!', `${STAGES[e.stage].hero.name} 처치 · 생명력 ${HEAL_BETWEEN_STAGES} 회복`, 1.8);
+        await this.banner('승리!', `${STAGES[e.stage].hero.name} 처치`, 1.8);
         return;
       case 'defeat':
         void this.enemyHero?.playOnce('Cheer', 1);
@@ -508,7 +546,7 @@ class App {
     const s = this.game.state;
     if (!s) return;
     const en = s.sides.enemy;
-    const power = this.game.enemyPower === 'summon' ? '해골 졸개 소환' : '적 하나에게 피해 1';
+    const power = this.game.powerOf('enemy').text;
     $('enemy-name').textContent = en.hero.name;
     $('enemy-mana').textContent = `마나 ${en.mana}/${en.maxMana} · 덱 ${en.drawPile.length}`;
     $('enemy-hand').innerHTML = en.hand.map((c) => (c.locked ? '<i class="locked"></i>' : '<i></i>')).join('');
@@ -659,15 +697,24 @@ class App {
       if (e.pointerType !== 'mouse') return; // touch: handled on release (tap) / long-press (tooltip)
       if (this.busy || !this.game.canUseHeroPower()) return;
       if (this.aim) this.cancelAim();
+      if (this.usePowerIfUntargeted()) return;
       this.startAim({ kind: 'power', sticky: false, x0: e.clientX, y0: e.clientY, moved: false });
     });
     $('hero-power').addEventListener('pointerup', (e) => {
       if (e.pointerType === 'mouse' || this.tooltipWasLongPress) return;
       if (this.busy || !this.game.canUseHeroPower()) return;
       if (this.aim) this.cancelAim();
+      if (this.usePowerIfUntargeted()) return;
       this.startAim({ kind: 'power', sticky: true, x0: e.clientX, y0: e.clientY, moved: false });
     });
     $('deck-btn').addEventListener('click', () => this.showDeck());
+  }
+
+  /** Powers without a target (비전 통찰) fire as soon as the button is pressed. */
+  private usePowerIfUntargeted(): boolean {
+    if (this.game.powerOf('player').target !== 'none') return false;
+    void this.play(this.game.heroPower({ kind: 'none' }));
+    return true;
   }
 
   private async endTurn() {
@@ -804,8 +851,8 @@ class App {
     const p = this.pick(x, y);
     const foe = (): Target | null =>
       p.enemyHero ? { kind: 'hero', side: 'enemy' } : p.unit?.side === 'enemy' ? { kind: 'unit', uid: p.unit.uid } : null;
-    if (aim.kind === 'power') return foe();
-    switch (this.cardTargetKind(aim.handIndex)) {
+    const kind = aim.kind === 'power' ? this.game.powerOf('player').target : this.cardTargetKind(aim.handIndex);
+    switch (kind) {
       case 'none': return { kind: 'none' };
       case 'slot': return p.lane !== undefined ? { kind: 'slot', lane: p.lane } : null;
       case 'lane': return p.lane !== undefined ? { kind: 'lane', lane: p.lane } : null;
@@ -937,7 +984,8 @@ class App {
     const s = this.game.state;
     if (!s) return;
     const en = s.sides.enemy;
-    const power = this.game.enemyPower === 'summon' ? '해골 졸개를 소환합니다' : '적 하나에게 피해를 1 줍니다';
+    const ep = this.game.powerOf('enemy');
+    const power = `${ep.name} — ${ep.text}`;
     const inspect = $('inspect');
     inspect.dataset.uid = 'enemy';
     inspect.innerHTML = `<div class="notes"><div class="monster-note"><div class="title">${en.hero.name}</div>
@@ -1040,7 +1088,74 @@ class App {
         <div><b>조작</b> 카드를 <b>탭(클릭)한 뒤 대상을 탭</b>하거나 끌어다 놓으세요. 피해 주문은 <b>상대 영웅 초상화</b>도 노릴 수 있습니다.</div>
       </div>
       <button class="btn" id="start-btn">출정</button>`);
-    m.querySelector('#start-btn')!.addEventListener('click', () => void this.startRun());
+    const save = this.readSave();
+    if (save) {
+      const h = heroDef(save.hero);
+      m.querySelector('#start-btn')!.insertAdjacentHTML('beforebegin',
+        `<button class="btn" id="resume-btn">이어하기 · ${h.name} · 스테이지 ${save.stage + 1} · 생명력 ${save.health}</button><br>`);
+      m.querySelector('#start-btn')!.textContent = '새로 시작';
+      m.querySelector('#start-btn')!.classList.add('secondary');
+      m.querySelector('#resume-btn')!.addEventListener('click', () => void this.startRun(save.hero, save));
+    }
+    m.querySelector('#start-btn')!.addEventListener('click', () => this.showHeroSelect());
+  }
+
+  private showHeroSelect() {
+    const m = this.openModal(`
+      <h2>영웅 선택</h2>
+      <p>영웅마다 생명력, 지휘술, 시작 덱이 다릅니다.</p>
+      <div class="heroes"></div>`);
+    const row = m.querySelector('.heroes')!;
+    for (const h of HEROES) {
+      const p = POWERS[h.power];
+      const minions = h.deck.filter((id) => card(id).type === 'minion').length;
+      const el = document.createElement('div');
+      el.className = 'hero-pick';
+      el.innerHTML = `
+        <div class="hero-face" style="background-image:url(${portrait(h.model)})"></div>
+        <h3>${h.name}</h3><div class="theme">${h.title} · 생명력 ${h.health}</div>
+        <div class="hero-power-desc"><b>지휘술 · ${p.name}</b><br>${p.text}</div>
+        <div class="hero-blurb">${h.blurb}<br>시작 덱: 하수인 ${minions} · 주문 ${h.deck.length - minions}</div>`;
+      el.addEventListener('click', () => void this.startRun(h.id));
+      row.appendChild(el);
+    }
+  }
+
+  /** Between stages: rest, or remove one card from the deck. */
+  private showCamp() {
+    const s = this.game.state;
+    const hero = s.sides.player.hero;
+    const m = this.openModal(`
+      <h2>야영지</h2>
+      <p>다음 전투 전에 하나를 고르세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장</p>
+      <div class="bundles">
+        <div class="bundle" id="camp-rest"><h3>휴식</h3><div class="theme">생명력 ${CAMP_HEAL} 회복</div></div>
+        <div class="bundle" id="camp-trim"><h3>정비</h3><div class="theme">덱에서 카드 1장 제거</div></div>
+      </div>`);
+    m.querySelector('#camp-rest')!.addEventListener('click', () => {
+      this.closeModal();
+      void this.play(this.game.campRest());
+    });
+    const trim = m.querySelector<HTMLElement>('#camp-trim')!;
+    if (s.deckList.length <= 5) trim.classList.add('disabled');
+    else trim.addEventListener('click', () => this.showTrim());
+  }
+
+  private showTrim() {
+    const s = this.game.state;
+    const m = this.openModal(`<h2>정비: 뺄 카드를 고르세요</h2><div class="deck-grid"></div><button class="btn secondary" id="trim-back">돌아가기</button>`);
+    const grid = m.querySelector('.deck-grid')!;
+    const order = s.deckList.map((id, i) => ({ id, i })).sort((a, b) => card(a.id).cost - card(b.id).cost || a.id.localeCompare(b.id));
+    for (const { id, i } of order) {
+      const el = createCardElement(id);
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => {
+        this.closeModal();
+        void this.play(this.game.campRemove(i));
+      });
+      grid.appendChild(el);
+    }
+    m.querySelector('#trim-back')!.addEventListener('click', () => this.showCamp());
   }
 
   /** 탐색: pick one of three cards. */
@@ -1082,8 +1197,9 @@ class App {
     });
     m.querySelectorAll<HTMLElement>('.bundle').forEach((el) =>
       el.addEventListener('click', () => {
-        this.closeModal();
-        void this.play(this.game.chooseReward(Number(el.dataset.i)));
+        this.game.chooseReward(Number(el.dataset.i));
+        this.writeSave();
+        this.showCamp();
       }));
     m.querySelector('#view-deck')!.addEventListener('click', () => this.showDeck(() => this.showReward()));
   }
@@ -1106,7 +1222,8 @@ class App {
       <p>${won ? '해골 군주가 무너지고 성채에 새벽이 찾아왔습니다.' : `스테이지 ${s.stage + 1}에서 ${st.hero.name}에게 쓰러졌습니다.`}</p>
       <p>클리어한 스테이지 ${s.stagesCleared}/${STAGES.length} · 최종 덱 ${s.deckList.length}장</p>
       <button class="btn" id="again">다시 도전</button>`);
-    m.querySelector('#again')!.addEventListener('click', () => void this.startRun());
+    this.clearSave();
+    m.querySelector('#again')!.addEventListener('click', () => this.showHeroSelect());
   }
 }
 
