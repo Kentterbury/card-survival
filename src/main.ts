@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
-import { card, type MinionCard } from './game/cards';
+import { card, KEYWORD_INFO, type MinionCard } from './game/cards';
 import { Game, HEAL_BETWEEN_STAGES, HERO_MAX_HEALTH, HERO_POWER_DAMAGE, PLAYER_HERO, sameTarget } from './game/engine';
 import { STAGES } from './game/stages';
 import {
@@ -326,10 +326,14 @@ class App {
         await wait(0.3);
         return;
       }
-      case 'wardGained':
-        this.views.get(e.uid)?.setWard(true);
-        await wait(0.08);
+      case 'keywordGained': {
+        const v = this.views.get(e.uid);
+        if (!v) return;
+        if (e.keyword === 'ward') v.setWard(true);
+        else this.fx.floatText(v.headPosition(), KEYWORD_INFO[e.keyword].name, 'buff');
+        await wait(0.12);
         return;
+      }
       case 'freeze':
         this.views.get(e.uid)?.setFrozen(true);
         await wait(0.08);

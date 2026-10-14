@@ -18,10 +18,15 @@ export const homeRow = (s: Side): number => (s === 'player' ? 0 : LAST_ROW);
 
 export type Keyword =
   | 'swift' | 'ranged' | 'ward'
-  | 'dash' | 'anchored' | 'knockback' | 'pierce' | 'flying' | 'formation' | 'lifesteal' | 'undying';
+  | 'dash' | 'anchored' | 'knockback' | 'pierce' | 'flying' | 'formation' | 'lifesteal' | 'undying'
+  | 'cleave' | 'thorns' | 'cover' | 'regenerate' | 'enrage' | 'vanguard';
 
 /** Attack bonus a `formation` unit gets with an ally beside it. */
 export const FORMATION_BONUS = 2;
+/** Attack bonus for a `vanguard` unit that is its side's front-most unit. */
+export const VANGUARD_BONUS = 2;
+/** Damage a `thorns` unit deals back to melee attackers. */
+export const THORNS_DAMAGE = 2;
 
 export type ModelId =
   | 'Knight' | 'Barbarian' | 'Mage' | 'Rogue' | 'Rogue_Hooded'
@@ -115,7 +120,7 @@ export type GameEvent =
   | { type: 'damage'; target: HitTarget; amount: number }
   | { type: 'wardBroken'; uid: number }
   | { type: 'heal'; target: HitTarget; amount: number }
-  | { type: 'wardGained'; uid: number }
+  | { type: 'keywordGained'; uid: number; keyword: Keyword }
   | { type: 'explosion'; lane: number; row: number }
   | { type: 'revive'; uid: number }
   | { type: 'buff'; uid: number; attack: number; health: number }

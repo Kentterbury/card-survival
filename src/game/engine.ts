@@ -5,6 +5,7 @@ import { Rng } from './rng';
 import { STAGES, type EnemyPower } from './stages';
 import {
   FORMATION_BONUS, forward, HERO_POWER_COST, homeRow, LANES, LAST_ROW, MAX_HAND, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE,
+  THORNS_DAMAGE, VANGUARD_BONUS,
   type CardInstance, type GameEvent, type HitTarget, type Keyword, type Phase, type RewardBundle, type Side, type SideState,
   type Target, type Unit,
 } from './types';
@@ -118,6 +119,9 @@ export class Game {
     me.powerUsed = false;
     for (const u of s.units) if (u.side === side) u.fresh = false;
     this.emit({ type: 'turnStart', side, turn: s.turn });
+    for (const u of this.unitsOf(side)) {
+      if (u.keywords.has('regenerate') && u.health < u.maxHealth) this.healUnit(u, u.maxHealth - u.health);
+    }
     this.draw(side, 1);
   }
 
@@ -179,7 +183,10 @@ export class Game {
   }
 
   private targetsOfKind(side: Side, kind: string): Target[] {
-    const foeUnits = (): Target[] => this.unitsOf(other(side)).map((u) => ({ kind: 'unit' as const, uid: u.uid }));
+    // Foes guarded by an 엄호 unit in their lane cannot be picked by targeted cards.
+    const foeUnits = (): Target[] => this.unitsOf(other(side))
+      .filter((u) => !this.coverFor(u))
+      .map((u) => ({ kind: 'unit' as const, uid: u.uid }));
     switch (kind) {
       case 'none': return [{ kind: 'none' }];
       case 'foe': return [...foeUnits(), { kind: 'hero', side: other(side) }];
@@ -274,6 +281,12 @@ export class Game {
       if (occ && occ.side !== u.side) {
         // Melee units cannot reach a flyer; only ranged attacks and spells can.
         if (occ.keywords.has('flying') && u.range === 1) return null;
+        // A shot at range is taken by an 엄호 unit in that lane, if it is within reach.
+        const cover = d > 1 ? this.coverFor(occ) : undefined;
+        if (cover) {
+          const cd = Math.abs(cover.row - u.row);
+          if ((cover.row - u.row) * dir > 0 && cd <= u.range) return { hit: cover, dist: cd };
+        }
         return { hit: occ, dist: d };
       }
       // Melee units cannot reach past an ally; ranged units shoot over them.
@@ -284,12 +297,24 @@ export class Game {
 
   /** Attack including situational bonuses (대열). */
   attackOf(u: Unit): number {
-    if (!u.keywords.has('formation')) return u.attack;
-    const beside = [u.lane - 1, u.lane + 1].some((l) => {
-      const n = this.unitAt(l, u.row);
-      return n && n.side === u.side;
-    });
-    return u.attack + (beside ? FORMATION_BONUS : 0);
+    let atk = u.attack;
+    if (u.keywords.has('formation')) {
+      const beside = [u.lane - 1, u.lane + 1].some((l) => {
+        const n = this.unitAt(l, u.row);
+        return n && n.side === u.side;
+      });
+      if (beside) atk += FORMATION_BONUS;
+    }
+    if (u.keywords.has('vanguard')) {
+      const progress = (x: Unit) => (x.side === 'player' ? x.row : LAST_ROW - x.row);
+      if (this.unitsOf(u.side).every((x) => progress(x) <= progress(u))) atk += VANGUARD_BONUS;
+    }
+    return atk;
+  }
+
+  /** Another living 엄호 unit guarding `u`'s lane, if any. */
+  coverFor(u: Unit): Unit | undefined {
+    return this.unitsOf(u.side).find((c) => c !== u && c.lane === u.lane && c.keywords.has('cover'));
   }
 
   private strike(u: Unit, hit: Unit | Side, dist: number) {
@@ -303,6 +328,13 @@ export class Game {
       dealt += this.damageHero(hit, atk);
     } else {
       dealt += this.damageUnit(hit, atk);
+      if (u.keywords.has('cleave')) {
+        for (const l of [hit.lane - 1, hit.lane + 1]) {
+          const n = this.unitAt(l, hit.row);
+          if (n && n.side !== u.side) dealt += this.damageUnit(n, atk);
+        }
+      }
+      if (!ranged && hit.keywords.has('thorns')) this.damageUnit(u, THORNS_DAMAGE);
       if (u.keywords.has('pierce')) {
         // The cell behind the target; past the last row that is the foe hero.
         const r = hit.row + dir;
@@ -371,7 +403,18 @@ export class Game {
     }
     u.health -= amount;
     this.emit({ type: 'damage', target: u.uid, amount });
+    if (u.keywords.has('enrage') && u.health > 0) {
+      u.attack += 1;
+      this.emit({ type: 'buff', uid: u.uid, attack: 1, health: 0 });
+    }
     return amount;
+  }
+
+  private healUnit(u: Unit, amount: number) {
+    const healed = Math.min(amount, u.maxHealth - u.health);
+    if (healed <= 0 || u.health <= 0) return;
+    u.health += healed;
+    this.emit({ type: 'heal', target: u.uid, amount: healed });
   }
 
   private healHero(side: Side, amount: number) {
@@ -512,16 +555,13 @@ export class Game {
       healHero: (amount) => this.healHero(side, amount),
       healUnit: (uid, amount) => {
         const u = this.unit(uid);
-        if (!u || u.health <= 0) return;
-        const healed = Math.min(amount, u.maxHealth - u.health);
-        u.health += healed;
-        if (healed > 0) this.emit({ type: 'heal', target: uid, amount: healed });
+        if (u) this.healUnit(u, amount);
       },
-      grantWard: (uid) => {
+      grantKeyword: (uid, keyword) => {
         const u = this.unit(uid);
-        if (!u || u.health <= 0 || u.keywords.has('ward')) return;
-        u.keywords.add('ward');
-        this.emit({ type: 'wardGained', uid });
+        if (!u || u.health <= 0 || u.keywords.has(keyword)) return;
+        u.keywords.add(keyword);
+        this.emit({ type: 'keywordGained', uid, keyword });
       },
       gainMana: (amount) => {
         this.side(side).mana += amount;

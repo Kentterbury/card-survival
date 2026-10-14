@@ -18,7 +18,7 @@ export interface EffectApi {
   buff(uid: number, attack: number, health: number): void;
   /** Restore a unit's health, up to its maximum. */
   healUnit(uid: number, amount: number): void;
-  grantWard(uid: number): void;
+  grantKeyword(uid: number, keyword: Keyword): void;
   /** Mana usable this turn (may go above the maximum). */
   gainMana(amount: number): void;
   /** Move an allied unit forward, toward the foe's side. */
@@ -171,6 +171,12 @@ const CARD_LIST: CardDef[] = [
   { id: 'phalanx', name: '대열 창병', type: 'minion', cost: 2, rarity: 'basic', attack: 1, health: 3, model: 'Knight', keywords: ['formation'], scale: 0.9, text: '<b>대열</b>' },
   { id: 'blood_blade', name: '피의 검사', type: 'minion', cost: 4, rarity: 'rare', attack: 3, health: 5, model: 'Barbarian', keywords: ['lifesteal'], text: '<b>흡혈</b>' },
   { id: 'stalwart', name: '불굴의 용사', type: 'minion', cost: 4, rarity: 'rare', attack: 3, health: 3, model: 'Knight', keywords: ['undying'], scale: 1.05, text: '<b>불사</b>' },
+  { id: 'greatsword', name: '대검 용병', type: 'minion', cost: 4, rarity: 'rare', attack: 3, health: 5, model: 'Barbarian', keywords: ['cleave'], scale: 1.05, text: '<b>휩쓸기</b>' },
+  { id: 'thornguard', name: '가시 방패병', type: 'minion', cost: 3, rarity: 'common', attack: 2, health: 5, model: 'Knight', keywords: ['thorns'], text: '<b>가시</b>' },
+  { id: 'cover_knight', name: '엄호 기사', type: 'minion', cost: 4, rarity: 'rare', attack: 2, health: 7, model: 'Knight', keywords: ['cover'], scale: 1.1, text: '<b>엄호</b>' },
+  { id: 'monk', name: '재생의 수도사', type: 'minion', cost: 3, rarity: 'common', attack: 2, health: 4, model: 'Mage', keywords: ['regenerate'], text: '<b>재생</b>' },
+  { id: 'brawler', name: '광기의 투사', type: 'minion', cost: 2, rarity: 'common', attack: 1, health: 4, model: 'Barbarian', keywords: ['enrage'], scale: 0.9, text: '<b>분노</b>' },
+  { id: 'vanguard_captain', name: '선봉장', type: 'minion', cost: 3, rarity: 'common', attack: 2, health: 4, model: 'Knight', keywords: ['vanguard'], text: '<b>선봉</b>' },
   { id: 'barricade_token', name: '바리케이드', type: 'minion', cost: 0, rarity: 'basic', attack: 0, health: 6, model: 'barrier', text: '움직이지도 공격하지도 않습니다.' },
 
   // ── Player spells ──────────────────────────────────────────
@@ -284,7 +290,23 @@ const CARD_LIST: CardDef[] = [
   {
     id: 'blessing', name: '수호의 축복', type: 'spell', cost: 3, rarity: 'rare', target: 'none', icon: 'shield', ai: { kind: 'buffAll' },
     text: '아군 하수인 모두에게 <b>보호막</b>을 부여합니다.',
-    cast: (api) => { for (const m of api.allies()) api.grantWard(m.uid); },
+    cast: (api) => { for (const m of api.allies()) api.grantKeyword(m.uid, 'ward'); },
+  },
+
+  {
+    id: 'thorn_armor', name: '가시 갑옷', type: 'spell', cost: 1, rarity: 'common', target: 'ally', icon: 'shield', ai: { kind: 'buff' },
+    text: '아군 하수인 하나에게 +0/+2와 <b>가시</b>를 부여합니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 0, 2); api.grantKeyword(t.uid, 'thorns'); } },
+  },
+  {
+    id: 'renewal', name: '재생의 축복', type: 'spell', cost: 2, rarity: 'common', target: 'ally', icon: 'heart', ai: { kind: 'buff' },
+    text: '아군 하수인 하나의 생명력을 모두 회복하고 <b>재생</b>을 부여합니다.',
+    cast: (api, t) => {
+      if (t.kind !== 'unit') return;
+      const u = api.allies().find((m) => m.uid === t.uid);
+      if (u) api.healUnit(u.uid, u.maxHealth);
+      api.grantKeyword(t.uid, 'regenerate');
+    },
   },
 
   // ── Enemy units ────────────────────────────────────────────
@@ -300,6 +322,13 @@ const CARD_LIST: CardDef[] = [
   { id: 'sk_pikeman', name: '해골 창병', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 2, health: 4, model: 'Skeleton_Warrior', keywords: ['pierce'], scale: 0.95, text: '<b>관통</b>' },
   { id: 'sk_phalanx', name: '해골 방진병', type: 'minion', cost: 2, rarity: 'basic', enemy: true, attack: 1, health: 3, model: 'Skeleton_Warrior', keywords: ['formation'], scale: 0.9, text: '<b>대열</b>' },
   { id: 'sk_leech', name: '흡혈 주술사', type: 'minion', cost: 4, rarity: 'rare', enemy: true, attack: 2, health: 3, model: 'Skeleton_Mage', keywords: ['ranged', 'lifesteal'], text: '<b>사격</b>. <b>흡혈</b>' },
+
+  { id: 'sk_captain', name: '해골 대장', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 2, health: 4, model: 'Skeleton_Warrior', keywords: ['vanguard'], text: '<b>선봉</b>' },
+  { id: 'sk_berserker', name: '해골 광전사', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 2, health: 4, model: 'Skeleton_Minion', keywords: ['enrage'], scale: 1.1, text: '<b>분노</b>' },
+  { id: 'sk_shieldwall', name: '해골 방패수', type: 'minion', cost: 4, rarity: 'rare', enemy: true, attack: 1, health: 7, model: 'Skeleton_Warrior', keywords: ['cover'], scale: 1.1, text: '<b>엄호</b>' },
+  { id: 'sk_thorn', name: '뼈 가시벽', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 1, health: 6, model: 'Skeleton_Warrior', keywords: ['thorns'], text: '<b>가시</b>' },
+  { id: 'sk_regen', name: '되살아나는 해골', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 3, health: 3, model: 'Skeleton_Minion', keywords: ['regenerate'], scale: 1.05, text: '<b>재생</b>' },
+  { id: 'sk_reaper', name: '해골 수확자', type: 'minion', cost: 5, rarity: 'rare', enemy: true, attack: 4, health: 5, model: 'Skeleton_Rogue', keywords: ['cleave'], scale: 1.2, text: '<b>휩쓸기</b>' },
 
   // ── Enemy spells ───────────────────────────────────────────
   {
@@ -368,4 +397,10 @@ export const KEYWORD_INFO: Record<Keyword, { name: string; text: string }> = {
   formation: { name: '대열', text: '양옆 줄 같은 행에 아군이 있으면 공격력 +2.' },
   lifesteal: { name: '흡혈', text: '이 하수인이 준 피해만큼 내 영웅의 생명력을 회복합니다.' },
   undying: { name: '불사', text: '처음 죽을 때 생명력 1로 되살아납니다.' },
+  cleave: { name: '휩쓸기', text: '하수인을 공격할 때 양옆 줄 같은 행의 적도 함께 공격합니다.' },
+  thorns: { name: '가시', text: '근접 공격을 받으면 공격한 적에게 피해를 2 줍니다.' },
+  cover: { name: '엄호', text: '같은 줄의 다른 아군을 대신해 적의 사격을 맞고, 적은 그 아군을 대상 지정 주문으로 노릴 수 없습니다.' },
+  regenerate: { name: '재생', text: '내 턴이 시작될 때 생명력을 모두 회복합니다.' },
+  enrage: { name: '분노', text: '피해를 받고 살아남을 때마다 공격력 +1.' },
+  vanguard: { name: '선봉', text: '아군 중 가장 앞에 있으면 공격력 +2.' },
 };

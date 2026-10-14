@@ -389,6 +389,86 @@ describe('keywords', () => {
   });
 });
 
+describe('keywords (2nd batch)', () => {
+  it('휩쓸기 also hits foes beside the target', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    place(g, 'greatsword', 'player', 2, 2);
+    const a = place(g, 'sk_warrior', 'enemy', 2, 3);
+    const b = place(g, 'sk_warrior', 'enemy', 1, 3);
+    const c = place(g, 'sk_warrior', 'enemy', 3, 4);
+    a.frozen = b.frozen = c.frozen = true;
+    passTurn(g);
+    expect(a.health).toBe(1);
+    expect(b.health).toBe(1);
+    expect(c.health).toBe(4); // different row
+  });
+
+  it('가시 hurts melee attackers but not ranged ones', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const melee = place(g, 'berserker', 'player', 0, 2);
+    const thorn = place(g, 'sk_thorn', 'enemy', 0, 3);
+    thorn.frozen = true;
+    const xbow = place(g, 'crossbowman', 'player', 4, 0);
+    const thorn2 = place(g, 'sk_thorn', 'enemy', 4, 2);
+    thorn2.frozen = true;
+    passTurn(g);
+    expect(melee.health).toBe(3 - 1 - 2); // counter 1 + thorns 2
+    expect(xbow.health).toBe(2);
+  });
+
+  it('엄호 takes ranged shots and blocks targeted spells for its lane', () => {
+    const g = freshGame(Array(6).fill('firebolt'));
+    const mage = place(g, 'sk_mage', 'enemy', 1, 3);
+    const wall = place(g, 'sk_shieldwall', 'enemy', 1, 4);
+    expect(g.cardTargets(0).some((t) => t.kind === 'unit' && t.uid === mage.uid)).toBe(false);
+    expect(g.cardTargets(0).some((t) => t.kind === 'unit' && t.uid === wall.uid)).toBe(true);
+    place(g, 'crossbowman', 'player', 1, 1);
+    mage.frozen = wall.frozen = true;
+    passTurn(g);
+    expect(mage.health).toBe(3);
+    expect(wall.health).toBe(7 - 2);
+  });
+
+  it('재생 heals fully at the start of its side\'s turn', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const m = place(g, 'monk', 'player', 0, 0);
+    m.health = 1;
+    passTurn(g);
+    expect(m.health).toBe(4);
+  });
+
+  it('분노 gains attack each time it survives damage', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const b = place(g, 'brawler', 'player', 2, 2);
+    place(g, 'sk_minion', 'enemy', 2, 3).frozen = true;
+    passTurn(g);
+    expect(b.attack).toBe(2);
+  });
+
+  it('선봉 gets +2 attack only while it is the front-most ally', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const v = place(g, 'vanguard_captain', 'player', 0, 2);
+    place(g, 'squire', 'player', 3, 1);
+    expect(g.attackOf(v)).toBe(4);
+    place(g, 'squire', 'player', 4, 3);
+    expect(g.attackOf(v)).toBe(2);
+  });
+
+  it('가시 갑옷 and 재생의 축복 grant their keywords', () => {
+    const g = freshGame(['thorn_armor', 'renewal', 'thorn_armor', 'renewal']);
+    g.side('player').mana = 10;
+    const u = place(g, 'squire', 'player', 0, 1);
+    u.health = 1;
+    const thornIdx = g.side('player').hand.findIndex((c) => c.defId === 'thorn_armor');
+    g.playCard(thornIdx, { kind: 'unit', uid: u.uid });
+    expect(u.keywords.has('thorns')).toBe(true);
+    const renewIdx = g.side('player').hand.findIndex((c) => c.defId === 'renewal');
+    g.playCard(renewIdx, { kind: 'unit', uid: u.uid });
+    expect(u.keywords.has('regenerate')).toBe(true);
+    expect(u.health).toBe(u.maxHealth);
+  });
+});
+
 describe('data and simulation', () => {
   it('every referenced card exists', () => {
     for (const s of STAGES) for (const id of s.deck) expect(CARDS[id]).toBeDefined();
