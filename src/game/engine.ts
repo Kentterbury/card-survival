@@ -1,35 +1,29 @@
+import { aiTakeTurn } from './ai';
 import { card, STARTER_DECK, type EffectApi, type MinionCard } from './cards';
-import { monsterDef } from './monsters';
 import { rollRewards } from './rewards';
 import { Rng } from './rng';
-import { STAGES } from './stages';
+import { STAGES, type EnemyPower } from './stages';
 import {
-  HERO_POWER_COST, LANES, MAX_HAND, MAX_MANA, MAX_RESERVE, SPAWN_ROW,
-  type CardInstance, type GameEvent, type Minion, type Monster, type Phase, type RewardBundle, type Target,
+  forward, HERO_POWER_COST, homeRow, LANES, LAST_ROW, MAX_HAND, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE,
+  type CardInstance, type GameEvent, type HitTarget, type Phase, type RewardBundle, type Side, type SideState,
+  type Target, type Unit,
 } from './types';
 
 export const HERO_MAX_HEALTH = 30;
 export const HEAL_BETWEEN_STAGES = 10;
 export const HERO_POWER_DAMAGE = 1;
+export const PLAYER_HERO = { name: '수비대장', model: 'Knight' as const, scale: 1.3 };
 
 export interface GameState {
   phase: Phase;
   stage: number;
+  /** Player turn number within the stage. */
   turn: number;
   stagesCleared: number;
-  hero: { health: number; maxHealth: number; powerUsed: boolean };
-  mana: number;
-  maxMana: number;
-  reserve: number;
   /** The run's deck as card ids; grows with each reward. */
   deckList: string[];
-  drawPile: CardInstance[];
-  hand: CardInstance[];
-  discard: CardInstance[];
-  slots: (Minion | null)[];
-  monsters: Monster[];
-  /** Spawns that could not fit at the far end yet. */
-  pendingSpawns: string[];
+  sides: Record<Side, SideState>;
+  units: Unit[];
   rewards: RewardBundle[];
 }
 
@@ -38,11 +32,11 @@ export class Game {
   state!: GameState;
   private nextUid = 1;
   private events: GameEvent[] = [];
-  private readonly api: EffectApi;
+  private readonly apis: Record<Side, EffectApi>;
 
   constructor(seed = Date.now()) {
     this.rng = new Rng(seed);
-    this.api = this.createApi();
+    this.apis = { player: this.createApi('player'), enemy: this.createApi('enemy') };
   }
 
   // ── Run / stage flow ─────────────────────────────────────────
@@ -50,10 +44,12 @@ export class Game {
   startRun(deck: string[] = STARTER_DECK): GameEvent[] {
     this.state = {
       phase: 'player', stage: 0, turn: 0, stagesCleared: 0,
-      hero: { health: HERO_MAX_HEALTH, maxHealth: HERO_MAX_HEALTH, powerUsed: false },
-      mana: 0, maxMana: 0, reserve: 0,
-      deckList: [...deck], drawPile: [], hand: [], discard: [],
-      slots: Array(LANES).fill(null), monsters: [], pendingSpawns: [], rewards: [],
+      deckList: [...deck],
+      sides: {
+        player: this.emptySide({ ...PLAYER_HERO, health: HERO_MAX_HEALTH, maxHealth: HERO_MAX_HEALTH }),
+        enemy: this.emptySide({ ...PLAYER_HERO, health: 1, maxHealth: 1 }),
+      },
+      units: [], rewards: [],
     };
     return this.collect(() => this.beginStage());
   }
@@ -73,332 +69,353 @@ export class Game {
     return STAGES[this.state.stage];
   }
 
-  /** Waves still to come in this stage (for the UI preview). */
-  upcomingWave(): string[] {
-    return this.stageDef.waves[this.state.turn] ?? [];
+  get enemyPower(): EnemyPower {
+    return this.stageDef.power;
+  }
+
+  /** True once the stage is decided (win, loss or reward screen). */
+  get over(): boolean {
+    const p = this.state.phase;
+    return p === 'reward' || p === 'victory' || p === 'defeat';
+  }
+
+  side(side: Side): SideState {
+    return this.state.sides[side];
+  }
+
+  private emptySide(hero: SideState['hero']): SideState {
+    return { hero, mana: 0, maxMana: 0, reserve: 0, powerUsed: false, drawPile: [], hand: [], discard: [] };
   }
 
   private beginStage() {
     const s = this.state;
+    const st = this.stageDef;
+    const playerHero = s.sides.player.hero;
+    s.sides.player = this.emptySide(playerHero);
+    s.sides.enemy = this.emptySide({ ...st.hero, maxHealth: st.hero.health });
+    s.sides.player.drawPile = this.makePile(s.deckList);
+    s.sides.enemy.drawPile = this.makePile(st.deck);
+    s.units = [];
     s.turn = 0;
-    s.maxMana = 0;
-    s.reserve = 0;
-    s.slots = Array(LANES).fill(null);
-    s.monsters = [];
-    s.pendingSpawns = [];
-    s.hand = [];
-    s.discard = [];
-    s.drawPile = this.rng.shuffle(s.deckList.map((defId) => ({ iid: this.nextUid++, defId })));
     this.emit({ type: 'stageStart', stage: s.stage });
-    this.spawnWave(0);
-    this.draw(3);
-    this.beginPlayerTurn();
+    this.draw('player', 3);
+    this.draw('enemy', 3);
+    this.beginTurn('player');
   }
 
-  private beginPlayerTurn() {
+  private makePile(ids: string[]): CardInstance[] {
+    return this.rng.shuffle(ids.map((defId) => ({ iid: this.nextUid++, defId })));
+  }
+
+  private beginTurn(side: Side) {
     const s = this.state;
-    s.phase = 'player';
-    s.turn++;
-    s.maxMana = Math.min(MAX_MANA, s.maxMana + 1);
-    s.mana = s.maxMana + s.reserve;
-    s.reserve = 0;
-    s.hero.powerUsed = false;
-    for (const m of this.minions()) m.attacksLeft = m.attack > 0 ? 1 : 0;
-    this.emit({ type: 'turnStart', turn: s.turn });
-    this.draw(1);
+    const me = s.sides[side];
+    s.phase = side;
+    if (side === 'player') s.turn++;
+    me.maxMana = Math.min(MAX_MANA, me.maxMana + 1);
+    me.mana = me.maxMana + me.reserve;
+    me.reserve = 0;
+    me.powerUsed = false;
+    for (const u of s.units) if (u.side === side) u.fresh = false;
+    this.emit({ type: 'turnStart', side, turn: s.turn });
+    this.draw(side, 1);
   }
 
-  // ── Player actions ───────────────────────────────────────────
-
-  canPlay(handIndex: number): boolean {
-    const s = this.state;
-    const inst = s.hand[handIndex];
-    return s.phase === 'player' && !!inst && card(inst.defId).cost <= s.mana && this.cardTargets(handIndex).length > 0;
-  }
-
-  /** Every legal target for a card in hand (`{kind:'none'}` for untargeted cards). */
-  cardTargets(handIndex: number): Target[] {
-    const inst = this.state.hand[handIndex];
-    if (!inst) return [];
-    const def = card(inst.defId);
-    const emptySlots = (): Target[] =>
-      this.state.slots.flatMap((m, lane) => (m ? [] : [{ kind: 'slot' as const, lane }]));
-    if (def.type === 'minion') return emptySlots();
-    switch (def.target) {
-      case 'none': return [{ kind: 'none' }];
-      case 'monster': return this.state.monsters.map((m) => ({ kind: 'monster' as const, uid: m.uid }));
-      case 'minion': return this.minions().map((m) => ({ kind: 'minion' as const, uid: m.uid }));
-      case 'lane': return Array.from({ length: LANES }, (_, lane) => ({ kind: 'lane' as const, lane }));
-      case 'slot': return emptySlots();
-    }
-  }
-
-  playCard(handIndex: number, target: Target = { kind: 'none' }): GameEvent[] {
-    if (!this.canPlay(handIndex)) return [];
-    if (!this.cardTargets(handIndex).some((t) => sameTarget(t, target))) return [];
-    return this.collect(() => {
-      const s = this.state;
-      const [inst] = s.hand.splice(handIndex, 1);
-      const def = card(inst.defId);
-      s.mana -= def.cost;
-      s.discard.push(inst);
-      this.emit({ type: 'cardPlayed', card: inst, target });
-      if (def.type === 'minion') {
-        if (target.kind === 'slot') this.summonMinion(def.id, target.lane);
-      } else {
-        this.emit({ type: 'spell', defId: def.id, target });
-        def.cast(this.api, target);
-      }
-      this.resolveDeaths();
-      this.checkStageClear();
-    });
-  }
-
-  attackTargets(minionUid: number): number[] {
-    const m = this.minions().find((x) => x.uid === minionUid);
-    if (!m || this.state.phase !== 'player' || m.attacksLeft <= 0 || m.attack <= 0) return [];
-    return this.state.monsters
-      .filter((x) => (m.keywords.has('ranged')
-        ? x.lane === m.lane
-        : x.row === 1 && Math.abs(x.lane - m.lane) <= 1))
-      .map((x) => x.uid);
-  }
-
-  minionAttack(minionUid: number, monsterUid: number): GameEvent[] {
-    if (!this.attackTargets(minionUid).includes(monsterUid)) return [];
-    return this.collect(() => {
-      const m = this.minions().find((x) => x.uid === minionUid)!;
-      const target = this.state.monsters.find((x) => x.uid === monsterUid)!;
-      const ranged = m.keywords.has('ranged');
-      m.attacksLeft--;
-      this.emit({ type: 'attack', attacker: m.uid, target: target.uid, ranged });
-      this.damage(target.uid, m.attack, m.uid);
-      if (!ranged && target.attack > 0) this.damage(m.uid, target.attack, target.uid);
-      this.resolveDeaths();
-      this.checkStageClear();
-    });
-  }
-
-  canUseHeroPower(): boolean {
-    const s = this.state;
-    return s.phase === 'player' && !s.hero.powerUsed && s.mana >= HERO_POWER_COST && s.monsters.length > 0;
-  }
-
-  heroPower(monsterUid: number): GameEvent[] {
-    if (!this.canUseHeroPower() || !this.state.monsters.some((m) => m.uid === monsterUid)) return [];
-    return this.collect(() => {
-      const s = this.state;
-      s.mana -= HERO_POWER_COST;
-      s.hero.powerUsed = true;
-      const target: Target = { kind: 'monster', uid: monsterUid };
-      this.emit({ type: 'heroPower', target });
-      this.damage(monsterUid, HERO_POWER_DAMAGE, 'hero');
-      this.resolveDeaths();
-      this.checkStageClear();
-    });
-  }
-
+  /** Ends the player's turn and plays out the whole enemy turn. */
   endTurn(): GameEvent[] {
     if (this.state.phase !== 'player') return [];
     return this.collect(() => {
-      const s = this.state;
-      s.reserve = Math.min(MAX_RESERVE, s.mana);
-      for (const m of this.minions()) {
-        const def = card(m.defId) as MinionCard;
-        if (def.onEndTurn && m.health > 0) def.onEndTurn(this.api, m);
-      }
-      this.resolveDeaths();
-      if (this.checkStageClear()) return;
-
-      s.phase = 'enemy';
+      this.finishTurn('player');
+      if (this.over) return;
       this.emit({ type: 'enemyTurn' });
-      this.monsterPhase();
-      if (s.hero.health <= 0) {
-        s.phase = 'defeat';
-        this.emit({ type: 'defeat' });
-        return;
-      }
-      this.spawnWave(s.turn);
-      if (this.checkStageClear()) return;
-      this.beginPlayerTurn();
+      this.beginTurn('enemy');
+      aiTakeTurn(this, 'enemy');
+      if (this.over) return;
+      this.finishTurn('enemy');
+      if (this.over) return;
+      this.beginTurn('player');
     });
   }
 
-  // ── Enemy turn ───────────────────────────────────────────────
+  private finishTurn(side: Side) {
+    const me = this.side(side);
+    me.reserve = Math.min(MAX_RESERVE, me.mana);
+    for (const u of this.unitsOf(side)) {
+      const def = card(u.defId) as MinionCard;
+      if (def.onEndTurn && u.health > 0) def.onEndTurn(this.apis[side], u);
+      this.resolveDeaths();
+      if (this.checkOutcome()) return;
+    }
+    this.unitPhase(side);
+  }
 
-  private monsterPhase() {
-    const s = this.state;
-    const order = [...s.monsters].sort((a, b) => a.row - b.row || a.lane - b.lane);
-    for (const m of order) {
-      if (m.health <= 0 || s.hero.health <= 0) continue;
-      if (m.frozen) {
-        m.frozen = false;
+  // ── Cards & hero powers (both sides) ─────────────────────────
+
+  canPlay(handIndex: number): boolean {
+    return this.canPlayAs('player', handIndex);
+  }
+
+  cardTargets(handIndex: number): Target[] {
+    return this.targetsFor('player', handIndex);
+  }
+
+  playCard(handIndex: number, target: Target = { kind: 'none' }): GameEvent[] {
+    return this.collect(() => this.playCardAs('player', handIndex, target));
+  }
+
+  canPlayAs(side: Side, handIndex: number): boolean {
+    const me = this.side(side);
+    const inst = me.hand[handIndex];
+    return this.state.phase === side && !!inst && card(inst.defId).cost <= me.mana && this.targetsFor(side, handIndex).length > 0;
+  }
+
+  /** Every legal target for a card in `side`'s hand (`{kind:'none'}` for untargeted cards). */
+  targetsFor(side: Side, handIndex: number): Target[] {
+    const inst = this.side(side).hand[handIndex];
+    if (!inst) return [];
+    const def = card(inst.defId);
+    const kind = def.type === 'minion' ? 'slot' : def.target;
+    return this.targetsOfKind(side, kind);
+  }
+
+  private targetsOfKind(side: Side, kind: string): Target[] {
+    const foeUnits = (): Target[] => this.unitsOf(other(side)).map((u) => ({ kind: 'unit' as const, uid: u.uid }));
+    switch (kind) {
+      case 'none': return [{ kind: 'none' }];
+      case 'foe': return [...foeUnits(), { kind: 'hero', side: other(side) }];
+      case 'foeUnit': return foeUnits();
+      case 'ally': return this.unitsOf(side).map((u) => ({ kind: 'unit' as const, uid: u.uid }));
+      case 'lane': return Array.from({ length: LANES }, (_, lane) => ({ kind: 'lane' as const, lane }));
+      case 'slot': return this.freeHomeLanes(side).map((lane) => ({ kind: 'slot' as const, lane }));
+      default: return [];
+    }
+  }
+
+  /** Plays a card for either side. Returns false if the play was illegal. */
+  playCardAs(side: Side, handIndex: number, target: Target): boolean {
+    if (!this.canPlayAs(side, handIndex)) return false;
+    if (!this.targetsFor(side, handIndex).some((t) => sameTarget(t, target))) return false;
+    const me = this.side(side);
+    const [inst] = me.hand.splice(handIndex, 1);
+    const def = card(inst.defId);
+    me.mana -= def.cost;
+    me.discard.push(inst);
+    this.emit({ type: 'cardPlayed', side, card: inst, target });
+    if (def.type === 'minion') {
+      if (target.kind === 'slot') this.summonUnit(side, def.id, target.lane);
+    } else {
+      this.emit({ type: 'spell', side, defId: def.id, target });
+      def.cast(this.apis[side], target);
+    }
+    this.resolveDeaths();
+    this.checkOutcome();
+    return true;
+  }
+
+  heroPowerTargets(side: Side = 'player'): Target[] {
+    const me = this.side(side);
+    if (this.state.phase !== side || me.powerUsed || me.mana < HERO_POWER_COST) return [];
+    const kind = side === 'enemy' && this.enemyPower === 'summon' ? 'slot' : 'foe';
+    return this.targetsOfKind(side, kind);
+  }
+
+  canUseHeroPower(): boolean {
+    return this.heroPowerTargets('player').length > 0;
+  }
+
+  heroPower(target: Target): GameEvent[] {
+    return this.collect(() => this.heroPowerAs('player', target));
+  }
+
+  heroPowerAs(side: Side, target: Target): boolean {
+    if (!this.heroPowerTargets(side).some((t) => sameTarget(t, target))) return false;
+    const me = this.side(side);
+    me.mana -= HERO_POWER_COST;
+    me.powerUsed = true;
+    this.emit({ type: 'heroPower', side, target });
+    if (target.kind === 'slot') this.summonUnit(side, 'sk_minion', target.lane);
+    else this.damage(target, HERO_POWER_DAMAGE);
+    this.resolveDeaths();
+    this.checkOutcome();
+    return true;
+  }
+
+  // ── Unit phase: every unit of a side advances or strikes ─────
+
+  private unitPhase(side: Side) {
+    const dir = forward(side);
+    const order = this.unitsOf(side).sort((a, b) => (b.row - a.row) * dir || a.lane - b.lane);
+    for (const u of order) {
+      if (u.health <= 0) continue;
+      if (u.frozen) {
+        u.frozen = false;
         continue;
       }
-      if (m.row <= m.range) {
-        const blocker = s.slots[m.lane];
-        const melee = m.row === 1;
-        if (blocker) {
-          this.emit({ type: 'attack', attacker: m.uid, target: blocker.uid, ranged: !melee });
-          this.damage(blocker.uid, m.attack, m.uid);
-          if (melee && blocker.attack > 0) this.damage(m.uid, blocker.attack, blocker.uid);
-        } else {
-          this.emit({ type: 'attack', attacker: m.uid, target: 'hero', ranged: !melee });
-          this.damageHero(m.attack, m.uid);
-        }
-        this.resolveDeaths();
-      } else {
-        this.advance(m);
-      }
-    }
-    for (const m of s.monsters) {
-      const helper = monsterDef(m.defId).summonsEachTurn;
-      if (helper) s.pendingSpawns.push(helper);
+      if (u.fresh && !u.keywords.has('swift')) continue;
+      if (u.attack <= 0) continue;
+      const target = this.targetAhead(u);
+      if (target) this.strike(u, target.hit, target.dist);
+      else this.advance(u);
+      this.resolveDeaths();
+      if (this.checkOutcome()) return;
     }
   }
 
-  private advance(m: Monster) {
-    const from = m.row;
-    let row = m.row;
-    for (let step = 0; step < m.speed && row > 1; step++) {
-      if (this.monsterAt(m.lane, row - 1)) break;
-      row--;
+  /** First foe within range straight ahead in the unit's lane; past the last row is the foe hero. */
+  targetAhead(u: Unit): { hit: Unit | Side; dist: number } | null {
+    const dir = forward(u.side);
+    for (let d = 1; d <= u.range; d++) {
+      const r = u.row + d * dir;
+      if (r < 0 || r > LAST_ROW) return { hit: other(u.side), dist: d };
+      const occ = this.unitAt(u.lane, r);
+      if (occ && occ.side !== u.side) return { hit: occ, dist: d };
+      // Melee units cannot reach past an ally; ranged units shoot over them.
+      if (occ && u.range === 1) return null;
     }
-    if (row !== from) {
-      m.row = row;
-      this.emit({ type: 'move', uid: m.uid, lane: m.lane, from, to: row });
-    }
+    return null;
   }
 
-  private spawnWave(index: number) {
-    const s = this.state;
-    const wave = this.stageDef.waves[index] ?? [];
-    const queue = [...s.pendingSpawns, ...wave];
-    s.pendingSpawns = [];
-    for (const entry of queue) {
-      const [id, laneStr] = entry.split('@');
-      if (!this.spawnMonster(id, laneStr === undefined ? undefined : Number(laneStr))) s.pendingSpawns.push(entry);
+  private strike(u: Unit, hit: Unit | Side, dist: number) {
+    const ranged = dist > 1;
+    const target: HitTarget = typeof hit === 'string' ? hit : hit.uid;
+    this.emit({ type: 'attack', attacker: u.uid, target, ranged });
+    if (typeof hit === 'string') {
+      this.damageHero(hit, u.attack);
+      return;
     }
+    this.damageUnit(hit, u.attack);
+    if (!ranged && hit.attack > 0) this.damageUnit(u, hit.attack);
   }
 
-  private spawnMonster(id: string, preferredLane?: number): boolean {
-    const free = [...Array(LANES).keys()].filter((l) => !this.monsterAt(l, SPAWN_ROW));
-    if (free.length === 0) return false;
-    const lane = preferredLane !== undefined && free.includes(preferredLane) ? preferredLane : this.rng.pick(free);
-    const def = monsterDef(id);
-    const m: Monster = {
-      side: 'monster', uid: this.nextUid++, defId: id, name: def.name, model: def.model,
-      attack: def.attack, health: def.health, maxHealth: def.health,
-      keywords: new Set(def.keywords ?? []), scale: def.scale ?? 1,
-      lane, row: SPAWN_ROW, speed: def.speed, range: def.range, frozen: false, boss: !!def.boss,
-    };
-    this.state.monsters.push(m);
-    this.emit({ type: 'spawn', uid: m.uid, lane, row: m.row, defId: id });
-    return true;
+  private advance(u: Unit) {
+    const dir = forward(u.side);
+    const from = u.row;
+    for (let step = 0; step < u.speed; step++) {
+      const next = u.row + dir;
+      if (next < 0 || next > LAST_ROW || this.unitAt(u.lane, next)) break;
+      u.row = next;
+    }
+    if (u.row !== from) this.emit({ type: 'move', uid: u.uid, lane: u.lane, from, to: u.row });
   }
 
   // ── Shared mechanics ─────────────────────────────────────────
 
-  private summonMinion(defId: string, lane: number) {
-    const s = this.state;
-    if (s.slots[lane]) return;
+  private summonUnit(side: Side, defId: string, lane: number) {
+    const row = homeRow(side);
+    if (lane < 0 || lane >= LANES || this.unitAt(lane, row)) return;
     const def = card(defId) as MinionCard;
-    const m: Minion = {
-      side: 'minion', uid: this.nextUid++, defId, name: def.name, model: def.model,
-      attack: def.attack, health: def.health, maxHealth: def.health,
-      keywords: new Set(def.keywords ?? []), scale: def.scale ?? 1,
-      lane, attacksLeft: def.keywords?.includes('swift') && def.attack > 0 ? 1 : 0,
+    const keywords = new Set(def.keywords ?? []);
+    const u: Unit = {
+      uid: this.nextUid++, defId, side, name: def.name, model: def.model,
+      attack: def.attack, health: def.health, maxHealth: def.health, keywords, scale: def.scale ?? 1,
+      lane, row, speed: def.speed ?? (def.attack > 0 ? 1 : 0), range: keywords.has('ranged') ? RANGED_RANGE : 1,
+      frozen: false, fresh: true,
     };
-    s.slots[lane] = m;
-    this.emit({ type: 'summon', uid: m.uid, lane, defId });
-    def.onSummon?.(this.api, m);
+    this.state.units.push(u);
+    this.emit({ type: 'summon', uid: u.uid, side, lane, row, defId });
+    def.onSummon?.(this.apis[side], u);
   }
 
-  private damage(uid: number, amount: number, source: number | 'spell' | 'hero') {
-    if (amount <= 0) return;
-    const unit = this.unit(uid);
-    if (!unit || unit.health <= 0) return;
-    if (unit.keywords.has('ward')) {
-      unit.keywords.delete('ward');
-      this.emit({ type: 'wardBroken', uid });
+  private damage(target: Target, amount: number) {
+    if (target.kind === 'hero') this.damageHero(target.side, amount);
+    else if (target.kind === 'unit') {
+      const u = this.unit(target.uid);
+      if (u) this.damageUnit(u, amount);
+    }
+  }
+
+  private damageUnit(u: Unit, amount: number) {
+    if (amount <= 0 || u.health <= 0) return;
+    if (u.keywords.has('ward')) {
+      u.keywords.delete('ward');
+      this.emit({ type: 'wardBroken', uid: u.uid });
       return;
     }
-    unit.health -= amount;
-    this.emit({ type: 'damage', uid, amount, source });
+    u.health -= amount;
+    this.emit({ type: 'damage', target: u.uid, amount });
   }
 
-  private damageHero(amount: number, source: number) {
-    const hero = this.state.hero;
+  private damageHero(side: Side, amount: number) {
+    if (amount <= 0) return;
+    const hero = this.side(side).hero;
     hero.health = Math.max(0, hero.health - amount);
-    this.emit({ type: 'damage', uid: 'hero', amount, source });
+    this.emit({ type: 'damage', target: side, amount });
   }
 
   private resolveDeaths() {
     const s = this.state;
     for (;;) {
-      const deadMonsters = s.monsters.filter((m) => m.health <= 0);
-      const deadMinions = this.minions().filter((m) => m.health <= 0);
-      if (deadMonsters.length === 0 && deadMinions.length === 0) return;
-      s.monsters = s.monsters.filter((m) => m.health > 0);
-      for (const m of deadMonsters) this.emit({ type: 'death', uid: m.uid });
-      for (const m of deadMinions) {
-        s.slots[m.lane] = null;
-        this.emit({ type: 'death', uid: m.uid });
-      }
-      for (const m of deadMinions) (card(m.defId) as MinionCard).onDeath?.(this.api, m);
+      const dead = s.units.filter((u) => u.health <= 0);
+      if (dead.length === 0) return;
+      s.units = s.units.filter((u) => u.health > 0);
+      for (const u of dead) this.emit({ type: 'death', uid: u.uid });
+      for (const u of dead) (card(u.defId) as MinionCard).onDeath?.(this.apis[u.side], u);
     }
   }
 
-  private checkStageClear(): boolean {
+  /** Ends the stage if a hero has fallen. Returns true when the stage is over. */
+  private checkOutcome(): boolean {
     const s = this.state;
-    if (s.phase === 'defeat' || s.phase === 'reward' || s.phase === 'victory') return true;
-    const wavesLeft = this.stageDef.waves.slice(s.turn + (s.phase === 'enemy' ? 1 : 0)).some((w) => w.length > 0);
-    if (s.monsters.length > 0 || s.pendingSpawns.length > 0 || wavesLeft) return false;
-    s.stagesCleared++;
-    this.emit({ type: 'stageClear', stage: s.stage });
-    s.hero.health = Math.min(s.hero.maxHealth, s.hero.health + HEAL_BETWEEN_STAGES);
-    if (s.stage >= STAGES.length - 1) {
-      s.phase = 'victory';
-      this.emit({ type: 'victory' });
-    } else {
-      s.phase = 'reward';
-      s.rewards = rollRewards(this.rng, s.stagesCleared);
-    }
-    return true;
-  }
-
-  private draw(count: number) {
-    const s = this.state;
-    for (let i = 0; i < count; i++) {
-      if (s.drawPile.length === 0 && s.discard.length > 0) {
-        s.drawPile = this.rng.shuffle(s.discard);
-        s.discard = [];
-        this.emit({ type: 'reshuffle', count: s.drawPile.length });
-      }
-      const inst = s.drawPile.pop();
-      if (!inst) return;
-      if (s.hand.length >= MAX_HAND) {
-        s.discard.push(inst);
-        this.emit({ type: 'burn', card: inst });
+    if (this.over) return true;
+    if (s.sides.enemy.hero.health <= 0) {
+      s.stagesCleared++;
+      this.emit({ type: 'stageClear', stage: s.stage });
+      const hero = s.sides.player.hero;
+      hero.health = Math.min(hero.maxHealth, hero.health + HEAL_BETWEEN_STAGES);
+      if (s.stage >= STAGES.length - 1) {
+        s.phase = 'victory';
+        this.emit({ type: 'victory' });
       } else {
-        s.hand.push(inst);
-        this.emit({ type: 'draw', card: inst });
+        s.phase = 'reward';
+        s.rewards = rollRewards(this.rng, s.stagesCleared);
+      }
+      return true;
+    }
+    if (s.sides.player.hero.health <= 0) {
+      s.phase = 'defeat';
+      this.emit({ type: 'defeat' });
+      return true;
+    }
+    return false;
+  }
+
+  private draw(side: Side, count: number) {
+    const me = this.side(side);
+    for (let i = 0; i < count; i++) {
+      if (me.drawPile.length === 0 && me.discard.length > 0) {
+        me.drawPile = this.rng.shuffle(me.discard);
+        me.discard = [];
+        this.emit({ type: 'reshuffle', side, count: me.drawPile.length });
+      }
+      const inst = me.drawPile.pop();
+      if (!inst) return;
+      if (me.hand.length >= MAX_HAND) {
+        me.discard.push(inst);
+        this.emit({ type: 'burn', side, card: inst });
+      } else {
+        me.hand.push(inst);
+        this.emit({ type: 'draw', side, card: inst });
       }
     }
   }
 
   // ── Helpers ──────────────────────────────────────────────────
 
-  minions(): Minion[] {
-    return this.state.slots.filter((m): m is Minion => m !== null);
+  unitsOf(side: Side): Unit[] {
+    return this.state.units.filter((u) => u.side === side && u.health > 0);
   }
 
-  unit(uid: number): Minion | Monster | undefined {
-    return this.minions().find((m) => m.uid === uid) ?? this.state.monsters.find((m) => m.uid === uid);
+  unit(uid: number): Unit | undefined {
+    return this.state.units.find((u) => u.uid === uid);
   }
 
-  monsterAt(lane: number, row: number): Monster | undefined {
-    return this.state.monsters.find((m) => m.lane === lane && m.row === row && m.health > 0);
+  unitAt(lane: number, row: number): Unit | undefined {
+    return this.state.units.find((u) => u.lane === lane && u.row === row && u.health > 0);
+  }
+
+  freeHomeLanes(side: Side): number[] {
+    const row = homeRow(side);
+    return [...Array(LANES).keys()].filter((l) => !this.unitAt(l, row));
   }
 
   private emit(e: GameEvent) {
@@ -413,54 +430,53 @@ export class Game {
     return out;
   }
 
-  private createApi(): EffectApi {
+  private createApi(side: Side): EffectApi {
+    const foeSide = other(side);
+    const dir = forward(side);
     return {
       rng: this.rng,
-      monsters: () => this.state.monsters.filter((m) => m.health > 0),
-      minions: () => this.minions().filter((m) => m.health > 0),
-      monstersInLane: (lane) => this.state.monsters.filter((m) => m.lane === lane && m.health > 0),
-      frontMonster: (lane) => this.state.monsters
-        .filter((m) => m.lane === lane && m.health > 0)
-        .sort((a, b) => a.row - b.row)[0],
-      damage: (uid, amount) => this.damage(uid, amount, 'spell'),
+      side,
+      foes: () => this.unitsOf(foeSide),
+      allies: () => this.unitsOf(side),
+      // Ordered from the caster's side outward.
+      foesInLane: (lane) => this.unitsOf(foeSide).filter((u) => u.lane === lane).sort((a, b) => (a.row - b.row) * dir),
+      frontFoe: (lane) => this.unitsOf(foeSide).filter((u) => u.lane === lane).sort((a, b) => (a.row - b.row) * dir)[0],
+      damage: (target, amount) => this.damage(target, amount),
+      damageFoeHero: (amount) => this.damageHero(foeSide, amount),
       healHero: (amount) => {
-        const hero = this.state.hero;
+        const hero = this.side(side).hero;
         const healed = Math.min(amount, hero.maxHealth - hero.health);
         hero.health += healed;
-        if (healed > 0) this.emit({ type: 'heal', uid: 'hero', amount: healed });
+        if (healed > 0) this.emit({ type: 'heal', target: side, amount: healed });
       },
-      draw: (count) => this.draw(count),
+      draw: (count) => this.draw(side, count),
       buff: (uid, attack, health) => {
         const u = this.unit(uid);
-        if (!u) return;
+        if (!u || u.health <= 0) return;
         u.attack += attack;
         u.health += health;
         u.maxHealth += health;
         this.emit({ type: 'buff', uid, attack, health });
       },
       freeze: (uid) => {
-        const m = this.state.monsters.find((x) => x.uid === uid);
-        if (!m || m.health <= 0) return;
-        m.frozen = true;
+        const u = this.unit(uid);
+        if (!u || u.health <= 0) return;
+        u.frozen = true;
         this.emit({ type: 'freeze', uid });
       },
       push: (uid, rows) => {
-        const m = this.state.monsters.find((x) => x.uid === uid);
-        if (!m || m.health <= 0) return;
-        const from = m.row;
-        let row = m.row;
-        for (let i = 0; i < rows && row < SPAWN_ROW; i++) {
-          if (this.monsterAt(m.lane, row + 1)) break;
-          row++;
+        const u = this.unit(uid);
+        if (!u || u.health <= 0) return;
+        const from = u.row;
+        for (let i = 0; i < rows; i++) {
+          const next = u.row + dir;
+          if (next < 0 || next > LAST_ROW || this.unitAt(u.lane, next)) break;
+          u.row = next;
         }
-        if (row !== from) {
-          m.row = row;
-          this.emit({ type: 'push', uid, lane: m.lane, from, to: row });
-        }
+        if (u.row !== from) this.emit({ type: 'push', uid, lane: u.lane, from, to: u.row });
       },
-      summon: (defId, lane) => {
-        if (lane >= 0 && lane < LANES) this.summonMinion(defId, lane);
-      },
+      summon: (defId, lane) => this.summonUnit(side, defId, lane),
+      freeHomeLanes: () => this.freeHomeLanes(side),
     };
   }
 }
@@ -469,8 +485,8 @@ export function sameTarget(a: Target, b: Target): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
     case 'none': return true;
-    case 'monster':
-    case 'minion': return a.uid === (b as typeof a).uid;
+    case 'unit': return a.uid === (b as typeof a).uid;
+    case 'hero': return a.side === (b as typeof a).side;
     case 'lane':
     case 'slot': return a.lane === (b as typeof a).lane;
   }

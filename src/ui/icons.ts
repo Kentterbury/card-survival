@@ -12,12 +12,15 @@ const PATHS: Record<SpellIcon, string> = {
   scroll: '<rect x="22" y="16" width="56" height="68" rx="6" fill="url(#g)"/><path d="M32 32h36M32 44h36M32 56h28M32 68h20" stroke="#6b4a24" stroke-width="4" stroke-linecap="round"/>',
   meteor: '<path d="M14 14l40 40" stroke="#ffb070" stroke-width="10" stroke-linecap="round" opacity=".7"/><path d="M28 10l32 32M10 30l32 32" stroke="#ff7a3a" stroke-width="5" stroke-linecap="round" opacity=".6"/><circle cx="64" cy="64" r="22" fill="url(#g)"/>',
   sword: '<path d="M50 6l8 14v44H42V20z" fill="url(#g)"/><path d="M30 64h40v8H30z" fill="#d9a441"/><path d="M46 72h8v18h-8z" fill="#7a4a1e"/>',
+  skull: '<path d="M50 12c-20 0-32 14-32 30 0 10 5 17 12 21v13h40V63c7-4 12-11 12-21 0-16-12-30-32-30z" fill="url(#g)"/><circle cx="38" cy="44" r="8" fill="#1a2a12"/><circle cx="62" cy="44" r="8" fill="#1a2a12"/><path d="M44 66v10M50 66v10M56 66v10" stroke="#1a2a12" stroke-width="3"/>',
+  curse: '<path d="M50 8c10 16 30 22 30 46a30 30 0 0 1-60 0c0-24 20-30 30-46z" fill="url(#g)"/><circle cx="50" cy="56" r="10" fill="#0c2410"/><circle cx="50" cy="56" r="4" fill="#bfff9a"/>',
 };
 
 const GRADIENTS: Record<SpellIcon, [string, string]> = {
   fire: ['#ffd36b', '#ff4a12'], bolt: ['#fffbd0', '#ffc21a'], storm: ['#cdeeff', '#3c8dff'],
   frost: ['#e8fdff', '#46c3ff'], wave: ['#efe6ff', '#8c6bff'], heart: ['#c8ffd9', '#26c26b'],
   shield: ['#fff1c2', '#d29a2a'], scroll: ['#fff3d6', '#d6b47a'], meteor: ['#ffd27a', '#e2341a'], sword: ['#ffffff', '#9fb4c8'],
+  skull: ['#f4ffe8', '#9dbf8a'], curse: ['#d6ffb0', '#2a9a3a'],
 };
 
 export function spellIconSvg(icon: SpellIcon): string {
@@ -39,4 +42,6 @@ export const SPELL_BACKDROP: Record<SpellIcon, string> = {
   scroll: 'radial-gradient(circle at 50% 50%, #5a4a32, #1e1810)',
   meteor: 'radial-gradient(circle at 70% 70%, #8a2a0a, #1a0806)',
   sword: 'radial-gradient(circle at 50% 50%, #3a4a5a, #10161c)',
+  skull: 'radial-gradient(circle at 50% 50%, #2a3a22, #0b100a)',
+  curse: 'radial-gradient(circle at 50% 50%, #1e4a22, #081208)',
 };

@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import type { SpellIcon } from '../game/cards';
 import { LANE_W, ROW_D } from './board';
 import { ease, tween } from './tween';
-import { SPAWN_ROW } from '../game/types';
+import { LAST_ROW } from '../game/types';
 
-const COLORS: Record<SpellIcon | 'arrow' | 'curse' | 'hero', number> = {
+const COLORS: Record<SpellIcon | 'arrow' | 'hero', number> = {
   fire: 0xff7a1a, bolt: 0xfff36a, storm: 0x9ad8ff, frost: 0x8fe9ff, wave: 0xd6c2ff,
   heart: 0x7dffb0, shield: 0xffe29a, scroll: 0xffffff, meteor: 0xff4a1a, sword: 0xffd34d,
-  arrow: 0xe8d6b0, curse: 0x6dff8a, hero: 0x8fd0ff,
+  skull: 0x9dff7a, arrow: 0xe8d6b0, curse: 0x6dff8a, hero: 0x8fd0ff,
 };
 
 export class Fx {
@@ -52,14 +52,14 @@ export class Fx {
   /** A column of light/fire over a whole lane. */
   async laneBlast(laneX: number, kind: SpellIcon) {
     const color = COLORS[kind];
-    const len = ROW_D * SPAWN_ROW;
+    const len = ROW_D * (LAST_ROW + 1);
     const geo = new THREE.BoxGeometry(LANE_W * 0.85, 0.1, len);
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.0, toneMapped: false, depthWrite: false });
     const slab = new THREE.Mesh(geo, mat);
-    slab.position.set(laneX, 0.15, -ROW_D * (SPAWN_ROW + 1) / 2);
+    slab.position.set(laneX, 0.15, -ROW_D * LAST_ROW / 2);
     this.scene.add(slab);
     const flames: Promise<void>[] = [];
-    for (let r = 1; r <= SPAWN_ROW; r++) {
+    for (let r = 0; r <= LAST_ROW; r++) {
       const p = new THREE.Vector3(laneX, 0.4, -r * ROW_D);
       flames.push(tween(0.08 * r, () => {}).then(() => this.burst(p, color, 10, 4)));
     }

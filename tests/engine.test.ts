@@ -1,187 +1,198 @@
 import { describe, expect, it } from 'vitest';
-import { CARDS } from '../src/game/cards';
+import { card, CARDS, STARTER_DECK, type MinionCard } from '../src/game/cards';
 import { Game, HERO_MAX_HEALTH } from '../src/game/engine';
-import { MONSTERS } from '../src/game/monsters';
 import { STAGES } from '../src/game/stages';
-import { LANES, SPAWN_ROW, type Monster } from '../src/game/types';
+import { LAST_ROW, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
 
 function freshGame(deck: string[]) {
   const g = new Game(42);
   g.startRun(deck);
+  g.state.units = [];
   return g;
 }
 
-function placeMonster(g: Game, id: string, lane: number, row: number): Monster {
-  const def = MONSTERS[id];
-  const m: Monster = {
-    side: 'monster', uid: 9000 + g.state.monsters.length, defId: id, name: def.name, model: def.model,
-    attack: def.attack, health: def.health, maxHealth: def.health, keywords: new Set(def.keywords ?? []),
-    scale: 1, lane, row, speed: def.speed, range: def.range, frozen: false, boss: false,
+let uidSeq = 5000;
+function place(g: Game, defId: string, side: Side, lane: number, row: number, fresh = false): Unit {
+  const d = card(defId) as MinionCard;
+  const keywords = new Set(d.keywords ?? []);
+  const u: Unit = {
+    uid: uidSeq++, defId, side, name: d.name, model: d.model, attack: d.attack, health: d.health, maxHealth: d.health,
+    keywords, scale: 1, lane, row, speed: d.speed ?? (d.attack > 0 ? 1 : 0), range: keywords.has('ranged') ? RANGED_RANGE : 1,
+    frozen: false, fresh,
   };
-  g.state.monsters.push(m);
-  return m;
+  g.state.units.push(u);
+  return u;
+}
+
+/** Ends the player turn with the enemy unable to do anything. */
+function passTurn(g: Game) {
+  g.side('enemy').hand = [];
+  g.side('enemy').drawPile = [];
+  g.side('enemy').discard = [];
+  g.side('enemy').powerUsed = true;
+  g.state.sides.enemy.maxMana = -1;
+  g.endTurn();
 }
 
 describe('turn structure', () => {
-  it('starts stage 1 with one mana, four cards and the first wave', () => {
-    const g = freshGame(Array(10).fill('squire'));
+  it('starts with one mana, four cards and both heroes at full health', () => {
+    const g = new Game(1);
+    g.startRun();
     expect(g.state.phase).toBe('player');
-    expect(g.state.turn).toBe(1);
-    expect(g.state.mana).toBe(1);
-    expect(g.state.hand).toHaveLength(4);
-    expect(g.state.monsters).toHaveLength(STAGES[0].waves[0].length);
-    expect(g.state.monsters[0].row).toBe(SPAWN_ROW);
+    expect(g.side('player').mana).toBe(1);
+    expect(g.side('player').hand).toHaveLength(4);
+    expect(g.side('enemy').hero.health).toBe(STAGES[0].hero.health);
+    expect(g.side('player').hero.health).toBe(HERO_MAX_HEALTH);
   });
 
-  it('grows mana by one per turn and carries one unspent mana over', () => {
+  it('starter deck is mostly spells', () => {
+    const minions = STARTER_DECK.filter((id) => card(id).type === 'minion').length;
+    expect(minions).toBeLessThan(STARTER_DECK.length / 2);
+  });
+
+  it('carries one unspent mana into the next turn', () => {
     const g = freshGame(Array(10).fill('squire'));
-    g.endTurn();
-    expect(g.state.maxMana).toBe(2);
-    expect(g.state.mana).toBe(3); // 2 + 1 reserve from the unspent turn-1 mana
-    g.state.mana = 0;
-    g.endTurn();
-    expect(g.state.mana).toBe(3);
+    passTurn(g);
+    expect(g.side('player').maxMana).toBe(2);
+    expect(g.side('player').mana).toBe(3);
   });
 
-  it('reshuffles the discard pile when the draw pile runs out', () => {
-    const g = freshGame(['firebolt', 'firebolt', 'firebolt', 'firebolt', 'firebolt']);
-    // 4 in hand, 1 in pile; play two so the discard has cards
-    g.state.mana = 10;
-    g.state.monsters.forEach((m) => (m.health = 99));
-    g.playCard(0, { kind: 'monster', uid: g.state.monsters[0].uid });
-    g.playCard(0, { kind: 'monster', uid: g.state.monsters[0].uid });
-    g.endTurn(); // draws the last card
-    g.endTurn(); // must reshuffle
-    expect(g.state.hand.length).toBe(4);
+  it('the enemy plays cards on its turn', () => {
+    const g = new Game(7);
+    g.startRun();
+    const before = g.side('enemy').hand.length;
+    g.endTurn();
+    const s = g.state;
+    expect(s.units.filter((u) => u.side === 'enemy').length + (before + 1 - g.side('enemy').hand.length)).toBeGreaterThan(0);
   });
 });
 
-describe('cards and combat', () => {
-  it('summons a minion into an empty slot only', () => {
+describe('lane combat', () => {
+  it('units advance one cell per turn, but not on the turn they are summoned', () => {
     const g = freshGame(Array(10).fill('squire'));
-    expect(g.cardTargets(0)).toHaveLength(LANES);
     g.playCard(0, { kind: 'slot', lane: 2 });
-    expect(g.state.slots[2]?.defId).toBe('squire');
-    expect(g.state.mana).toBe(0);
-    g.state.mana = 5;
-    expect(g.cardTargets(0).some((t) => t.kind === 'slot' && t.lane === 2)).toBe(false);
+    const u = g.state.units[0];
+    expect(u.row).toBe(0);
+    passTurn(g);
+    expect(u.row).toBe(0); // fresh on its first turn
+    passTurn(g);
+    expect(u.row).toBe(1);
   });
 
-  it('melee minions trade blows with a monster in the front row', () => {
-    const g = freshGame(Array(10).fill('berserker'));
-    g.state.monsters = [];
-    g.state.mana = 3;
-    g.playCard(0, { kind: 'slot', lane: 1 });
-    const m = placeMonster(g, 'warrior', 2, 1); // adjacent lane, front row
-    const minion = g.state.slots[1]!;
-    expect(g.attackTargets(minion.uid)).toEqual([m.uid]);
-    g.minionAttack(minion.uid, m.uid);
-    expect(m.health).toBe(MONSTERS.warrior.health - 4);
-    expect(g.state.slots[1]).toBeNull(); // 3 health vs 3 attack
+  it('melee units trade blows with the foe right in front', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const mine = place(g, 'berserker', 'player', 1, 3);
+    const foe = place(g, 'sk_warrior', 'enemy', 1, 4);
+    passTurn(g);
+    // berserker hits for 4 (kills the 3/4), takes 3 back; then enemy has nothing left to swing.
+    expect(foe.health).toBe(0);
+    expect(mine.health).toBe(0);
   });
 
-  it('ranged minions hit anywhere in their lane without retaliation', () => {
-    const g = freshGame(Array(10).fill('crossbowman'));
-    g.state.monsters = [];
-    g.state.mana = 2;
-    g.playCard(0, { kind: 'slot', lane: 0 });
+  it('ranged units shoot the first foe ahead, over allies, without retaliation', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const xbow = place(g, 'crossbowman', 'player', 0, 0);
+    place(g, 'shieldbearer', 'player', 0, 1);
+    const foe = place(g, 'sk_warrior', 'enemy', 0, 3);
+    g.side('enemy').hand = [];
     g.endTurn();
-    g.state.monsters = [];
-    const m = placeMonster(g, 'warrior', 0, 5);
-    placeMonster(g, 'warrior', 1, 1);
-    const xbow = g.state.slots[0]!;
-    expect(g.attackTargets(xbow.uid)).toEqual([m.uid]);
-    g.minionAttack(xbow.uid, m.uid);
-    expect(m.health).toBe(MONSTERS.warrior.health - 2);
-    expect(xbow.health).toBe(1);
+    expect(foe.health).toBeLessThanOrEqual(4 - 2);
+    expect(xbow.health).toBe(2);
+  });
+
+  it('a unit with nobody in front hits the enemy hero from the last row', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    place(g, 'berserker', 'player', 4, LAST_ROW);
+    const hp = g.side('enemy').hero.health;
+    passTurn(g);
+    expect(g.side('enemy').hero.health).toBe(hp - 4);
+  });
+
+  it('ranged units hit the hero once it is in range', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    place(g, 'crossbowman', 'player', 2, LAST_ROW - 2);
+    const hp = g.side('enemy').hero.health;
+    passTurn(g);
+    expect(g.side('enemy').hero.health).toBe(hp - 2);
+  });
+
+  it('enemy units reaching our side damage our hero', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    place(g, 'sk_warrior', 'enemy', 3, 0);
+    g.side('enemy').hand = [];
+    g.endTurn();
+    expect(g.side('player').hero.health).toBe(HERO_MAX_HEALTH - 3);
   });
 
   it('ward absorbs the first hit', () => {
-    const g = freshGame(Array(10).fill('shieldbearer'));
-    g.state.monsters = [];
-    g.state.mana = 2;
-    g.playCard(0, { kind: 'slot', lane: 3 });
-    placeMonster(g, 'warrior', 3, 1);
+    const g = freshGame(Array(10).fill('squire'));
+    const shield = place(g, 'shieldbearer', 'player', 1, 0);
+    place(g, 'sk_warrior', 'enemy', 1, 1);
+    g.side('enemy').hand = [];
     g.endTurn();
-    const shield = g.state.slots[3]!;
     expect(shield.health).toBe(5);
     expect(shield.keywords.has('ward')).toBe(false);
   });
-
-  it('shockwave pushes a lane back and frost skips a monster turn', () => {
-    const g = freshGame(['shockwave', 'frostring', 'squire', 'squire', 'squire', 'squire']);
-    g.state.monsters = [];
-    g.state.mana = 10;
-    const a = placeMonster(g, 'warrior', 2, 1);
-    const b = placeMonster(g, 'warrior', 2, 2);
-    const shock = g.state.hand.findIndex((c) => c.defId === 'shockwave');
-    if (shock >= 0) {
-      g.playCard(shock, { kind: 'lane', lane: 2 });
-      expect([a.row, b.row].sort()).toEqual([3, 4]);
-    }
-    const frost = g.state.hand.findIndex((c) => c.defId === 'frostring');
-    if (frost >= 0) {
-      const before = a.row;
-      g.playCard(frost, { kind: 'lane', lane: 2 });
-      g.endTurn();
-      expect(a.row).toBe(before);
-    }
-  });
-
-  it('unblocked monsters in range hit the hero', () => {
-    const g = freshGame(Array(10).fill('squire'));
-    g.state.monsters = [];
-    placeMonster(g, 'mage', 4, 3);
-    g.endTurn();
-    expect(g.state.hero.health).toBe(HERO_MAX_HEALTH - 2);
-  });
-
-  it('on-death summons refill the slot', () => {
-    const g = freshGame(Array(10).fill('veteran'));
-    g.state.monsters = [];
-    g.state.mana = 4;
-    g.playCard(0, { kind: 'slot', lane: 0 });
-    g.state.slots[0]!.health = 1;
-    placeMonster(g, 'warrior', 0, 1);
-    g.endTurn();
-    expect(g.state.slots[0]?.defId).toBe('squire');
-  });
 });
 
-describe('stage flow', () => {
-  it('offers three reward bundles after clearing a stage and adds the pick to the deck', () => {
-    const g = freshGame(Array(10).fill('thunderbolt'));
-    // Fast-forward: clear every wave instantly.
-    for (let i = 0; i < 40 && g.state.phase === 'player'; i++) {
-      g.state.monsters.forEach((m) => (m.health = 0));
-      g.state.mana = 0;
-      g.state.monsters = [];
-      g.endTurn();
-    }
+describe('spells', () => {
+  it('damage spells can target the enemy hero', () => {
+    const g = freshGame(['firebolt', 'firebolt', 'firebolt', 'firebolt', 'firebolt']);
+    expect(g.cardTargets(0).some((t) => t.kind === 'hero' && t.side === 'enemy')).toBe(true);
+    const hp = g.side('enemy').hero.health;
+    g.playCard(0, { kind: 'hero', side: 'enemy' });
+    expect(g.side('enemy').hero.health).toBe(hp - 3);
+  });
+
+  it('killing the enemy hero clears the stage and offers rewards', () => {
+    const g = freshGame(Array(10).fill('pyroblast'));
+    g.side('player').mana = 10;
+    g.side('enemy').hero.health = 5;
+    g.playCard(0, { kind: 'hero', side: 'enemy' });
     expect(g.state.phase).toBe('reward');
     expect(g.state.rewards).toHaveLength(3);
     const size = g.state.deckList.length;
-    g.chooseReward(1);
+    g.chooseReward(0);
     expect(g.state.deckList).toHaveLength(size + 3);
     expect(g.state.stage).toBe(1);
     expect(g.state.phase).toBe('player');
   });
 
-  it('every card and monster referenced by data exists', () => {
-    for (const s of STAGES) for (const w of s.waves) for (const e of w) expect(MONSTERS[e.split('@')[0]]).toBeDefined();
-    for (const c of Object.values(CARDS)) expect(c.cost).toBeGreaterThanOrEqual(0);
+  it('our hero dying ends the run', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    g.side('player').hero.health = 2;
+    place(g, 'sk_warrior', 'enemy', 0, 0);
+    g.side('enemy').hand = [];
+    g.endTurn();
+    expect(g.state.phase).toBe('defeat');
   });
 
-  it('a greedy bot can play whole runs without getting stuck', () => {
+  it('shockwave pushes foes back toward their side', () => {
+    const g = freshGame(['shockwave', 'shockwave', 'shockwave', 'shockwave', 'shockwave']);
+    g.side('player').mana = 5;
+    const a = place(g, 'sk_warrior', 'enemy', 2, 1);
+    const b = place(g, 'sk_warrior', 'enemy', 2, 2);
+    g.playCard(0, { kind: 'lane', lane: 2 });
+    expect([a.row, b.row].sort()).toEqual([3, 4]);
+  });
+});
+
+describe('data and simulation', () => {
+  it('every referenced card exists', () => {
+    for (const s of STAGES) for (const id of s.deck) expect(CARDS[id]).toBeDefined();
+    for (const id of STARTER_DECK) expect(CARDS[id]).toBeDefined();
+  });
+
+  it('the bot can play whole runs without getting stuck', () => {
     let wins = 0;
     let cleared = 0;
-    const N = 60;
+    const N = 40;
     for (let seed = 1; seed <= N; seed++) {
       const r = playRun(new Game(seed));
       if (r.won) wins++;
       cleared += r.stagesCleared;
-      expect(r.turns).toBeLessThan(400);
+      expect(r.turns).toBeLessThan(600);
     }
     console.log(`bot: ${wins}/${N} wins, avg stages cleared ${(cleared / N).toFixed(2)}`);
     expect(cleared).toBeGreaterThan(0);

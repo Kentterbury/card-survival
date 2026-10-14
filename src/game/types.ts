@@ -1,11 +1,20 @@
 export const LANES = 5;
-/** Monster rows: 1 is right in front of the defense line, SPAWN_ROW is where waves appear. */
-export const SPAWN_ROW = 6;
+/** Rows 0..LAST_ROW. The player summons on row 0, the enemy on LAST_ROW. */
+export const ROWS = 6;
+export const LAST_ROW = ROWS - 1;
 export const MAX_MANA = 10;
 export const MAX_HAND = 10;
 /** Unspent mana carried into the next turn, at most this much. */
 export const MAX_RESERVE = 1;
 export const HERO_POWER_COST = 2;
+/** How far units with the `ranged` keyword shoot along their lane. */
+export const RANGED_RANGE = 3;
+
+export type Side = 'player' | 'enemy';
+export const other = (s: Side): Side => (s === 'player' ? 'enemy' : 'player');
+/** Direction a side's units advance in (row delta per step). */
+export const forward = (s: Side): number => (s === 'player' ? 1 : -1);
+export const homeRow = (s: Side): number => (s === 'player' ? 0 : LAST_ROW);
 
 export type Keyword = 'swift' | 'ranged' | 'ward';
 
@@ -16,46 +25,63 @@ export type ModelId =
 
 export type Target =
   | { kind: 'none' }
-  | { kind: 'monster'; uid: number }
-  | { kind: 'minion'; uid: number }
+  | { kind: 'unit'; uid: number }
+  | { kind: 'hero'; side: Side }
   | { kind: 'lane'; lane: number }
   | { kind: 'slot'; lane: number };
 
-export type TargetKind = Target['kind'];
+/**
+ * What a card may target, relative to whoever plays it:
+ * `foe` = an opposing unit or the opposing hero, `foeUnit` = opposing units only,
+ * `ally` = own units, `lane` = a whole lane, `slot` = an empty cell on the own home row.
+ */
+export type TargetKind = 'none' | 'foe' | 'foeUnit' | 'ally' | 'lane' | 'slot';
 
 export interface Unit {
   uid: number;
   defId: string;
+  side: Side;
   name: string;
   model: ModelId;
   attack: number;
   health: number;
   maxHealth: number;
   keywords: Set<Keyword>;
-  /** Visual size multiplier for elites and bosses. */
+  /** Visual size multiplier for elites. */
   scale: number;
-}
-
-export interface Minion extends Unit {
-  side: 'minion';
-  lane: number;
-  attacksLeft: number;
-}
-
-export interface Monster extends Unit {
-  side: 'monster';
   lane: number;
   row: number;
+  /** Cells advanced per turn (0 = holds position). */
   speed: number;
-  /** Rows from the defense line this monster can strike from (1 = melee). */
+  /** Cells ahead this unit can strike (1 = melee). */
   range: number;
   frozen: boolean;
-  boss: boolean;
+  /** Summoned this turn: does not act at the end of it unless `swift`. */
+  fresh: boolean;
 }
 
 export interface CardInstance {
   iid: number;
   defId: string;
+}
+
+export interface Hero {
+  name: string;
+  model: ModelId;
+  scale: number;
+  health: number;
+  maxHealth: number;
+}
+
+export interface SideState {
+  hero: Hero;
+  mana: number;
+  maxMana: number;
+  reserve: number;
+  powerUsed: boolean;
+  drawPile: CardInstance[];
+  hand: CardInstance[];
+  discard: CardInstance[];
 }
 
 export type Phase = 'player' | 'enemy' | 'reward' | 'victory' | 'defeat';
@@ -67,26 +93,28 @@ export interface RewardBundle {
   cards: string[];
 }
 
+/** A hit target in events: a unit uid, or the hero of the given side. */
+export type HitTarget = number | Side;
+
 export type GameEvent =
   | { type: 'stageStart'; stage: number }
-  | { type: 'turnStart'; turn: number }
-  | { type: 'draw'; card: CardInstance }
-  | { type: 'burn'; card: CardInstance }
-  | { type: 'reshuffle'; count: number }
-  | { type: 'cardPlayed'; card: CardInstance; target: Target }
-  | { type: 'summon'; uid: number; lane: number; defId: string }
-  | { type: 'spawn'; uid: number; lane: number; row: number; defId: string }
+  | { type: 'turnStart'; side: Side; turn: number }
+  | { type: 'draw'; side: Side; card: CardInstance }
+  | { type: 'burn'; side: Side; card: CardInstance }
+  | { type: 'reshuffle'; side: Side; count: number }
+  | { type: 'cardPlayed'; side: Side; card: CardInstance; target: Target }
+  | { type: 'summon'; uid: number; side: Side; lane: number; row: number; defId: string }
   | { type: 'move'; uid: number; lane: number; from: number; to: number }
-  | { type: 'attack'; attacker: number; target: number | 'hero'; ranged: boolean }
-  | { type: 'damage'; uid: number | 'hero'; amount: number; source: number | 'spell' | 'hero' }
+  | { type: 'push'; uid: number; lane: number; from: number; to: number }
+  | { type: 'attack'; attacker: number; target: HitTarget; ranged: boolean }
+  | { type: 'damage'; target: HitTarget; amount: number }
   | { type: 'wardBroken'; uid: number }
-  | { type: 'heal'; uid: number | 'hero'; amount: number }
+  | { type: 'heal'; target: Side; amount: number }
   | { type: 'buff'; uid: number; attack: number; health: number }
   | { type: 'freeze'; uid: number }
-  | { type: 'push'; uid: number; lane: number; from: number; to: number }
   | { type: 'death'; uid: number }
-  | { type: 'spell'; defId: string; target: Target }
-  | { type: 'heroPower'; target: Target }
+  | { type: 'spell'; side: Side; defId: string; target: Target }
+  | { type: 'heroPower'; side: Side; target: Target }
   | { type: 'enemyTurn' }
   | { type: 'stageClear'; stage: number }
   | { type: 'defeat' }

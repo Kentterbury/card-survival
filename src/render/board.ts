@@ -1,17 +1,19 @@
 import * as THREE from 'three';
-import { LANES, SPAWN_ROW } from '../game/types';
+import { LANES, LAST_ROW, ROWS } from '../game/types';
 import { instantiateStatic } from './assets';
 
 export const LANE_W = 2.6;
 export const ROW_D = 2.35;
-/** Where hero spells and the hero power are cast from (the hero itself is the HUD portrait). */
+/** Where the player's spells and hero power are cast from (the hero itself is the HUD portrait). */
 export const HERO_POS = new THREE.Vector3(-5.2, 0, 3.4);
+/** The enemy hero stands in front of the gate, past the last row. */
+export const ENEMY_HERO_POS = new THREE.Vector3(0, 0, -(ROWS + 0.35) * ROW_D);
 
 export function laneX(lane: number): number {
   return (lane - (LANES - 1) / 2) * LANE_W;
 }
 
-/** Row 0 is the defense line (minion slots); monsters occupy rows 1..SPAWN_ROW. */
+/** Row 0 is the player's home row, LAST_ROW the enemy's. Row -1 / ROWS are the heroes' edges. */
 export function rowZ(row: number): number {
   return -row * ROW_D;
 }
@@ -20,7 +22,7 @@ export function cellPos(lane: number, row: number): THREE.Vector3 {
   return new THREE.Vector3(laneX(lane), 0, rowZ(row));
 }
 
-export type CellHighlight = 'none' | 'valid' | 'hover' | 'danger' | 'lane';
+export type CellHighlight = 'none' | 'valid' | 'hover' | 'danger' | 'lane' | 'enemyHome';
 
 export class Board {
   readonly scene = new THREE.Scene();
@@ -141,7 +143,7 @@ export class Board {
     geo.rotateX(-Math.PI / 2);
     for (let lane = 0; lane < LANES; lane++) {
       this.cells.push([]);
-      for (let row = 0; row <= SPAWN_ROW; row++) {
+      for (let row = 0; row <= LAST_ROW; row++) {
         const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
         const m = new THREE.Mesh(geo, mat);
         m.position.copy(cellPos(lane, row)).setY(0.07);
@@ -150,15 +152,17 @@ export class Board {
         this.scene.add(m);
       }
     }
-    // A faint line marking the defense line and the slots behind it.
-    const line = new THREE.Mesh(
-      new THREE.PlaneGeometry(LANE_W * LANES, 0.08).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.55 }),
-    );
-    line.position.set(0, 0.08, -ROW_D / 2);
-    this.scene.add(line);
+    // Faint lines marking each side's home row.
+    for (const [z, color] of [[-ROW_D / 2, 0xffc46b], [-(LAST_ROW - 0.5) * ROW_D, 0x7dff9a]] as const) {
+      const line = new THREE.Mesh(
+        new THREE.PlaneGeometry(LANE_W * LANES, 0.08).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 }),
+      );
+      line.position.set(0, 0.08, z);
+      this.scene.add(line);
+    }
     // Lane dividers running down the hall.
-    const depth = ROW_D * (SPAWN_ROW + 1);
+    const depth = ROW_D * ROWS;
     const dividerMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false });
     for (let i = 0; i <= LANES; i++) {
       const d = new THREE.Mesh(new THREE.PlaneGeometry(0.06, depth).rotateX(-Math.PI / 2), dividerMat);
@@ -167,10 +171,10 @@ export class Board {
     }
   }
 
-  /** Base look of the grid: slots are outlined, everything else invisible. */
+  /** Base look of the grid: both home rows are tinted, everything else invisible. */
   clearHighlights() {
     for (let lane = 0; lane < LANES; lane++) {
-      for (let row = 0; row <= SPAWN_ROW; row++) this.setCell(lane, row, row === 0 ? 'lane' : 'none');
+      for (let row = 0; row <= LAST_ROW; row++) this.setCell(lane, row, row === 0 ? 'lane' : row === LAST_ROW ? 'enemyHome' : 'none');
     }
   }
 
@@ -183,7 +187,8 @@ export class Board {
       lane: [0xc9b48a, 0.12],
       valid: [0x5cf2a3, 0.22],
       hover: [0xfff27a, 0.45],
-      danger: [0xff4a3d, 0.18],
+      danger: [0xff4a3d, 0.2],
+      enemyHome: [0x7dff9a, 0.06],
     };
     mat.color.setHex(style[kind][0]);
     mat.opacity = style[kind][1];
@@ -197,8 +202,8 @@ export class Board {
     if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit)) return null;
     const lane = Math.round(hit.x / LANE_W + (LANES - 1) / 2);
     const row = Math.round(-hit.z / ROW_D);
-    if (lane < 0 || lane >= LANES || row < 0 || row > SPAWN_ROW + 1) return null;
-    return { lane, row: Math.min(row, SPAWN_ROW) };
+    if (lane < 0 || lane >= LANES || row < 0 || row > LAST_ROW) return null;
+    return { lane, row };
   }
 
   addShake(amount: number) {

@@ -28,7 +28,7 @@ button { font-family: inherit; }
 .unit-badge .atk { background: radial-gradient(circle at 35% 30%, #ffe18a, var(--atk) 60%, #8a5a10); border-radius: 4px 4px 4px 12px; clip-path: polygon(50% 0, 100% 30%, 100% 100%, 0 100%, 0 30%); }
 .unit-badge .hp { background: radial-gradient(circle at 35% 30%, #ff9a8a, var(--hp) 60%, #6a1410); border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%; }
 .unit-badge .hp.hurt { color: #ffb0a0; }
-.unit-badge.monster .atk { background: radial-gradient(circle at 35% 30%, #c8ff9a, #6ab83a 60%, #24420e); }
+.unit-badge.enemy .atk { background: radial-gradient(circle at 35% 30%, #c8ff9a, #6ab83a 60%, #24420e); }
 .unit-badge .threat { position: absolute; top: -1.35em; left: 50%; transform: translateX(-50%); min-width: 0; width: 1.4em; height: 1.4em; border: none; box-shadow: none; background: none; color: #ff5040; font-size: .95em; animation: pulse 1s ease-in-out infinite; }
 .unit-badge .frozen-tag { position: absolute; top: -1.35em; right: -1.2em; min-width: 0; border: none; box-shadow: none; background: none; color: #9fe6ff; }
 .unit-badge.can-attack span { box-shadow: 0 0 0 2px #6dff9a, 0 0 12px #6dff9a; }
@@ -46,10 +46,6 @@ button { font-family: inherit; }
 #stage-plaque { position: absolute; top: 1.2vh; left: calc(1.2vh + env(safe-area-inset-left)); padding: .8vh 2vh; text-align: left; background: linear-gradient(#2a2018ee, #140e0aee); border: 2px solid var(--gold-dim); border-radius: 10px; box-shadow: 0 4px 16px #000a; pointer-events: none; }
 #stage-title { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: clamp(14px, 2.5vh, 24px); color: var(--gold); }
 #stage-sub { font-size: clamp(11px, 1.6vh, 15px); opacity: .85; }
-#next-wave { position: absolute; top: 1.2vh; right: calc(1.2vh + env(safe-area-inset-right)); padding: .8vh 1.2vh; max-width: 30vw; background: #140e0acc; border: 1px solid #5a4422; border-radius: 10px; font-size: clamp(11px, 1.6vh, 15px); pointer-events: none; }
-#next-wave .label { color: var(--gold); font-weight: 700; margin-bottom: .3vh; }
-#next-wave .chip { display: inline-flex; align-items: center; gap: .4vh; margin: .2vh .4vh .2vh 0; padding: .2vh .8vh; border-radius: 999px; background: #3a1c1c; border: 1px solid #8a3a2a; }
-#next-wave .chip img { width: 2.4vh; height: 2.4vh; border-radius: 50%; object-fit: cover; background: #000; }
 
 #hero-frame { position: absolute; left: calc(1.6vh + env(safe-area-inset-left)); bottom: 1.6vh; width: 15vh; height: 15vh; pointer-events: none; }
 #hero-portrait { position: absolute; inset: 0; border-radius: 50%; background: #241a12 center 20% / 150% no-repeat; border: 4px solid var(--gold); box-shadow: 0 0 0 3px #3a2a16, 0 6px 18px #000c; }
@@ -173,8 +169,7 @@ button { font-family: inherit; }
   #inspect .notes { width: 34vh; }
   #stage-plaque { padding: .6vh 1.6vh; }
   #stage-title { font-size: 13px; }
-  #stage-sub, #next-wave { font-size: 11px; }
-  /* A tapped card lifts high and large enough to read. */
+  #stage-sub,   /* A tapped card lifts high and large enough to read. */
   .card.in-hand.aiming { transform: translate(var(--x), calc(var(--card-h) * -1.25)) scale(1.9); }
   .card.in-hand.hover:not(.aiming) { transform: translate(var(--x), var(--y)) rotate(var(--r)); }
   .bundle { width: min(29vw, 300px); padding: 1vh .8vh; }
@@ -191,3 +186,23 @@ button { font-family: inherit; }
   #rotate-hint .phone { width: 56px; height: 96px; border: 4px solid var(--gold); border-radius: 12px; animation: rotatePhone 2s ease-in-out infinite; }
 }
 @keyframes rotatePhone { 0%, 20% { transform: rotate(0); } 50%, 80% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
+
+/* ── Enemy hero ──────────────────────────────── */
+#enemy-frame { position: absolute; top: 1.2vh; right: calc(2vh + env(safe-area-inset-right)); width: 11vh; height: 11vh; cursor: default; }
+#enemy-portrait { position: absolute; inset: 0; border-radius: 50%; background: #1a2414 center 20% / 150% no-repeat; border: 4px solid #7dbf5a; box-shadow: 0 0 0 3px #1e2a14, 0 6px 18px #000c; }
+#enemy-hp { position: absolute; right: -1.4vh; bottom: -.6vh; min-width: 4.4vh; height: 4.4vh; padding: 0 .5vh; display: grid; place-items: center; font-weight: 900; font-size: 2.3vh; background: radial-gradient(circle at 35% 30%, #ff9a8a, var(--hp) 60%, #6a1410); border: 3px solid #1a1208; border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%; text-shadow: 0 1px 2px #000; }
+#enemy-info { position: absolute; right: calc(100% + 1.6vh); text-align: right; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: clamp(11px, 1.6vh, 15px); padding: .6vh 1.2vh; background: #0e140acc; border: 1px solid #4a6a2a; border-radius: 8px; pointer-events: none; }
+#enemy-name { font-family: 'Gowun Batang', serif; font-weight: 700; color: #b8ff9a; font-size: 1.15em; }
+#enemy-mana { color: #bfe4ff; }
+#enemy-hand { display: flex; justify-content: flex-end; gap: 2px; margin-top: .4vh; }
+#enemy-hand i { width: 1.3vh; height: 1.9vh; border-radius: 2px; background: repeating-linear-gradient(45deg, #2a3a1c 0 3px, #1a240e 3px 6px); border: 1px solid #7dbf5a; }
+#enemy-frame.hit #enemy-portrait { animation: heroHit .35s; }
+#enemy-frame.targetable #enemy-portrait { border-color: #6dff9a; box-shadow: 0 0 0 3px #1e2a14, 0 0 18px #3aff8a; }
+#enemy-frame.hover #enemy-portrait { border-color: #fff27a; box-shadow: 0 0 0 3px #3a2a14, 0 0 24px #fff27a; }
+#enemy-frame.casting #enemy-portrait { box-shadow: 0 0 0 3px #1e2a14, 0 0 28px #9dff7a; }
+
+.card.enemy-card .card-frame { background: linear-gradient(160deg, #2a3a22, #10180c 55%, #24321c); border-color: #7dbf5a; }
+.card.enemy-card .card-name { background: linear-gradient(90deg, transparent, #2a4a1e 12%, #3a6428 50%, #2a4a1e 88%, transparent); border-color: #a8e07a; }
+#enemy-played { position: fixed; left: 50%; top: 18vh; transform: translateX(-50%); z-index: 65; pointer-events: none; text-align: center; }
+#enemy-played .card { position: relative; left: 0; --card-w: min(17vh, 180px); }
+#enemy-played .label { margin-bottom: .6vh; font-weight: 700; color: #b8ff9a; text-shadow: 0 2px 4px #000; font-size: clamp(12px, 1.9vh, 18px); }

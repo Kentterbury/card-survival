@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Minion, ModelId, Monster } from '../game/types';
+import type { ModelId, Side, Unit } from '../game/types';
 import { ANIMS, instantiateCharacter, instantiateStatic, type AnimSet } from './assets';
 import { ease, tween, wait } from './tween';
 
@@ -27,7 +27,7 @@ export class UnitView {
 
   constructor(
     readonly uid: number,
-    readonly side: 'minion' | 'monster' | 'hero',
+    readonly side: Side | 'hero',
     readonly modelId: ModelId,
     readonly scale: number,
     badgeLayer: HTMLElement,
@@ -74,7 +74,7 @@ export class UnitView {
     this.group.add(this.model);
   }
 
-  setStats(u: Pick<Minion | Monster, 'attack' | 'health' | 'maxHealth'>) {
+  setStats(u: Pick<Unit, 'attack' | 'health' | 'maxHealth'>) {
     this.attack = u.attack;
     this.health = u.health;
     this.maxHealth = u.maxHealth;

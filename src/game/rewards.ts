@@ -13,7 +13,7 @@ const BUNDLES: (RewardBundle & { tier: number })[] = [
   { id: 'citadel', name: '성채', theme: '단단한 전열', tier: 2, cards: ['fortress', 'veteran', 'barricade'] },
   { id: 'warband', name: '전쟁 군단', theme: '강력한 하수인', tier: 2, cards: ['warlord', 'berserker', 'rally'] },
   { id: 'arcane', name: '대마법', theme: '전설급 주문', tier: 3, cards: ['archmage', 'meteor', 'regroup'] },
-  { id: 'cataclysm', name: '대재앙', theme: '전장 정리', tier: 3, cards: ['meteor', 'flamewave', 'thunderbolt'] },
+  { id: 'cataclysm', name: '대재앙', theme: '전장 정리', tier: 3, cards: ['pyroblast', 'flamewave', 'thunderbolt'] },
 ];
 
 /** `cleared` is how many stages have been beaten so far (1 after the first stage). */

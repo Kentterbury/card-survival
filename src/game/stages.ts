@@ -1,43 +1,50 @@
-/**
- * Fixed stage scripts. Each entry in `waves` is what appears at the far end of
- * the hall at the end of that enemy turn (index 0 = before the first player turn).
- * A spawn is `monsterId` (random lane) or `monsterId@lane`.
- */
+import type { ModelId } from './types';
+
+/** `summon`: 2 mana, summon a 해골 졸개. `bolt`: 2 mana, 1 damage to any foe (hero included). */
+export type EnemyPower = 'summon' | 'bolt';
+
 export interface StageDef {
   name: string;
   subtitle: string;
-  waves: string[][];
+  hero: { name: string; model: ModelId; scale: number; health: number };
+  power: EnemyPower;
+  deck: string[];
 }
+
+const x = (id: string, n: number) => Array<string>(n).fill(id);
 
 export const STAGES: StageDef[] = [
   {
-    name: '무너진 성문', subtitle: '첫 번째 방어선',
-    waves: [
-      ['minion@2'], [], ['minion', 'minion'], [], ['minion', 'rogue'], [], ['minion', 'minion', 'minion'], [], ['warrior@2'],
-    ],
+    name: '무너진 성문', subtitle: '해골 하사가 길을 막는다',
+    hero: { name: '해골 하사', model: 'Skeleton_Warrior', scale: 1.5, health: 12 },
+    power: 'summon',
+    deck: [...x('sk_minion', 6), ...x('sk_rogue', 2), ...x('sk_warrior', 3), ...x('e_curse', 2), ...x('e_bonearmor', 2)],
   },
   {
-    name: '횃불의 회랑', subtitle: '속도가 빠른 추적자들',
-    waves: [
-      ['minion', 'minion'], ['rogue'], [], ['minion', 'rogue', 'minion'], ['warrior'], [], ['rogue', 'rogue'], ['minion', 'minion'], [], ['warrior', 'warrior'],
-    ],
+    name: '횃불의 회랑', subtitle: '날랜 추적자들의 대장',
+    hero: { name: '추적자 대장', model: 'Skeleton_Rogue', scale: 1.5, health: 16 },
+    power: 'bolt',
+    deck: [...x('sk_minion', 4), ...x('sk_rogue', 5), ...x('sk_warrior', 2), ...x('e_curse', 2), ...x('e_raise', 2), 'e_bonearmor'],
   },
   {
     name: '주술사의 서고', subtitle: '멀리서 날아오는 저주',
-    waves: [
-      ['minion', 'mage'], [], ['warrior', 'minion'], ['mage'], ['rogue', 'rogue'], [], ['mage', 'warrior', 'minion'], ['minion', 'minion'], [], ['guard@2', 'mage'], ['rogue', 'rogue'],
-    ],
+    hero: { name: '서고의 주술사', model: 'Skeleton_Mage', scale: 1.5, health: 20 },
+    power: 'bolt',
+    deck: [...x('sk_minion', 3), ...x('sk_mage', 4), ...x('sk_warrior', 2), ...x('e_curse', 2), ...x('e_chill', 2), ...x('e_darkwave', 2), 'e_drain'],
   },
   {
     name: '뼈의 납골당', subtitle: '거대한 것이 깨어난다',
-    waves: [
-      ['guard', 'minion', 'minion'], [], ['mage', 'rogue'], ['warrior', 'warrior'], [], ['brute@2'], ['minion', 'minion', 'minion'], ['mage', 'mage'], [], ['rogue', 'rogue', 'guard'], [], ['brute@1', 'brute@3'],
-    ],
+    hero: { name: '납골당 수호자', model: 'Skeleton_Warrior', scale: 1.7, health: 24 },
+    power: 'summon',
+    deck: [...x('sk_minion', 3), ...x('sk_warrior', 3), ...x('sk_guard', 3), ...x('sk_brute', 2), ...x('e_bonearmor', 2), ...x('e_warcry', 2), 'e_raise'],
   },
   {
     name: '군주의 왕좌', subtitle: '최종 결전',
-    waves: [
-      ['lich@2', 'minion@0', 'minion@4'], [], ['warrior', 'mage'], [], ['guard', 'rogue'], [], ['brute'], [], ['mage', 'mage'],
+    hero: { name: '해골 군주', model: 'Skeleton_Mage', scale: 1.9, health: 30 },
+    power: 'summon',
+    deck: [
+      ...x('sk_minion', 2), ...x('sk_rogue', 2), ...x('sk_warrior', 2), ...x('sk_mage', 2), ...x('sk_guard', 2), ...x('sk_brute', 2),
+      'e_darkwave', ...x('e_drain', 2), ...x('e_soulfire', 2), 'e_warcry',
     ],
   },
 ];

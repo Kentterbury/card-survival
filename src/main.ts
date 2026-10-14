@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import './style.css';
 import { card, type MinionCard } from './game/cards';
-import { Game, HEAL_BETWEEN_STAGES, HERO_MAX_HEALTH, HERO_POWER_DAMAGE, sameTarget } from './game/engine';
-import { monsterDef } from './game/monsters';
+import { Game, HEAL_BETWEEN_STAGES, HERO_MAX_HEALTH, HERO_POWER_DAMAGE, PLAYER_HERO, sameTarget } from './game/engine';
 import { STAGES } from './game/stages';
-import { HERO_POWER_COST, LANES, MAX_MANA, SPAWN_ROW, type GameEvent, type ModelId, type Target } from './game/types';
+import {
+  HERO_POWER_COST, LAST_ROW, MAX_MANA, RANGED_RANGE, ROWS,
+  type GameEvent, type HitTarget, type Side, type Target, type Unit,
+} from './game/types';
 import { CHARACTER_MODELS, preloadAll } from './render/assets';
-import { Board, cellPos, HERO_POS } from './render/board';
+import { Board, cellPos, ENEMY_HERO_POS, HERO_POS } from './render/board';
 import { Fx } from './render/fx';
 import { renderPortraits } from './render/portraits';
 import { updateTweens, wait } from './render/tween';
@@ -16,25 +18,27 @@ import { spellIconSvg } from './ui/icons';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const HERO_MODEL: ModelId = 'Knight';
+/** Pick-proxy uid of the enemy hero's 3D model. */
+const ENEMY_HERO_UID = -2;
 
 type Aim =
   | { kind: 'card'; handIndex: number; el: HTMLElement; sticky: boolean; x0: number; y0: number; moved: boolean }
-  | { kind: 'minion'; uid: number; sticky: boolean; x0: number; y0: number; moved: boolean }
-  | { kind: 'hero'; sticky: boolean; x0: number; y0: number; moved: boolean };
+  | { kind: 'power'; sticky: boolean; x0: number; y0: number; moved: boolean };
 
-type Pick = { uid?: number; side?: 'minion' | 'monster'; lane?: number; row?: number };
+type PickResult = { unit?: Unit; enemyHero?: boolean; lane?: number; row?: number };
 
 class App {
   game = new Game();
   board = new Board($<HTMLCanvasElement>('scene'));
   fx = new Fx(this.board.scene, this.board.camera, $('float-layer'));
   views = new Map<number, UnitView>();
+  enemyHero: UnitView | null = null;
   busy = false;
   aim: Aim | null = null;
   pointer = { x: 0, y: 0 };
   lastPointerType = 'mouse';
-  heroHpShown = HERO_MAX_HEALTH;
+  /** Hero health as currently shown, updated event by event during playback. */
+  heroHp: Record<Side, number> = { player: HERO_MAX_HEALTH, enemy: 0 };
   /** Event type currently being animated (useful when debugging playback). */
   currentEvent = '';
   /** `?speed=4` speeds up all animation (handy for testing). */
@@ -50,9 +54,9 @@ class App {
     $('loading-text').textContent = '초상화 그리는 중…';
     setPortraits(await renderPortraits([...CHARACTER_MODELS, 'barrier']));
     await this.board.buildEnvironment();
-    $('hero-portrait').style.backgroundImage = `url(${portrait(HERO_MODEL)})`;
+    $('hero-portrait').style.backgroundImage = `url(${portrait(PLAYER_HERO.model)})`;
     $('hero-power').querySelector<HTMLElement>('.hp-icon')!.innerHTML = spellIconSvg('bolt');
-    $('hero-power').title = `지휘의 번개 (${HERO_POWER_COST} 마나): 몬스터 하나에게 피해를 ${HERO_POWER_DAMAGE} 줍니다. 턴마다 한 번.`;
+    $('hero-power').title = `지휘의 번개 (${HERO_POWER_COST} 마나): 적 하나(영웅 포함)에게 피해를 ${HERO_POWER_DAMAGE} 줍니다. 턴마다 한 번.`;
     this.board.clearHighlights();
     this.bindInput();
     window.addEventListener('resize', () => {
@@ -72,10 +76,10 @@ class App {
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000) * this.speed;
     this.lastFrame = now;
     this.elapsed += dt;
-    const time = this.elapsed;
     updateTweens(dt);
-    this.board.update(dt, time);
+    this.board.update(dt, this.elapsed);
     for (const v of this.views.values()) v.update(dt);
+    this.enemyHero?.update(dt);
     this.fx.update(dt);
     this.placeBadges();
     this.board.render();
@@ -98,7 +102,6 @@ class App {
     this.closeModal();
     void enterMobileFullscreen();
     this.game = new Game(Date.now() & 0x7fffffff);
-    this.heroHpShown = HERO_MAX_HEALTH;
     $('hud').classList.remove('hidden');
     await this.play(this.game.startRun());
   }
@@ -112,9 +115,10 @@ class App {
       for (let i = 0; i < events.length;) {
         const e = events[i];
         this.currentEvent = e.type;
-        if (e.type === 'move' || e.type === 'spawn') {
+        if (e.type === 'move') {
+          // Units of one side march together.
           let j = i;
-          while (j < events.length && events[j].type === e.type) j++;
+          while (j < events.length && events[j].type === 'move') j++;
           await Promise.all(events.slice(i, j).map((ev) => this.playEvent(ev)));
           i = j;
         } else {
@@ -132,23 +136,46 @@ class App {
     else if (phase === 'defeat') this.showEnd(false);
   }
 
-  private viewPos(uid: number | 'hero'): THREE.Vector3 {
-    if (uid === 'hero') return HERO_POS.clone().setY(1.4);
-    const v = this.views.get(uid);
+  /** Where a hit lands: a unit's body, or the hero edge of the attacker's lane. */
+  private hitPos(target: HitTarget, lane = 2): THREE.Vector3 {
+    if (target === 'player') return cellPos(lane, -0.8).setY(1.2);
+    if (target === 'enemy') return cellPos(lane, ROWS - 0.2).setY(1.6);
+    const v = this.views.get(target);
     return v ? v.group.position.clone().setY(1.1 * v.scale) : new THREE.Vector3();
   }
 
-  private async createView(uid: number, side: 'minion' | 'monster', defId: string, lane: number, row: number) {
-    const isMinion = side === 'minion';
-    const def = isMinion ? (card(defId) as MinionCard) : monsterDef(defId);
-    const v = new UnitView(uid, side, def.model, def.scale ?? 1, $('badges'));
-    this.views.set(uid, v);
-    await v.load(isMinion ? 'enemy' : 'player');
-    v.group.position.copy(cellPos(lane, row));
+  private casterPos(side: Side): THREE.Vector3 {
+    return side === 'player' ? HERO_POS.clone().setY(2.4) : ENEMY_HERO_POS.clone().setY(3.2);
+  }
+
+  private async createView(u: Pick<Unit, 'uid' | 'side' | 'defId' | 'lane' | 'row'>) {
+    const def = card(u.defId) as MinionCard;
+    const v = new UnitView(u.uid, u.side, def.model, def.scale ?? 1, $('badges'));
+    this.views.set(u.uid, v);
+    await v.load(u.side === 'player' ? 'enemy' : 'player');
+    v.group.position.copy(cellPos(u.lane, u.row));
     v.setStats({ attack: def.attack, health: def.health, maxHealth: def.health });
     v.setWard(def.keywords?.includes('ward') ?? false);
     this.board.scene.add(v.group);
     return v;
+  }
+
+  private async setupEnemyHero() {
+    this.enemyHero?.dispose();
+    const h = this.game.stageDef.hero;
+    const v = new UnitView(ENEMY_HERO_UID, 'hero', h.model, h.scale, $('badges'));
+    await v.load('player');
+    v.group.position.copy(ENEMY_HERO_POS);
+    this.board.scene.add(v.group);
+    this.enemyHero = v;
+    $('enemy-portrait').style.backgroundImage = `url(${portrait(h.model)})`;
+  }
+
+  private heroFrameHit(side: Side) {
+    const frame = $(side === 'player' ? 'hero-frame' : 'enemy-frame');
+    frame.classList.remove('hit');
+    void frame.offsetWidth;
+    frame.classList.add('hit');
   }
 
   private async playEvent(e: GameEvent): Promise<void> {
@@ -157,48 +184,43 @@ class App {
       case 'stageStart': {
         for (const v of this.views.values()) v.dispose();
         this.views.clear();
+        await this.setupEnemyHero();
+        this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };
         const st = STAGES[e.stage];
         this.renderHud();
-        await this.banner(`스테이지 ${e.stage + 1} · ${st.name}`, st.subtitle, 1.6);
+        await this.banner(`스테이지 ${e.stage + 1} · ${st.hero.name}`, `${st.name} — ${st.subtitle}`, 1.8);
         return;
       }
       case 'turnStart':
         this.renderHud();
-        await this.banner('나의 차례', '', 0.7);
+        if (e.side === 'player') await this.banner('나의 차례', '', 0.7);
         return;
       case 'enemyTurn':
-        await this.banner('적의 차례', '', 0.6, 'enemy');
+        await this.banner('상대의 차례', '', 0.6, 'enemy');
         return;
       case 'reshuffle':
-        this.fx.floatText(HERO_POS.clone().setY(2), '덱을 다시 섞음', 'info');
+        if (e.side === 'player') this.fx.floatText(HERO_POS.clone().setY(2), '덱을 다시 섞음', 'info');
         return;
       case 'burn':
-        this.fx.floatText(HERO_POS.clone().setY(2), `손패 가득! ${card(e.card.defId).name} 소멸`, 'info');
+        if (e.side === 'player') this.fx.floatText(HERO_POS.clone().setY(2), `손패 가득! ${card(e.card.defId).name} 소멸`, 'info');
         return;
       case 'draw':
+        if (e.side === 'enemy') this.renderEnemyInfo();
         return;
-      case 'cardPlayed': {
-        if (card(e.card.defId).type !== 'spell') return;
-        const holder = document.createElement('div');
-        holder.id = 'played-card';
-        holder.appendChild(createCardElement(e.card.defId));
-        document.body.appendChild(holder);
-        await wait(0.55);
-        holder.remove();
+      case 'cardPlayed':
+        await this.showPlayedCard(e.side, e.card.defId);
         return;
-      }
       case 'summon': {
-        const v = await this.createView(e.uid, 'minion', e.defId, e.lane, 0);
+        const v = await this.createView(e);
         const base = v.group.position.clone();
-        v.group.position.y = 2.5;
-        await v.moveTo(base, 0.22, false);
-        this.fx.burst(base.clone().setY(0.2), 0xffe29a, 16, 3);
-        this.board.addShake(0.15);
-        return;
-      }
-      case 'spawn': {
-        const v = await this.createView(e.uid, 'monster', e.defId, e.lane, e.row);
-        await v.spawnAnim();
+        if (e.side === 'enemy') {
+          await v.spawnAnim();
+        } else {
+          v.group.position.y = 2.5;
+          await v.moveTo(base, 0.22, false);
+        }
+        this.fx.burst(base.clone().setY(0.2), e.side === 'player' ? 0xffe29a : 0x9dff7a, 16, 3);
+        this.board.addShake(0.12);
         return;
       }
       case 'move':
@@ -206,17 +228,17 @@ class App {
         const v = this.views.get(e.uid);
         if (!v) return;
         const dist = Math.abs(e.to - e.from);
-        await v.moveTo(cellPos(e.lane, e.to), (e.type === 'push' ? 0.12 : 0.45) * dist + 0.1, e.type === 'move');
+        await v.moveTo(cellPos(e.lane, e.to), (e.type === 'push' ? 0.12 : 0.42) * dist + 0.1, e.type === 'move');
         return;
       }
       case 'attack': {
         const a = this.views.get(e.attacker);
         if (!a) return;
-        const targetPos = this.viewPos(e.target);
+        const lane = this.game.unit(e.attacker)?.lane ?? Math.round(a.group.position.x / 2.6 + 2);
+        const targetPos = this.hitPos(e.target, lane);
         if (e.ranged) {
-          const mon = a.side === 'monster';
           await a.attackAnim();
-          const kind = a.modelId === 'Rogue' ? 'arrow' : mon ? 'curse' : 'storm';
+          const kind = a.modelId === 'Rogue' ? 'arrow' : a.side === 'enemy' ? 'curse' : 'storm';
           await this.fx.projectile(a.group.position.clone().setY(1.3 * a.scale), targetPos, kind);
         } else {
           await a.lunge(targetPos.clone().setY(0));
@@ -224,18 +246,19 @@ class App {
         return;
       }
       case 'damage': {
-        if (e.uid === 'hero') {
-          this.heroHpShown = Math.max(0, this.heroHpShown - e.amount);
+        if (typeof e.target === 'string') {
+          const side = e.target;
+          this.heroHp[side] = Math.max(0, this.heroHp[side] - e.amount);
           this.renderHeroHp();
-          const frame = $('hero-frame');
-          frame.classList.remove('hit');
-          void frame.offsetWidth;
-          frame.classList.add('hit');
-          this.board.addShake(0.5);
-          this.fx.floatText(HERO_POS.clone().setY(2.6), `-${e.amount}`, 'dmg');
+          this.heroFrameHit(side);
+          this.board.addShake(side === 'player' ? 0.5 : 0.3);
+          if (side === 'enemy') this.enemyHero?.hitAnim();
+          const at = side === 'player' ? HERO_POS.clone().setY(2.6) : ENEMY_HERO_POS.clone().setY(4);
+          this.fx.floatText(at, `-${e.amount}`, 'dmg');
+          await wait(0.15);
           return;
         }
-        const v = this.views.get(e.uid);
+        const v = this.views.get(e.target);
         if (!v) return;
         v.health -= e.amount;
         v.renderBadge();
@@ -252,13 +275,16 @@ class App {
         await wait(0.15);
         return;
       }
-      case 'heal':
-        this.heroHpShown = Math.min(s.hero.maxHealth, this.heroHpShown + e.amount);
+      case 'heal': {
+        const side = e.target;
+        this.heroHp[side] = Math.min(s.sides[side].hero.maxHealth, this.heroHp[side] + e.amount);
         this.renderHeroHp();
-        this.fx.floatText(HERO_POS.clone().setY(2.6), `+${e.amount}`, 'heal');
-        this.fx.burst(HERO_POS.clone().setY(1), 0x7dffb0, 20, 2);
+        const at = side === 'player' ? HERO_POS.clone() : ENEMY_HERO_POS.clone();
+        this.fx.floatText(at.clone().setY(side === 'player' ? 2.6 : 4), `+${e.amount}`, 'heal');
+        this.fx.burst(at.setY(1), 0x7dffb0, 20, 2);
         await wait(0.2);
         return;
+      }
       case 'buff': {
         const v = this.views.get(e.uid);
         if (!v) return;
@@ -271,12 +297,10 @@ class App {
         await wait(0.15);
         return;
       }
-      case 'freeze': {
-        const v = this.views.get(e.uid);
-        v?.setFrozen(true);
+      case 'freeze':
+        this.views.get(e.uid)?.setFrozen(true);
         await wait(0.08);
         return;
-      }
       case 'death': {
         const v = this.views.get(e.uid);
         if (!v) return;
@@ -286,44 +310,82 @@ class App {
         return;
       }
       case 'spell':
-        await this.spellFx(e.defId, e.target);
+        await this.spellFx(e.side, e.defId, e.target);
         return;
       case 'heroPower':
-        if (e.target.kind === 'monster') {
-          await this.fx.projectile(HERO_POS.clone().setY(2.2), this.viewPos(e.target.uid), 'hero', 22);
+        if (e.side === 'enemy') {
+          await this.castingGlow();
+          void this.enemyHero?.playOnce('Spellcast_Raise', 1);
+        }
+        if (e.target.kind === 'unit' || e.target.kind === 'hero') {
+          await this.fx.projectile(this.casterPos(e.side), this.targetPos(e.target), e.side === 'player' ? 'hero' : 'curse', 22);
         }
         return;
       case 'stageClear':
-        for (const v of this.views.values()) if (v.side === 'minion') void v.playOnce('Cheer', 1);
-        await this.banner('스테이지 클리어!', `생명력 ${HEAL_BETWEEN_STAGES} 회복`, 1.6);
+        for (const v of this.views.values()) if (v.side === 'player') void v.playOnce('Cheer', 1);
+        if (this.enemyHero) await this.enemyHero.die();
+        await this.banner('승리!', `${STAGES[e.stage].hero.name} 처치 · 생명력 ${HEAL_BETWEEN_STAGES} 회복`, 1.8);
         return;
       case 'defeat':
+        void this.enemyHero?.playOnce('Cheer', 1);
         await this.banner('패배', '', 1.2, 'enemy');
         return;
       case 'victory':
-        await this.banner('승리!', '해골 군주를 쓰러뜨렸습니다', 1.8);
+        await this.banner('최종 승리!', '해골 군주를 쓰러뜨렸습니다', 1.8);
         return;
     }
   }
 
-  private async spellFx(defId: string, target: Target) {
+  private targetPos(t: Target): THREE.Vector3 {
+    if (t.kind === 'unit') return this.hitPos(t.uid);
+    if (t.kind === 'hero') return t.side === 'player' ? HERO_POS.clone().setY(1.6) : ENEMY_HERO_POS.clone().setY(2.4);
+    return new THREE.Vector3();
+  }
+
+  private async castingGlow() {
+    const f = $('enemy-frame');
+    f.classList.add('casting');
+    await wait(0.25);
+    f.classList.remove('casting');
+  }
+
+  private async showPlayedCard(side: Side, defId: string) {
+    const def = card(defId);
+    if (side === 'player' && def.type !== 'spell') return;
+    const holder = document.createElement('div');
+    holder.id = side === 'player' ? 'played-card' : 'enemy-played';
+    if (side === 'enemy') holder.innerHTML = '<div class="label">상대가 사용</div>';
+    holder.appendChild(createCardElement(defId));
+    document.body.appendChild(holder);
+    if (side === 'enemy') {
+      this.renderEnemyInfo();
+      void this.enemyHero?.playOnce('Spellcast_Raise', 1);
+    }
+    await wait(side === 'enemy' ? 0.9 : 0.55);
+    holder.remove();
+  }
+
+  private async spellFx(side: Side, defId: string, target: Target) {
     const def = card(defId);
     if (def.type !== 'spell') return;
-    const from = HERO_POS.clone().setY(2.4);
+    const from = this.casterPos(side);
     switch (target.kind) {
-      case 'monster':
-        await this.fx.projectile(from, this.viewPos(target.uid), def.icon, 20, 0.3);
+      case 'unit':
+        if (def.target === 'ally') {
+          const v = this.views.get(target.uid);
+          if (v) this.fx.burst(v.group.position.clone().setY(1), 0xffd34d, 20, 2.5);
+          await wait(0.2);
+        } else {
+          await this.fx.projectile(from, this.targetPos(target), def.icon, 20, 0.3);
+        }
+        return;
+      case 'hero':
+        await this.fx.projectile(from, this.targetPos(target), def.icon, 20, 0.3);
         return;
       case 'lane':
-        if (def.icon === 'meteor') await this.fx.meteor(cellPos(target.lane, 3).setY(0.5));
+        if (def.icon === 'meteor') await this.fx.meteor(cellPos(target.lane, LAST_ROW / 2).setY(0.5));
         await this.fx.laneBlast(cellPos(target.lane, 0).x, def.icon);
         return;
-      case 'minion': {
-        const v = this.views.get(target.uid);
-        if (v) this.fx.burst(v.group.position.clone().setY(1), 0xffd34d, 20, 2.5);
-        await wait(0.2);
-        return;
-      }
       case 'none':
         await this.fx.nova(def.icon);
         return;
@@ -336,20 +398,14 @@ class App {
   private async sync() {
     const s = this.game.state;
     const alive = new Set<number>();
-    for (const m of this.game.minions()) {
-      alive.add(m.uid);
-      const v = this.views.get(m.uid) ?? (await this.createView(m.uid, 'minion', m.defId, m.lane, 0));
-      v.setStats(m);
-      v.setWard(m.keywords.has('ward'));
-      v.group.position.copy(cellPos(m.lane, 0));
-    }
-    for (const m of s.monsters) {
-      alive.add(m.uid);
-      const v = this.views.get(m.uid) ?? (await this.createView(m.uid, 'monster', m.defId, m.lane, m.row));
-      v.setStats(m);
-      v.setWard(m.keywords.has('ward'));
-      v.setFrozen(m.frozen);
-      v.group.position.copy(cellPos(m.lane, m.row));
+    for (const u of s.units) {
+      if (u.health <= 0) continue;
+      alive.add(u.uid);
+      const v = this.views.get(u.uid) ?? (await this.createView(u));
+      v.setStats(u);
+      v.setWard(u.keywords.has('ward'));
+      v.setFrozen(u.frozen);
+      v.group.position.copy(cellPos(u.lane, u.row));
     }
     for (const [uid, v] of this.views) {
       if (!alive.has(uid)) {
@@ -357,111 +413,94 @@ class App {
         this.views.delete(uid);
       }
     }
-    this.heroHpShown = s.hero.health;
+    this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };
     this.renderHud();
   }
 
   // ── HUD ──────────────────────────────────────────────────────
 
   private renderHud() {
-    const g = this.game;
-    const s = g.state;
+    const s = this.game.state;
     if (!s) return;
     const st = STAGES[s.stage];
+    const me = s.sides.player;
     $('stage-title').textContent = `스테이지 ${s.stage + 1}/${STAGES.length} · ${st.name}`;
-    const wavesLeft = st.waves.slice(s.turn).filter((w) => w.length > 0).length;
-    $('stage-sub').textContent = `${s.turn}턴 · 남은 웨이브 ${wavesLeft}`;
+    $('stage-sub').textContent = `${s.turn}턴`;
     this.renderHeroHp();
-    this.renderNextWave();
+    this.renderEnemyInfo();
     this.renderMana();
     this.renderHand();
-    $('deck-count').textContent = String(s.drawPile.length);
-    $('discard-count').textContent = `버린 카드 ${s.discard.length}`;
+    $('deck-count').textContent = String(me.drawPile.length);
+    $('discard-count').textContent = `버린 카드 ${me.discard.length}`;
     this.renderControls();
     this.renderThreats();
   }
 
+  private renderEnemyInfo() {
+    const s = this.game.state;
+    if (!s) return;
+    const en = s.sides.enemy;
+    const power = this.game.enemyPower === 'summon' ? '해골 졸개 소환' : '적 하나에게 피해 1';
+    $('enemy-name').textContent = en.hero.name;
+    $('enemy-mana').textContent = `마나 ${en.mana}/${en.maxMana} · 덱 ${en.drawPile.length}`;
+    $('enemy-hand').innerHTML = '<i></i>'.repeat(en.hand.length);
+    $('enemy-frame').title = `${en.hero.name} — 영웅 능력(2): ${power}`;
+  }
+
   private renderControls() {
     const g = this.game;
-    const s = g.state;
+    const me = g.state.sides.player;
     const power = $<HTMLButtonElement>('hero-power');
     const canPower = !this.busy && g.canUseHeroPower();
     power.disabled = !canPower;
     power.classList.toggle('ready', canPower);
-    power.classList.toggle('used', s.hero.powerUsed);
+    power.classList.toggle('used', me.powerUsed);
 
     const endBtn = $<HTMLButtonElement>('end-turn');
-    endBtn.disabled = this.busy || s.phase !== 'player';
-    endBtn.classList.toggle('done', !this.busy && s.phase === 'player' && !this.hasMoves());
-    this.renderBadgeStates();
+    endBtn.disabled = this.busy || g.state.phase !== 'player';
+    endBtn.classList.toggle('done', !this.busy && g.state.phase === 'player' && !this.hasMoves());
     $('hand').querySelectorAll<HTMLElement>('.card').forEach((el) => {
       const playable = !this.busy && g.canPlay(Number(el.dataset.index));
       el.classList.toggle('playable', playable);
-      el.classList.toggle('unplayable', !playable && s.phase === 'player');
+      el.classList.toggle('unplayable', !playable && g.state.phase === 'player');
     });
   }
 
   private hasMoves(): boolean {
     const g = this.game;
-    return g.state.hand.some((_, i) => g.canPlay(i))
-      || g.minions().some((m) => g.attackTargets(m.uid).length > 0)
-      || g.canUseHeroPower();
+    return g.state.sides.player.hand.some((_, i) => g.canPlay(i)) || g.canUseHeroPower();
   }
 
   private renderHeroHp() {
-    $('hero-hp').textContent = String(this.heroHpShown);
-  }
-
-  private renderNextWave() {
-    const s = this.game.state;
-    const el = $('next-wave');
-    const next = [...s.pendingSpawns, ...this.game.upcomingWave()];
-    if (s.phase !== 'player' || next.length === 0) {
-      el.innerHTML = '<div class="label">다음 등장</div><div>없음</div>';
-      return;
-    }
-    const counts = new Map<string, number>();
-    for (const e of next) {
-      const id = e.split('@')[0];
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-    el.innerHTML = '<div class="label">다음 등장</div>' + [...counts].map(([id, n]) => {
-      const d = monsterDef(id);
-      return `<span class="chip"><img src="${portrait(d.model)}" alt="">${d.name}${n > 1 ? ` ×${n}` : ''}</span>`;
-    }).join('');
+    $('hero-hp').textContent = String(this.heroHp.player);
+    $('enemy-hp').textContent = String(this.heroHp.enemy);
   }
 
   private renderMana() {
-    const s = this.game.state;
-    const reserveShown = Math.max(0, s.mana - s.maxMana);
-    $('mana-text').textContent = `${s.mana - reserveShown}/${s.maxMana}${reserveShown ? ` (+${reserveShown})` : ''}`;
+    const me = this.game.state.sides.player;
+    const reserveShown = Math.max(0, me.mana - me.maxMana);
+    $('mana-text').textContent = `${me.mana - reserveShown}/${me.maxMana}${reserveShown ? ` (+${reserveShown})` : ''}`;
     let html = '';
     for (let i = 0; i < MAX_MANA; i++) {
-      const cls = i < Math.min(s.mana, s.maxMana) ? 'full' : i < s.maxMana ? '' : 'locked';
+      const cls = i < Math.min(me.mana, me.maxMana) ? 'full' : i < me.maxMana ? '' : 'locked';
       html += `<div class="gem ${cls}"></div>`;
     }
     for (let i = 0; i < reserveShown; i++) html += '<div class="gem reserve" title="이월된 마나"></div>';
     $('mana-gems').innerHTML = html;
   }
 
-  private renderBadgeStates() {
-    for (const m of this.game.minions()) {
-      const v = this.views.get(m.uid);
-      v?.badge.classList.toggle('can-attack', !this.busy && this.game.attackTargets(m.uid).length > 0);
-    }
-  }
-
+  /** Marks what every unit will do at the end of its side's turn. */
   private renderThreats() {
     if (this.aim) return;
     this.board.clearHighlights();
-    for (const m of this.game.state.monsters) {
-      const v = this.views.get(m.uid);
-      const threat = m.row <= m.range && !m.frozen;
-      if (threat) this.board.setCell(m.lane, m.row, 'danger');
-      if (v && !v.dead) {
-        v.setStats(m);
-        v.renderBadge((threat ? '<span class="threat" title="다음 적 턴에 공격">!</span>' : '') + (m.frozen ? '<span class="frozen-tag">❄</span>' : ''));
-      }
+    for (const u of this.game.state.units) {
+      const v = this.views.get(u.uid);
+      if (!v || v.dead) continue;
+      const next = !u.frozen && u.attack > 0 ? this.game.targetAhead(u) : null;
+      if (next && next.hit === 'player') this.board.setCell(u.lane, u.row, 'danger');
+      v.setStats(u);
+      const mark = next && u.side === 'enemy' ? '<span class="threat" title="다음 턴에 공격">!</span>' : '';
+      v.renderBadge(mark + (u.frozen ? '<span class="frozen-tag">❄</span>' : ''));
     }
   }
 
@@ -473,7 +512,7 @@ class App {
     if (!s) return;
     const existing = new Map<number, HTMLElement>();
     hand.querySelectorAll<HTMLElement>('.card').forEach((el) => existing.set(Number(el.dataset.iid), el));
-    const els = s.hand.map((inst) => {
+    const els = s.sides.player.hand.map((inst) => {
       let el = existing.get(inst.iid);
       existing.delete(inst.iid);
       if (!el) {
@@ -521,6 +560,11 @@ class App {
     window.addEventListener('pointermove', (e) => this.onMove(e));
     window.addEventListener('pointerup', (e) => this.onUp(e));
     $('scene').addEventListener('pointerdown', (e) => this.onBoardDown(e));
+    $('enemy-frame').addEventListener('pointerdown', (e) => {
+      this.pointer = { x: e.clientX, y: e.clientY };
+      if (this.aim?.sticky) void this.resolveAim(e.clientX, e.clientY);
+      else if (!this.aim) this.inspectEnemyHero();
+    });
     window.addEventListener('pointerdown', (e) => { this.lastPointerType = e.pointerType; }, { capture: true });
     // Right click cancels; a touch long-press also fires contextmenu, which must not.
     window.addEventListener('contextmenu', (e) => {
@@ -535,7 +579,8 @@ class App {
     $('hero-power').addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       if (this.busy || !this.game.canUseHeroPower()) return;
-      this.startAim({ kind: 'hero', sticky: false, x0: e.clientX, y0: e.clientY, moved: false });
+      if (this.aim) this.cancelAim();
+      this.startAim({ kind: 'power', sticky: false, x0: e.clientX, y0: e.clientY, moved: false });
     });
     $('deck-btn').addEventListener('click', () => this.showDeck());
   }
@@ -572,19 +617,14 @@ class App {
       void this.resolveAim(e.clientX, e.clientY);
       return;
     }
-    if (this.busy || this.aim) return;
-    this.inspectAt(e.clientX, e.clientY);
-    const p = this.pick(e.clientX, e.clientY);
-    if (p.uid !== undefined && p.side === 'minion' && this.game.attackTargets(p.uid).length > 0) {
-      this.startAim({ kind: 'minion', uid: p.uid, sticky: false, x0: e.clientX, y0: e.clientY, moved: false });
-    }
+    if (!this.aim) this.inspectAt(e.clientX, e.clientY);
   }
 
   private onMove(e: PointerEvent) {
     this.pointer = { x: e.clientX, y: e.clientY };
     const aim = this.aim;
     if (!aim) {
-      this.inspectAt(e.clientX, e.clientY);
+      if (e.pointerType === 'mouse') this.inspectAt(e.clientX, e.clientY);
       return;
     }
     if (!aim.moved && Math.hypot(e.clientX - aim.x0, e.clientY - aim.y0) > 12) {
@@ -601,7 +641,7 @@ class App {
     const aim = this.aim;
     if (!aim || aim.sticky) return;
     if (!aim.moved) {
-      // A click without dragging: keep aiming until the next click.
+      // A click/tap without dragging: keep aiming until the next click/tap.
       aim.sticky = true;
       this.updateAimVisuals();
       return;
@@ -611,13 +651,14 @@ class App {
 
   private startAim(aim: Aim) {
     this.aim = aim;
-    $('inspect').classList.remove('show');
     if (aim.kind === 'card') {
       aim.el.classList.add('aiming');
       const notes = keywordNotes(aim.el.dataset.defId!);
       const inspect = $('inspect');
       inspect.innerHTML = notes ? `<div class="notes">${notes}</div>` : '';
       inspect.classList.toggle('show', !!notes);
+    } else {
+      $('inspect').classList.remove('show');
     }
     this.updateAimVisuals();
   }
@@ -632,44 +673,35 @@ class App {
     this.aim = null;
     $('inspect').classList.remove('show');
     $('arrow-path').setAttribute('d', '');
+    $('enemy-frame').classList.remove('targetable', 'hover');
     this.renderThreats();
   }
 
   private cardTargetKind(handIndex: number) {
-    const def = card(this.game.state.hand[handIndex].defId);
+    const def = card(this.game.state.sides.player.hand[handIndex].defId);
     return def.type === 'minion' ? 'slot' : def.target;
   }
 
-  /** What is under the pointer: a unit, and/or a board cell. */
-  private pick(x: number, y: number): Pick {
+  /** What is under the pointer: a unit or the enemy hero, and/or a board cell. */
+  private pick(x: number, y: number): PickResult {
+    if (document.elementsFromPoint(x, y).some((el) => el.id === 'enemy-frame' || el.closest?.('#enemy-frame'))) {
+      return { enemyHero: true };
+    }
     const ndc = new THREE.Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
     this.ray.setFromCamera(ndc, this.board.camera);
     const proxies = [...this.views.values()].filter((v) => !v.dead).map((v) => v.proxy);
+    if (this.enemyHero && !this.enemyHero.dead) proxies.push(this.enemyHero.proxy);
     const hit = this.ray.intersectObjects(proxies, false)[0];
-    const out: Pick = {};
     if (hit) {
       const uid = hit.object.userData.uid as number;
+      if (uid === ENEMY_HERO_UID) return { enemyHero: true };
       const unit = this.game.unit(uid);
-      if (unit) {
-        out.uid = uid;
-        out.side = unit.side;
-        out.lane = unit.lane;
-        out.row = unit.side === 'monster' ? unit.row : 0;
-        return out;
-      }
+      if (unit && unit.health > 0) return { unit, lane: unit.lane, row: unit.row };
     }
     const cell = this.board.pickGround(ndc);
-    if (cell) {
-      out.lane = cell.lane;
-      out.row = cell.row;
-      const m = this.game.monsterAt(cell.lane, cell.row);
-      if (m) { out.uid = m.uid; out.side = 'monster'; }
-      else if (cell.row === 0 && this.game.state.slots[cell.lane]) {
-        out.uid = this.game.state.slots[cell.lane]!.uid;
-        out.side = 'minion';
-      }
-    }
-    return out;
+    if (!cell) return {};
+    const unit = this.game.unitAt(cell.lane, cell.row);
+    return { unit, lane: cell.lane, row: cell.row };
   }
 
   private overHand(y: number) {
@@ -681,15 +713,16 @@ class App {
     const aim = this.aim;
     if (!aim || this.overHand(y)) return null;
     const p = this.pick(x, y);
-    if (aim.kind === 'minion' || aim.kind === 'hero') {
-      return p.side === 'monster' && p.uid !== undefined ? { kind: 'monster', uid: p.uid } : null;
-    }
+    const foe = (): Target | null =>
+      p.enemyHero ? { kind: 'hero', side: 'enemy' } : p.unit?.side === 'enemy' ? { kind: 'unit', uid: p.unit.uid } : null;
+    if (aim.kind === 'power') return foe();
     switch (this.cardTargetKind(aim.handIndex)) {
       case 'none': return { kind: 'none' };
       case 'slot': return p.lane !== undefined ? { kind: 'slot', lane: p.lane } : null;
       case 'lane': return p.lane !== undefined ? { kind: 'lane', lane: p.lane } : null;
-      case 'monster': return p.side === 'monster' ? { kind: 'monster', uid: p.uid! } : null;
-      case 'minion': return p.side === 'minion' ? { kind: 'minion', uid: p.uid! } : null;
+      case 'foe': return foe();
+      case 'foeUnit': return p.unit?.side === 'enemy' ? { kind: 'unit', uid: p.unit.uid } : null;
+      case 'ally': return p.unit?.side === 'player' ? { kind: 'unit', uid: p.unit.uid } : null;
     }
   }
 
@@ -697,33 +730,30 @@ class App {
     const aim = this.aim;
     if (!aim) return [];
     if (aim.kind === 'card') return this.game.cardTargets(aim.handIndex);
-    if (aim.kind === 'minion') return this.game.attackTargets(aim.uid).map((uid) => ({ kind: 'monster' as const, uid }));
-    return this.game.state.monsters.map((m) => ({ kind: 'monster' as const, uid: m.uid }));
+    return this.game.heroPowerTargets('player');
   }
 
   private highlightTarget(t: Target, style: 'valid' | 'hover') {
-    const s = this.game.state;
     switch (t.kind) {
-      case 'monster': {
-        const m = s.monsters.find((x) => x.uid === t.uid);
-        if (m) this.board.setCell(m.lane, m.row, style);
+      case 'unit': {
+        const u = this.game.unit(t.uid);
+        if (u) this.board.setCell(u.lane, u.row, style);
         return;
       }
-      case 'minion': {
-        const m = this.game.minions().find((x) => x.uid === t.uid);
-        if (m) this.board.setCell(m.lane, 0, style);
+      case 'hero':
+        $('enemy-frame').classList.add(style === 'hover' ? 'hover' : 'targetable');
         return;
-      }
       case 'slot':
         this.board.setCell(t.lane, 0, style);
         return;
       case 'lane':
-        for (let r = style === 'hover' ? 0 : 1; r <= SPAWN_ROW; r++) {
-          if (style === 'hover' || this.game.monsterAt(t.lane, r)) this.board.setCell(t.lane, r, style);
+        for (let r = 0; r <= LAST_ROW; r++) {
+          const u = this.game.unitAt(t.lane, r);
+          if (style === 'hover' || u?.side === 'enemy') this.board.setCell(t.lane, r, style);
         }
         return;
       case 'none':
-        if (style === 'hover') for (const m of s.monsters) this.board.setCell(m.lane, m.row, 'hover');
+        if (style === 'hover') for (const u of this.game.unitsOf('enemy')) this.board.setCell(u.lane, u.row, 'hover');
         return;
     }
   }
@@ -733,6 +763,7 @@ class App {
     if (!aim) return;
     const { x, y } = this.pointer;
     this.board.clearHighlights();
+    $('enemy-frame').classList.remove('targetable', 'hover');
     const valid = this.validTargets();
     for (const t of valid) this.highlightTarget(t, 'valid');
     const t = this.targetAt(x, y);
@@ -745,15 +776,9 @@ class App {
         const tx = x - window.innerWidth / 2;
         const ty = y - window.innerHeight + aim.el.offsetHeight / 2;
         aim.el.style.transform = `translate(${tx}px, ${ty}px) scale(${this.overHand(y) ? 1.1 : 0.85})`;
-      } else if (aim.moved && kind !== 'slot' && kind !== 'none') {
+      } else if (kind !== 'slot' && kind !== 'none') {
         const r = aim.el.getBoundingClientRect();
         from = { x: r.left + r.width / 2, y: r.top + r.height * 0.15 };
-      }
-    } else if (aim.kind === 'minion') {
-      const v = this.views.get(aim.uid);
-      if (v) {
-        const p = v.group.position.clone().setY(1).project(this.board.camera);
-        from = { x: (p.x * 0.5 + 0.5) * window.innerWidth, y: (-p.y * 0.5 + 0.5) * window.innerHeight };
       }
     } else {
       const r = $('hero-power').getBoundingClientRect();
@@ -779,10 +804,8 @@ class App {
     if (aim.kind === 'card') {
       aim.el.remove();
       await this.play(this.game.playCard(aim.handIndex, t));
-    } else if (aim.kind === 'minion' && t.kind === 'monster') {
-      await this.play(this.game.minionAttack(aim.uid, t.uid));
-    } else if (aim.kind === 'hero' && t.kind === 'monster') {
-      await this.play(this.game.heroPower(t.uid));
+    } else {
+      await this.play(this.game.heroPower(t));
     }
     this.renderHud();
   }
@@ -794,28 +817,41 @@ class App {
       return;
     }
     const p = this.pick(x, y);
-    const unit = p.uid !== undefined ? this.game.unit(p.uid) : undefined;
+    if (p.enemyHero) {
+      this.inspectEnemyHero();
+      return;
+    }
+    const unit = p.unit;
     if (!unit) {
       inspect.classList.remove('show');
+      inspect.dataset.uid = '';
       return;
     }
     if (inspect.dataset.uid === String(unit.uid) && inspect.classList.contains('show')) return;
     inspect.dataset.uid = String(unit.uid);
-    if (unit.side === 'minion') {
-      const el = createCardElement(unit.defId, { attack: unit.attack, health: unit.health });
-      inspect.innerHTML = '';
-      inspect.appendChild(el);
-      const notes = keywordNotes(unit.defId);
-      if (notes) inspect.insertAdjacentHTML('beforeend', `<div class="notes">${notes}</div>`);
-    } else {
-      const d = monsterDef(unit.defId);
-      const ward = unit.keywords.has('ward') ? ' · 보호막' : '';
-      inspect.innerHTML = `<div class="notes"><div class="monster-note"><div class="title">${d.name}</div>
-        공격력 <b>${unit.attack}</b> · 생명력 <b>${unit.health}/${unit.maxHealth}</b>${ward}<br>
-        이동 ${d.speed}칸 · 사거리 ${d.range}칸${d.boss ? ' · <b>보스</b>' : ''}
-        ${d.text ? `<div style="margin-top:.6vh">${d.text}</div>` : ''}
-        ${unit.frozen ? '<div style="color:#9fe6ff">빙결됨: 다음 턴 행동 불가</div>' : ''}</div></div>`;
-    }
+    const el = createCardElement(unit.defId, { attack: unit.attack, health: unit.health });
+    inspect.innerHTML = '';
+    inspect.appendChild(el);
+    const status = [
+      unit.side === 'enemy' ? '<b>적</b> 하수인' : '<b>아군</b> 하수인',
+      `이동 ${unit.speed}칸 · 사거리 ${unit.range}칸`,
+      unit.frozen ? '빙결됨: 다음 행동을 건너뜀' : '',
+      unit.fresh && !unit.keywords.has('swift') ? '이번 턴에 소환됨' : '',
+    ].filter(Boolean).join('<br>');
+    inspect.insertAdjacentHTML('beforeend', `<div class="notes"><div class="kw-note">${status}</div>${keywordNotes(unit.defId)}</div>`);
+    inspect.classList.add('show');
+  }
+
+  private inspectEnemyHero() {
+    const s = this.game.state;
+    if (!s) return;
+    const en = s.sides.enemy;
+    const power = this.game.enemyPower === 'summon' ? '해골 졸개를 소환합니다' : '적 하나에게 피해를 1 줍니다';
+    const inspect = $('inspect');
+    inspect.dataset.uid = 'enemy';
+    inspect.innerHTML = `<div class="notes"><div class="monster-note"><div class="title">${en.hero.name}</div>
+      생명력 <b>${en.hero.health}/${en.hero.maxHealth}</b><br>마나 ${en.mana}/${en.maxMana} · 손패 ${en.hand.length}장 · 덱 ${en.drawPile.length}장
+      <div style="margin-top:.6vh"><b>영웅 능력 (2)</b>: ${power}</div></div></div>`;
     inspect.classList.add('show');
   }
 
@@ -827,7 +863,7 @@ class App {
     el.innerHTML = `<div class="big">${big}</div>${small ? `<div class="small">${small}</div>` : ''}`;
     el.animate(
       [{ opacity: 0, transform: 'scale(1.15)' }, { opacity: 1, transform: 'scale(1)', offset: 0.15 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }],
-      { duration: seconds * 1000, easing: 'ease-out' },
+      { duration: (seconds * 1000) / this.speed, easing: 'ease-out' },
     );
     await wait(seconds * 0.55);
   }
@@ -846,14 +882,14 @@ class App {
   private showTitle() {
     const m = this.openModal(`
       <h1>카드 서바이벌</h1>
-      <p>무덤에서 깨어난 해골 군단이 성채로 밀려옵니다. 카드로 하수인을 배치하고 주문을 외워 방어선을 지키세요.</p>
+      <p>해골 군단의 지휘관들과 1:1로 맞붙습니다. 하수인을 보내 상대 진영으로 밀고 들어가고, 주문으로 상대 영웅을 무너뜨리세요.</p>
       <div class="rules">
+        <div><b>승리</b> 상대 영웅의 생명력을 0으로 만들면 이깁니다. 내 영웅이 쓰러지면 패배합니다.</div>
         <div><b>마나</b> 매 턴 최대 마나가 1씩 늘어납니다(최대 ${MAX_MANA}). 쓰지 않은 마나는 <b>1까지 다음 턴으로 이월</b>됩니다.</div>
-        <div><b>방어선</b> 앞쪽 ${LANES}칸에 하수인을 소환합니다. 몬스터는 각 줄을 따라 한 칸씩 다가옵니다.</div>
-        <div><b>공격</b> 근접 하수인은 맨 앞줄(자기 줄과 양옆) 몬스터를, <b>사격</b> 하수인은 자기 줄의 몬스터라면 어디든 공격합니다.</div>
-        <div><b>위험</b> 막는 하수인이 없는 줄의 몬스터는 <b>영웅</b>을 직접 공격합니다. 붉은 칸은 다음 적 턴에 공격할 몬스터입니다.</div>
-        <div><b>스테이지</b> 정해진 웨이브를 모두 막으면 클리어. 클리어할 때마다 <b>카드 꾸러미</b> 하나를 골라 덱에 추가합니다.</div>
-        <div><b>조작</b> 카드를 <b>탭(클릭)한 뒤 대상을 탭</b>하거나 끌어다 놓으세요. 하수인을 탭한 뒤 몬스터를 탭하면 공격합니다. 유닛을 탭하면 정보가 보입니다. 같은 카드를 다시 탭하면 취소.</div>
+        <div><b>하수인</b> 내 진영(맨 아래 줄)에 소환하면 내 턴이 끝날 때마다 <b>한 칸씩 전진</b>합니다. 앞을 막는 적이 있으면 대신 공격합니다.</div>
+        <div><b>사격</b> 원거리 하수인은 자기 줄 앞쪽 ${RANGED_RANGE}칸 안의 첫 적을 쏩니다. 아군 너머로도 쏠 수 있습니다.</div>
+        <div><b>영웅 공격</b> 앞에 아무도 없이 끝까지 가면 <b>상대 영웅을 직접 공격</b>합니다. 상대도 마찬가지입니다.</div>
+        <div><b>조작</b> 카드를 <b>탭(클릭)한 뒤 대상을 탭</b>하거나 끌어다 놓으세요. 피해 주문은 <b>상대 영웅 초상화</b>도 노릴 수 있습니다.</div>
       </div>
       <button class="btn" id="start-btn">출정</button>`);
     m.querySelector('#start-btn')!.addEventListener('click', () => void this.startRun());
@@ -861,6 +897,7 @@ class App {
 
   private showReward() {
     const s = this.game.state;
+    const hero = s.sides.player.hero;
     const bundles = s.rewards.map((b, i) => `
       <div class="bundle" data-i="${i}">
         <h3>${b.name}</h3><div class="theme">${b.theme}</div>
@@ -868,7 +905,7 @@ class App {
       </div>`).join('');
     const m = this.openModal(`
       <h2>스테이지 ${s.stage + 1} 클리어!</h2>
-      <p>카드 꾸러미 하나를 골라 덱에 추가하세요. 생명력 ${s.hero.health}/${s.hero.maxHealth} · 덱 ${s.deckList.length}장</p>
+      <p>카드 꾸러미 하나를 골라 덱에 추가하세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장</p>
       <div class="bundles">${bundles}</div>
       <button class="btn secondary" id="view-deck">현재 덱 보기</button>`);
     m.querySelectorAll<HTMLElement>('.mini-cards').forEach((el) => {
@@ -894,9 +931,10 @@ class App {
 
   private showEnd(won: boolean) {
     const s = this.game.state;
+    const st = STAGES[s.stage];
     const m = this.openModal(`
-      <h1>${won ? '승리!' : '패배'}</h1>
-      <p>${won ? '해골 군주가 무너지고 성채에 새벽이 찾아왔습니다.' : `방어선이 무너졌습니다. 스테이지 ${s.stage + 1} · ${STAGES[s.stage].name}에서 쓰러졌습니다.`}</p>
+      <h1>${won ? '최종 승리!' : '패배'}</h1>
+      <p>${won ? '해골 군주가 무너지고 성채에 새벽이 찾아왔습니다.' : `스테이지 ${s.stage + 1}에서 ${st.hero.name}에게 쓰러졌습니다.`}</p>
       <p>클리어한 스테이지 ${s.stagesCleared}/${STAGES.length} · 최종 덱 ${s.deckList.length}장</p>
       <button class="btn" id="again">다시 도전</button>`);
     m.querySelector('#again')!.addEventListener('click', () => void this.startRun());

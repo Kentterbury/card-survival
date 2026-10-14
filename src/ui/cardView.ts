@@ -15,7 +15,7 @@ export function portrait(model: ModelId): string {
 export function createCardElement(defId: string, opts: { attack?: number; health?: number } = {}): HTMLDivElement {
   const def = card(defId);
   const el = document.createElement('div');
-  el.className = `card ${def.type} rarity-${def.rarity}`;
+  el.className = `card ${def.type} rarity-${def.rarity}${def.enemy ? ' enemy-card' : ''}`;
   el.dataset.defId = defId;
   el.innerHTML = cardInner(def, opts);
   return el;
