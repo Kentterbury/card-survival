@@ -178,6 +178,115 @@ describe('spells', () => {
   });
 });
 
+describe('new cards', () => {
+  const withCard = (id: string, mana = 10) => {
+    const g = freshGame(Array(6).fill(id));
+    g.side('player').mana = mana;
+    return g;
+  };
+
+  it('화염 폭탄병 hits every foe in its lane when it dies', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const bomber = place(g, 'bomber', 'player', 2, 2);
+    bomber.health = 1;
+    const a = place(g, 'sk_warrior', 'enemy', 2, 3);
+    const b = place(g, 'sk_minion', 'enemy', 2, 5);
+    g.side('enemy').hand = [];
+    g.endTurn();
+    expect(b.health).toBeLessThanOrEqual(0);
+    expect(a.health).toBeLessThan(4);
+  });
+
+  it('공성 마법사 holds its ground and burns the enemy hero each turn', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const siege = place(g, 'siege_mage', 'player', 0, 0);
+    siege.speed = 0;
+    const hp = g.side('enemy').hero.health;
+    passTurn(g);
+    expect(siege.row).toBe(0);
+    expect(g.side('enemy').hero.health).toBe(hp - 2);
+  });
+
+  it('일제 사격 hits each lane front, or the hero for empty lanes', () => {
+    const g = withCard('volley');
+    const a = place(g, 'sk_warrior', 'enemy', 0, 3);
+    const hp = g.side('enemy').hero.health;
+    g.playCard(0, { kind: 'none' });
+    expect(a.health).toBe(3);
+    expect(g.side('enemy').hero.health).toBe(hp - 4);
+  });
+
+  it('처형 kills a damaged minion outright', () => {
+    const g = withCard('execute');
+    const a = place(g, 'sk_brute', 'enemy', 1, 4);
+    a.health = 9;
+    g.playCard(0, { kind: 'unit', uid: a.uid });
+    expect(g.unit(a.uid)?.health ?? 0).toBeLessThanOrEqual(0);
+    const b = place(g, 'sk_brute', 'enemy', 2, 4);
+    g.playCard(0, { kind: 'unit', uid: b.uid });
+    expect(b.health).toBe(8);
+  });
+
+  it('진격의 북소리 moves allies forward and adds attack', () => {
+    const g = withCard('war_drums');
+    const a = place(g, 'squire', 'player', 1, 0);
+    const b = place(g, 'squire', 'player', 1, 1);
+    g.playCard(0, { kind: 'none' });
+    expect([a.row, b.row].sort()).toEqual([1, 2]);
+    expect(a.attack).toBe(2);
+  });
+
+  it('방벽 수호자 raises barricades on both sides', () => {
+    const g = withCard('warden');
+    g.playCard(0, { kind: 'slot', lane: 2 });
+    const lanes = g.state.units.filter((u) => u.defId === 'barricade_token').map((u) => u.lane).sort();
+    expect(lanes).toEqual([1, 3]);
+  });
+
+  it('얼음 감옥 freezes and pushes a foe back', () => {
+    const g = withCard('ice_prison');
+    const a = place(g, 'sk_warrior', 'enemy', 3, 1);
+    g.playCard(0, { kind: 'unit', uid: a.uid });
+    expect(a.frozen).toBe(true);
+    expect(a.row).toBe(3);
+  });
+
+  it('전장 신관 heals the hero and allies at end of turn', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    place(g, 'priest', 'player', 0, 0);
+    const hurt = place(g, 'squire', 'player', 4, 0);
+    hurt.health = 1;
+    g.side('player').hero.health = 20;
+    passTurn(g);
+    expect(hurt.health).toBe(3);
+    expect(g.side('player').hero.health).toBe(22);
+  });
+
+  it('마나 물약 gives two extra mana this turn', () => {
+    const g = withCard('mana_potion', 1);
+    g.playCard(0, { kind: 'none' });
+    expect(g.side('player').mana).toBe(3);
+  });
+
+  it('수호의 축복 gives every ally a ward', () => {
+    const g = withCard('blessing');
+    const a = place(g, 'squire', 'player', 0, 1);
+    const b = place(g, 'berserker', 'player', 1, 2);
+    g.playCard(0, { kind: 'none' });
+    expect(a.keywords.has('ward') && b.keywords.has('ward')).toBe(true);
+  });
+
+  it('every reward card exists and every player card can be obtained', async () => {
+    const { rollRewards } = await import('../src/game/rewards');
+    const { Rng } = await import('../src/game/rng');
+    const seen = new Set<string>(STARTER_DECK);
+    const rng = new Rng(1);
+    for (let i = 0; i < 400; i++) for (const b of rollRewards(rng, 1 + (i % 4))) for (const id of b.cards) { expect(CARDS[id]).toBeDefined(); seen.add(id); }
+    const obtainable = Object.values(CARDS).filter((c) => !c.enemy && c.id !== 'barricade_token').map((c) => c.id);
+    expect(obtainable.filter((id) => !seen.has(id))).toEqual([]);
+  });
+});
+
 describe('data and simulation', () => {
   it('every referenced card exists', () => {
     for (const s of STAGES) for (const id of s.deck) expect(CARDS[id]).toBeDefined();

@@ -112,6 +112,18 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
       return { target: { kind: 'none' }, score: base - (g.side(side).hand.length > 4 ? 8 : 1) };
     case 'heal':
       return myHero.maxHealth - myHero.health >= 6 ? { target: { kind: 'none' }, score: base } : null;
+    case 'control': {
+      const units = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : []));
+      if (units.length === 0) return null;
+      const worst = units.sort((a, b) => threat(b, side) - threat(a, side))[0];
+      return threat(worst, side) > 10 ? { target: { kind: 'unit', uid: worst.uid }, score: base + 6 } : null;
+    }
+    case 'ramp': {
+      // Worth it only when it unlocks a card we could not afford otherwise.
+      const me = g.side(side);
+      const unlocks = me.hand.some((c) => card(c.defId).cost > me.mana && card(c.defId).cost <= me.mana + 2);
+      return unlocks ? { target: { kind: 'none' }, score: 5 } : null;
+    }
   }
 }
 

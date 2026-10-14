@@ -276,6 +276,15 @@ class App {
         return;
       }
       case 'heal': {
+        if (typeof e.target === 'number') {
+          const v = this.views.get(e.target);
+          if (!v) return;
+          v.health += e.amount;
+          v.renderBadge();
+          this.fx.floatText(v.headPosition(), `+${e.amount}`, 'heal');
+          await wait(0.1);
+          return;
+        }
         const side = e.target;
         this.heroHp[side] = Math.min(s.sides[side].hero.maxHealth, this.heroHp[side] + e.amount);
         this.renderHeroHp();
@@ -297,6 +306,10 @@ class App {
         await wait(0.15);
         return;
       }
+      case 'wardGained':
+        this.views.get(e.uid)?.setWard(true);
+        await wait(0.08);
+        return;
       case 'freeze':
         this.views.get(e.uid)?.setFrozen(true);
         await wait(0.08);

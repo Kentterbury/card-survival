@@ -7,7 +7,7 @@ import { LAST_ROW } from '../game/types';
 const COLORS: Record<SpellIcon | 'arrow' | 'hero', number> = {
   fire: 0xff7a1a, bolt: 0xfff36a, storm: 0x9ad8ff, frost: 0x8fe9ff, wave: 0xd6c2ff,
   heart: 0x7dffb0, shield: 0xffe29a, scroll: 0xffffff, meteor: 0xff4a1a, sword: 0xffd34d,
-  skull: 0x9dff7a, arrow: 0xe8d6b0, curse: 0x6dff8a, hero: 0x8fd0ff,
+  skull: 0x9dff7a, arrows: 0xffd890, potion: 0x7ab8ff, arrow: 0xe8d6b0, curse: 0x6dff8a, hero: 0x8fd0ff,
 };
 
 export class Fx {

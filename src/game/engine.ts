@@ -418,6 +418,18 @@ export class Game {
     return [...Array(LANES).keys()].filter((l) => !this.unitAt(l, row));
   }
 
+  private shove(uid: number, rows: number, dir: number) {
+    const u = this.unit(uid);
+    if (!u || u.health <= 0) return;
+    const from = u.row;
+    for (let i = 0; i < rows; i++) {
+      const next = u.row + dir;
+      if (next < 0 || next > LAST_ROW || this.unitAt(u.lane, next)) break;
+      u.row = next;
+    }
+    if (u.row !== from) this.emit({ type: 'push', uid, lane: u.lane, from, to: u.row });
+  }
+
   private emit(e: GameEvent) {
     this.events.push(e);
   }
@@ -449,6 +461,22 @@ export class Game {
         hero.health += healed;
         if (healed > 0) this.emit({ type: 'heal', target: side, amount: healed });
       },
+      healUnit: (uid, amount) => {
+        const u = this.unit(uid);
+        if (!u || u.health <= 0) return;
+        const healed = Math.min(amount, u.maxHealth - u.health);
+        u.health += healed;
+        if (healed > 0) this.emit({ type: 'heal', target: uid, amount: healed });
+      },
+      grantWard: (uid) => {
+        const u = this.unit(uid);
+        if (!u || u.health <= 0 || u.keywords.has('ward')) return;
+        u.keywords.add('ward');
+        this.emit({ type: 'wardGained', uid });
+      },
+      gainMana: (amount) => {
+        this.side(side).mana += amount;
+      },
       draw: (count) => this.draw(side, count),
       buff: (uid, attack, health) => {
         const u = this.unit(uid);
@@ -464,17 +492,9 @@ export class Game {
         u.frozen = true;
         this.emit({ type: 'freeze', uid });
       },
-      push: (uid, rows) => {
-        const u = this.unit(uid);
-        if (!u || u.health <= 0) return;
-        const from = u.row;
-        for (let i = 0; i < rows; i++) {
-          const next = u.row + dir;
-          if (next < 0 || next > LAST_ROW || this.unitAt(u.lane, next)) break;
-          u.row = next;
-        }
-        if (u.row !== from) this.emit({ type: 'push', uid, lane: u.lane, from, to: u.row });
-      },
+      // Both move a unit in the caster's forward direction: foes get pushed back, allies advance.
+      push: (uid, rows) => this.shove(uid, rows, dir),
+      advance: (uid, rows) => this.shove(uid, rows, dir),
       summon: (defId, lane) => this.summonUnit(side, defId, lane),
       freeHomeLanes: () => this.freeHomeLanes(side),
     };

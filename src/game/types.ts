@@ -109,7 +109,8 @@ export type GameEvent =
   | { type: 'attack'; attacker: number; target: HitTarget; ranged: boolean }
   | { type: 'damage'; target: HitTarget; amount: number }
   | { type: 'wardBroken'; uid: number }
-  | { type: 'heal'; target: Side; amount: number }
+  | { type: 'heal'; target: HitTarget; amount: number }
+  | { type: 'wardGained'; uid: number }
   | { type: 'buff'; uid: number; attack: number; health: number }
   | { type: 'freeze'; uid: number }
   | { type: 'death'; uid: number }

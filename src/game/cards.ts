@@ -16,6 +16,13 @@ export interface EffectApi {
   healHero(amount: number): void;
   draw(count: number): void;
   buff(uid: number, attack: number, health: number): void;
+  /** Restore a unit's health, up to its maximum. */
+  healUnit(uid: number, amount: number): void;
+  grantWard(uid: number): void;
+  /** Mana usable this turn (may go above the maximum). */
+  gainMana(amount: number): void;
+  /** Move an allied unit forward, toward the foe's side. */
+  advance(uid: number, rows: number): void;
   freeze(uid: number): void;
   /** Push an opposing unit back toward its own side. */
   push(uid: number, rows: number): void;
@@ -27,7 +34,7 @@ export interface EffectApi {
 export type Rarity = 'basic' | 'common' | 'rare' | 'epic';
 export type SpellIcon =
   | 'bolt' | 'fire' | 'frost' | 'storm' | 'wave' | 'heart' | 'shield' | 'scroll' | 'meteor' | 'sword'
-  | 'skull' | 'curse';
+  | 'skull' | 'curse' | 'arrows' | 'potion';
 
 interface BaseCard {
   id: string;
@@ -62,7 +69,9 @@ export type SpellAi =
   | { kind: 'lane' }
   | { kind: 'summon' }
   | { kind: 'draw' }
-  | { kind: 'heal' };
+  | { kind: 'heal' }
+  | { kind: 'control' }
+  | { kind: 'ramp' };
 
 export interface SpellCard extends BaseCard {
   type: 'spell';
@@ -127,6 +136,26 @@ const CARD_LIST: CardDef[] = [
     id: 'archmage', name: '대마법사', type: 'minion', cost: 7, rarity: 'epic', attack: 4, health: 6, model: 'Mage', keywords: ['ranged'], scale: 1.2,
     text: '<b>사격</b>. 내 턴이 끝날 때 모든 적 하수인에게 피해를 1 줍니다.',
     onEndTurn: (api) => { for (const m of api.foes()) api.damage({ kind: 'unit', uid: m.uid }, 1); },
+  },
+  {
+    id: 'bomber', name: '화염 폭탄병', type: 'minion', cost: 3, rarity: 'common', attack: 2, health: 3, model: 'Barbarian', scale: 0.95,
+    text: '<b>파괴 시:</b> 이 줄의 적 모두에게 피해 2.',
+    onDeath: (api, self) => { for (const m of api.foesInLane(self.lane)) api.damage({ kind: 'unit', uid: m.uid }, 2); },
+  },
+  {
+    id: 'siege_mage', name: '공성 마법사', type: 'minion', cost: 5, rarity: 'rare', attack: 2, health: 5, model: 'Mage', keywords: ['ranged'], speed: 0, scale: 1.1,
+    text: '<b>사격</b>. 제자리 고정. 턴 종료 시 적 영웅에게 피해 2.',
+    onEndTurn: (api) => api.damageFoeHero(2),
+  },
+  {
+    id: 'warden', name: '방벽 수호자', type: 'minion', cost: 3, rarity: 'common', attack: 2, health: 6, model: 'Knight', speed: 0, scale: 1.1,
+    text: '제자리 고정. <b>등장 시:</b> 양옆에 바리케이드 설치.',
+    onSummon: (api, self) => { api.summon('barricade_token', self.lane - 1); api.summon('barricade_token', self.lane + 1); },
+  },
+  {
+    id: 'priest', name: '전장 신관', type: 'minion', cost: 3, rarity: 'rare', attack: 1, health: 4, model: 'Mage', scale: 0.95,
+    text: '턴 종료 시 내 영웅과 아군 모두 2 회복.',
+    onEndTurn: (api) => { api.healHero(2); for (const m of api.allies()) api.healUnit(m.uid, 2); },
   },
   { id: 'barricade_token', name: '바리케이드', type: 'minion', cost: 0, rarity: 'basic', attack: 0, health: 6, model: 'barrier', text: '움직이지도 공격하지도 않습니다.' },
 
@@ -203,6 +232,45 @@ const CARD_LIST: CardDef[] = [
     id: 'sanctuary', name: '성역의 빛', type: 'spell', cost: 3, rarity: 'rare', target: 'none', icon: 'heart', ai: { kind: 'heal' },
     text: '내 영웅의 생명력을 6 회복하고 아군 하수인 모두에게 +0/+2를 부여합니다.',
     cast: (api) => { api.healHero(6); for (const m of api.allies()) api.buff(m.uid, 0, 2); },
+  },
+
+  {
+    id: 'volley', name: '일제 사격', type: 'spell', cost: 3, rarity: 'common', target: 'none', icon: 'arrows', ai: { kind: 'aoe' },
+    text: '모든 줄의 맨 앞 적에게 피해를 1 줍니다. 비어 있는 줄마다 적 영웅에게 피해 1.',
+    cast: (api) => { for (let lane = 0; lane < 5; lane++) hitLaneFront(api, lane, 1); },
+  },
+  {
+    id: 'execute', name: '처형', type: 'spell', cost: 2, rarity: 'common', target: 'foeUnit', icon: 'skull', ai: { kind: 'damage', amount: 2 },
+    text: '적 하수인 하나에게 피해를 2 줍니다. 이미 피해를 입은 하수인이면 처치합니다.',
+    cast: (api, t) => {
+      if (t.kind !== 'unit') return;
+      const u = api.foes().find((m) => m.uid === t.uid);
+      if (u) api.damage(t, u.health < u.maxHealth ? u.health : 2);
+    },
+  },
+  {
+    id: 'war_drums', name: '진격의 북소리', type: 'spell', cost: 2, rarity: 'rare', target: 'none', icon: 'sword', ai: { kind: 'buffAll' },
+    text: '아군 하수인 모두에게 공격력 +1을 주고 한 칸 전진시킵니다.',
+    cast: (api) => {
+      // Front-most first so allies do not block each other.
+      const allies = [...api.allies()].sort((a, b) => (api.side === 'player' ? b.row - a.row : a.row - b.row));
+      for (const m of allies) { api.buff(m.uid, 1, 0); api.advance(m.uid, 1); }
+    },
+  },
+  {
+    id: 'ice_prison', name: '얼음 감옥', type: 'spell', cost: 1, rarity: 'common', target: 'foeUnit', icon: 'frost', ai: { kind: 'control' },
+    text: '적 하수인 하나를 <b>빙결</b>시키고 2칸 뒤로 밀어냅니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.freeze(t.uid); api.push(t.uid, 2); } },
+  },
+  {
+    id: 'mana_potion', name: '마나 물약', type: 'spell', cost: 0, rarity: 'common', target: 'none', icon: 'potion', ai: { kind: 'ramp' },
+    text: '이번 턴에만 마나를 2 얻습니다.',
+    cast: (api) => api.gainMana(2),
+  },
+  {
+    id: 'blessing', name: '수호의 축복', type: 'spell', cost: 3, rarity: 'rare', target: 'none', icon: 'shield', ai: { kind: 'buffAll' },
+    text: '아군 하수인 모두에게 <b>보호막</b>을 부여합니다.',
+    cast: (api) => { for (const m of api.allies()) api.grantWard(m.uid); },
   },
 
   // ── Enemy units ────────────────────────────────────────────
