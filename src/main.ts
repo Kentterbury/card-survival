@@ -156,6 +156,7 @@ class App {
     v.group.position.copy(cellPos(u.lane, u.row));
     v.setStats({ attack: def.attack, health: def.health, maxHealth: def.health });
     v.setWard(def.keywords?.includes('ward') ?? false);
+    v.setFlying(def.keywords?.includes('flying') ?? false);
     this.board.scene.add(v.group);
     return v;
   }
@@ -312,6 +313,17 @@ class App {
         this.fx.burst(at, 0xffd34d, 20, 4);
         this.board.addShake(0.45);
         await wait(0.25);
+        return;
+      }
+      case 'revive': {
+        const v = this.views.get(e.uid);
+        if (!v) return;
+        v.health = 1;
+        v.renderBadge();
+        v.flash(0xb8ff9a);
+        this.fx.burst(v.group.position.clone().setY(1), 0xb8ff9a, 24, 3);
+        this.fx.floatText(v.headPosition(), '불사!', 'buff');
+        await wait(0.3);
         return;
       }
       case 'wardGained':
@@ -519,7 +531,8 @@ class App {
       if (!v || v.dead) continue;
       const next = !u.frozen && u.attack > 0 ? this.game.targetAhead(u) : null;
       if (next && next.hit === 'player') this.board.setCell(u.lane, u.row, 'danger');
-      v.setStats(u);
+      // Show situational attack (대열) on the badge.
+      v.setStats({ ...u, attack: this.game.attackOf(u) });
       const mark = next && u.side === 'enemy' ? '<span class="threat" title="다음 턴에 공격">!</span>' : '';
       v.renderBadge(mark + (u.frozen ? '<span class="frozen-tag">❄</span>' : ''));
     }

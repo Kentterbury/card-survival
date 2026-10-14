@@ -24,6 +24,9 @@ export class UnitView {
   private ice: THREE.Mesh | null = null;
   private flashMats: THREE.MeshStandardMaterial[] = [];
   dead = false;
+  /** Flyers hover above the floor and bob gently. */
+  private hover = 0;
+  private bobT = Math.random() * 6;
 
   constructor(
     readonly uid: number,
@@ -230,13 +233,22 @@ export class UnitView {
     });
   }
 
+  setFlying(on: boolean) {
+    this.hover = on ? 0.9 : 0;
+    if (this.model) this.model.position.y = this.hover;
+  }
+
   update(dt: number) {
     this.mixer?.update(dt);
+    if (this.hover && this.model && !this.dead) {
+      this.bobT += dt * 2.2;
+      this.model.position.y = this.hover + Math.sin(this.bobT) * 0.15;
+    }
     if (this.ward) this.ward.rotation.y += dt;
   }
 
   headPosition(): THREE.Vector3 {
-    return this.group.position.clone().add(new THREE.Vector3(0, 2.25 * this.scale * UNIT_SCALE + 0.15, 0));
+    return this.group.position.clone().add(new THREE.Vector3(0, 2.25 * this.scale * UNIT_SCALE + 0.15 + this.hover, 0));
   }
 
   dispose() {

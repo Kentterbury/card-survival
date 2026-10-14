@@ -4,8 +4,8 @@ import { rollRewards } from './rewards';
 import { Rng } from './rng';
 import { STAGES, type EnemyPower } from './stages';
 import {
-  forward, HERO_POWER_COST, homeRow, LANES, LAST_ROW, MAX_HAND, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE,
-  type CardInstance, type GameEvent, type HitTarget, type Phase, type RewardBundle, type Side, type SideState,
+  FORMATION_BONUS, forward, HERO_POWER_COST, homeRow, LANES, LAST_ROW, MAX_HAND, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE,
+  type CardInstance, type GameEvent, type HitTarget, type Keyword, type Phase, type RewardBundle, type Side, type SideState,
   type Target, type Unit,
 } from './types';
 
@@ -264,34 +264,71 @@ export class Game {
   /** First foe within range straight ahead in the unit's lane; past the last row is the foe hero. */
   targetAhead(u: Unit): { hit: Unit | Side; dist: number } | null {
     const dir = forward(u.side);
+    const flying = u.keywords.has('flying');
     for (let d = 1; d <= u.range; d++) {
       const r = u.row + d * dir;
       if (r < 0 || r > LAST_ROW) return { hit: other(u.side), dist: d };
+      // Flyers ignore units and only go for the hero.
+      if (flying) continue;
       const occ = this.unitAt(u.lane, r);
-      if (occ && occ.side !== u.side) return { hit: occ, dist: d };
+      if (occ && occ.side !== u.side) {
+        // Melee units cannot reach a flyer; only ranged attacks and spells can.
+        if (occ.keywords.has('flying') && u.range === 1) return null;
+        return { hit: occ, dist: d };
+      }
       // Melee units cannot reach past an ally; ranged units shoot over them.
       if (occ && u.range === 1) return null;
     }
     return null;
   }
 
+  /** Attack including situational bonuses (대열). */
+  attackOf(u: Unit): number {
+    if (!u.keywords.has('formation')) return u.attack;
+    const beside = [u.lane - 1, u.lane + 1].some((l) => {
+      const n = this.unitAt(l, u.row);
+      return n && n.side === u.side;
+    });
+    return u.attack + (beside ? FORMATION_BONUS : 0);
+  }
+
   private strike(u: Unit, hit: Unit | Side, dist: number) {
     const ranged = dist > 1;
+    const dir = forward(u.side);
+    const atk = this.attackOf(u);
     const target: HitTarget = typeof hit === 'string' ? hit : hit.uid;
     this.emit({ type: 'attack', attacker: u.uid, target, ranged });
+    let dealt = 0;
     if (typeof hit === 'string') {
-      this.damageHero(hit, u.attack);
-      return;
+      dealt += this.damageHero(hit, atk);
+    } else {
+      dealt += this.damageUnit(hit, atk);
+      if (u.keywords.has('pierce')) {
+        // The cell behind the target; past the last row that is the foe hero.
+        const r = hit.row + dir;
+        if (r < 0 || r > LAST_ROW) dealt += this.damageHero(other(u.side), atk);
+        else {
+          const behind = this.unitAt(u.lane, r);
+          if (behind && behind.side !== u.side) dealt += this.damageUnit(behind, atk);
+        }
+      }
+      // Melee blows are simultaneous: the target strikes back even if this kills it.
+      if (!ranged && hit.attack > 0) {
+        const back = this.damageUnit(u, this.attackOf(hit));
+        if (back > 0 && hit.keywords.has('lifesteal')) this.healHero(hit.side, back);
+      }
+      if (u.keywords.has('knockback') && hit.health > 0) this.shove(hit.uid, 1, dir);
     }
-    this.damageUnit(hit, u.attack);
-    if (!ranged && hit.attack > 0) this.damageUnit(u, hit.attack);
+    if (dealt > 0 && u.keywords.has('lifesteal')) this.healHero(u.side, dealt);
   }
 
   private advance(u: Unit) {
     const dir = forward(u.side);
     const from = u.row;
     for (let step = 0; step < u.speed; step++) {
-      const next = u.row + dir;
+      let next = u.row + dir;
+      // Flyers pass over anything in the way and land on the next free cell.
+      if (u.keywords.has('flying')) while (next >= 0 && next <= LAST_ROW && this.unitAt(u.lane, next)) next += dir;
       if (next < 0 || next > LAST_ROW || this.unitAt(u.lane, next)) break;
       u.row = next;
     }
@@ -308,7 +345,7 @@ export class Game {
     const u: Unit = {
       uid: this.nextUid++, defId, side, name: def.name, model: def.model,
       attack: def.attack, health: def.health, maxHealth: def.health, keywords, scale: def.scale ?? 1,
-      lane, row, speed: def.speed ?? (def.attack > 0 ? 1 : 0), range: keywords.has('ranged') ? RANGED_RANGE : 1,
+      lane, row, speed: unitSpeed(def.attack, keywords), range: keywords.has('ranged') ? RANGED_RANGE : 1,
       frozen: false, fresh: true,
     };
     this.state.units.push(u);
@@ -324,27 +361,44 @@ export class Game {
     }
   }
 
-  private damageUnit(u: Unit, amount: number) {
-    if (amount <= 0 || u.health <= 0) return;
+  /** Returns the damage actually dealt (0 when a ward soaks it). */
+  private damageUnit(u: Unit, amount: number): number {
+    if (amount <= 0 || u.health <= 0) return 0;
     if (u.keywords.has('ward')) {
       u.keywords.delete('ward');
       this.emit({ type: 'wardBroken', uid: u.uid });
-      return;
+      return 0;
     }
     u.health -= amount;
     this.emit({ type: 'damage', target: u.uid, amount });
+    return amount;
   }
 
-  private damageHero(side: Side, amount: number) {
-    if (amount <= 0) return;
+  private healHero(side: Side, amount: number) {
+    const hero = this.side(side).hero;
+    const healed = Math.min(amount, hero.maxHealth - hero.health);
+    hero.health += healed;
+    if (healed > 0) this.emit({ type: 'heal', target: side, amount: healed });
+  }
+
+  private damageHero(side: Side, amount: number): number {
+    if (amount <= 0) return 0;
     const hero = this.side(side).hero;
     hero.health = Math.max(0, hero.health - amount);
     this.emit({ type: 'damage', target: side, amount });
+    return amount;
   }
 
   private resolveDeaths() {
     const s = this.state;
     for (;;) {
+      for (const u of s.units) {
+        if (u.health <= 0 && u.keywords.has('undying')) {
+          u.keywords.delete('undying');
+          u.health = 1;
+          this.emit({ type: 'revive', uid: u.uid });
+        }
+      }
       const dead = s.units.filter((u) => u.health <= 0);
       if (dead.length === 0) return;
       s.units = s.units.filter((u) => u.health > 0);
@@ -455,12 +509,7 @@ export class Game {
       frontFoe: (lane) => this.unitsOf(foeSide).filter((u) => u.lane === lane).sort((a, b) => (a.row - b.row) * dir)[0],
       damage: (target, amount) => this.damage(target, amount),
       damageFoeHero: (amount) => this.damageHero(foeSide, amount),
-      healHero: (amount) => {
-        const hero = this.side(side).hero;
-        const healed = Math.min(amount, hero.maxHealth - hero.health);
-        hero.health += healed;
-        if (healed > 0) this.emit({ type: 'heal', target: side, amount: healed });
-      },
+      healHero: (amount) => this.healHero(side, amount),
       healUnit: (uid, amount) => {
         const u = this.unit(uid);
         if (!u || u.health <= 0) return;
@@ -502,6 +551,12 @@ export class Game {
       explode: (lane, row) => this.emit({ type: 'explosion', lane, row }),
     };
   }
+}
+
+/** 질주 = 2 cells, 고정 or 0 attack = holds position, otherwise 1 cell per turn. */
+export function unitSpeed(attack: number, keywords: Set<Keyword>): number {
+  if (keywords.has('anchored') || attack <= 0) return 0;
+  return keywords.has('dash') ? 2 : 1;
 }
 
 export function sameTarget(a: Target, b: Target): boolean {

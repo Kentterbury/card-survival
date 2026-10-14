@@ -16,7 +16,12 @@ export const other = (s: Side): Side => (s === 'player' ? 'enemy' : 'player');
 export const forward = (s: Side): number => (s === 'player' ? 1 : -1);
 export const homeRow = (s: Side): number => (s === 'player' ? 0 : LAST_ROW);
 
-export type Keyword = 'swift' | 'ranged' | 'ward';
+export type Keyword =
+  | 'swift' | 'ranged' | 'ward'
+  | 'dash' | 'anchored' | 'knockback' | 'pierce' | 'flying' | 'formation' | 'lifesteal' | 'undying';
+
+/** Attack bonus a `formation` unit gets with an ally beside it. */
+export const FORMATION_BONUS = 2;
 
 export type ModelId =
   | 'Knight' | 'Barbarian' | 'Mage' | 'Rogue' | 'Rogue_Hooded'
@@ -112,6 +117,7 @@ export type GameEvent =
   | { type: 'heal'; target: HitTarget; amount: number }
   | { type: 'wardGained'; uid: number }
   | { type: 'explosion'; lane: number; row: number }
+  | { type: 'revive'; uid: number }
   | { type: 'buff'; uid: number; attack: number; health: number }
   | { type: 'freeze'; uid: number }
   | { type: 'death'; uid: number }

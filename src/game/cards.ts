@@ -56,8 +56,6 @@ export interface MinionCard extends BaseCard {
   health: number;
   model: ModelId;
   keywords?: Keyword[];
-  /** Default 1 (0 for 0-attack units, which hold their position). */
-  speed?: number;
   scale?: number;
   onSummon?: (api: EffectApi, self: Unit) => void;
   onDeath?: (api: EffectApi, self: Unit) => void;
@@ -105,8 +103,8 @@ const CARD_LIST: CardDef[] = [
   { id: 'squire', name: '견습 검사', type: 'minion', cost: 1, rarity: 'basic', attack: 1, health: 3, model: 'Knight', scale: 0.85, text: '' },
   { id: 'crossbowman', name: '석궁병', type: 'minion', cost: 2, rarity: 'basic', attack: 2, health: 2, model: 'Rogue', keywords: ['ranged'], text: '<b>사격</b>' },
   {
-    id: 'shieldbearer', name: '방패병', type: 'minion', cost: 2, rarity: 'basic', attack: 0, health: 5, model: 'Knight', keywords: ['ward'],
-    text: '<b>보호막</b>. 전진하지 않고 자리를 지킵니다.',
+    id: 'shieldbearer', name: '방패병', type: 'minion', cost: 2, rarity: 'basic', attack: 0, health: 5, model: 'Knight', keywords: ['ward', 'anchored'],
+    text: '<b>보호막</b>. <b>고정</b>',
   },
   {
     id: 'apprentice', name: '견습 마법사', type: 'minion', cost: 2, rarity: 'basic', attack: 1, health: 2, model: 'Mage', keywords: ['ranged'],
@@ -119,8 +117,8 @@ const CARD_LIST: CardDef[] = [
     text: '<b>등장 시:</b> 내 영웅의 생명력을 5 회복합니다.', onSummon: (api) => api.healHero(5),
   },
   {
-    id: 'shadowblade', name: '그림자 단검수', type: 'minion', cost: 3, rarity: 'common', attack: 3, health: 2, model: 'Rogue_Hooded', keywords: ['swift'], speed: 2,
-    text: '<b>기습</b>. 2칸씩 전진합니다.',
+    id: 'shadowblade', name: '그림자 단검수', type: 'minion', cost: 3, rarity: 'common', attack: 3, health: 2, model: 'Rogue_Hooded', keywords: ['swift', 'dash'],
+    text: '<b>기습</b>. <b>질주</b>',
   },
   {
     id: 'veteran', name: '노련한 창병', type: 'minion', cost: 4, rarity: 'common', attack: 3, health: 6, model: 'Knight',
@@ -153,13 +151,13 @@ const CARD_LIST: CardDef[] = [
     },
   },
   {
-    id: 'siege_mage', name: '공성 마법사', type: 'minion', cost: 5, rarity: 'rare', attack: 2, health: 5, model: 'Mage', keywords: ['ranged'], speed: 0, scale: 1.1,
-    text: '<b>사격</b>. 제자리 고정. 턴 종료 시 적 영웅에게 피해 2.',
+    id: 'siege_mage', name: '공성 마법사', type: 'minion', cost: 5, rarity: 'rare', attack: 2, health: 5, model: 'Mage', keywords: ['ranged', 'anchored'], scale: 1.1,
+    text: '<b>사격</b>. <b>고정</b>. 턴 종료 시 적 영웅에게 피해 2.',
     onEndTurn: (api) => api.damageFoeHero(2),
   },
   {
-    id: 'warden', name: '방벽 수호자', type: 'minion', cost: 3, rarity: 'common', attack: 2, health: 6, model: 'Knight', speed: 0, scale: 1.1,
-    text: '제자리 고정. <b>등장 시:</b> 양옆에 바리케이드 설치.',
+    id: 'warden', name: '방벽 수호자', type: 'minion', cost: 3, rarity: 'common', attack: 2, health: 6, model: 'Knight', keywords: ['anchored'], scale: 1.1,
+    text: '<b>고정</b>. <b>등장 시:</b> 양옆에 바리케이드 설치.',
     onSummon: (api, self) => { api.summon('barricade_token', self.lane - 1); api.summon('barricade_token', self.lane + 1); },
   },
   {
@@ -167,6 +165,12 @@ const CARD_LIST: CardDef[] = [
     text: '턴 종료 시 내 영웅과 아군 모두 2 회복.',
     onEndTurn: (api) => { api.healHero(2); for (const m of api.allies()) api.healUnit(m.uid, 2); },
   },
+  { id: 'mace_knight', name: '철퇴 기사', type: 'minion', cost: 3, rarity: 'common', attack: 3, health: 4, model: 'Knight', keywords: ['knockback'], text: '<b>넉백</b>' },
+  { id: 'longbow', name: '장궁수', type: 'minion', cost: 3, rarity: 'common', attack: 2, health: 3, model: 'Rogue', keywords: ['ranged', 'pierce'], text: '<b>사격</b>. <b>관통</b>' },
+  { id: 'glider', name: '활공 정찰병', type: 'minion', cost: 2, rarity: 'common', attack: 2, health: 1, model: 'Rogue_Hooded', keywords: ['flying'], scale: 0.9, text: '<b>비행</b>' },
+  { id: 'phalanx', name: '대열 창병', type: 'minion', cost: 2, rarity: 'basic', attack: 1, health: 3, model: 'Knight', keywords: ['formation'], scale: 0.9, text: '<b>대열</b>' },
+  { id: 'blood_blade', name: '피의 검사', type: 'minion', cost: 4, rarity: 'rare', attack: 3, health: 5, model: 'Barbarian', keywords: ['lifesteal'], text: '<b>흡혈</b>' },
+  { id: 'stalwart', name: '불굴의 용사', type: 'minion', cost: 4, rarity: 'rare', attack: 3, health: 3, model: 'Knight', keywords: ['undying'], scale: 1.05, text: '<b>불사</b>' },
   { id: 'barricade_token', name: '바리케이드', type: 'minion', cost: 0, rarity: 'basic', attack: 0, health: 6, model: 'barrier', text: '움직이지도 공격하지도 않습니다.' },
 
   // ── Player spells ──────────────────────────────────────────
@@ -285,11 +289,17 @@ const CARD_LIST: CardDef[] = [
 
   // ── Enemy units ────────────────────────────────────────────
   { id: 'sk_minion', name: '해골 졸개', type: 'minion', cost: 1, rarity: 'basic', enemy: true, attack: 1, health: 2, model: 'Skeleton_Minion', text: '' },
-  { id: 'sk_rogue', name: '해골 추적자', type: 'minion', cost: 2, rarity: 'basic', enemy: true, attack: 2, health: 2, model: 'Skeleton_Rogue', speed: 2, text: '2칸씩 전진합니다.' },
+  { id: 'sk_rogue', name: '해골 추적자', type: 'minion', cost: 2, rarity: 'basic', enemy: true, attack: 2, health: 2, model: 'Skeleton_Rogue', keywords: ['dash'], text: '<b>질주</b>' },
   { id: 'sk_warrior', name: '해골 전사', type: 'minion', cost: 3, rarity: 'basic', enemy: true, attack: 3, health: 4, model: 'Skeleton_Warrior', text: '' },
   { id: 'sk_mage', name: '해골 주술사', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 2, health: 3, model: 'Skeleton_Mage', keywords: ['ranged'], text: '<b>사격</b>' },
   { id: 'sk_guard', name: '무덤 수호병', type: 'minion', cost: 4, rarity: 'common', enemy: true, attack: 3, health: 6, model: 'Skeleton_Warrior', keywords: ['ward'], scale: 1.15, text: '<b>보호막</b>' },
-  { id: 'sk_brute', name: '뼈 거인', type: 'minion', cost: 6, rarity: 'rare', enemy: true, attack: 6, health: 10, model: 'Skeleton_Warrior', scale: 1.45, text: '' },
+  { id: 'sk_brute', name: '뼈 거인', type: 'minion', cost: 6, rarity: 'rare', enemy: true, attack: 6, health: 10, model: 'Skeleton_Warrior', keywords: ['knockback'], scale: 1.45, text: '<b>넉백</b>' },
+
+  { id: 'sk_wraith', name: '해골 망령', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 2, health: 2, model: 'Skeleton_Rogue', keywords: ['flying'], scale: 0.9, text: '<b>비행</b>' },
+  { id: 'sk_undying', name: '불사 해골', type: 'minion', cost: 2, rarity: 'basic', enemy: true, attack: 2, health: 1, model: 'Skeleton_Minion', keywords: ['undying'], text: '<b>불사</b>' },
+  { id: 'sk_pikeman', name: '해골 창병', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 2, health: 4, model: 'Skeleton_Warrior', keywords: ['pierce'], scale: 0.95, text: '<b>관통</b>' },
+  { id: 'sk_phalanx', name: '해골 방진병', type: 'minion', cost: 2, rarity: 'basic', enemy: true, attack: 1, health: 3, model: 'Skeleton_Warrior', keywords: ['formation'], scale: 0.9, text: '<b>대열</b>' },
+  { id: 'sk_leech', name: '흡혈 주술사', type: 'minion', cost: 4, rarity: 'rare', enemy: true, attack: 2, health: 3, model: 'Skeleton_Mage', keywords: ['ranged', 'lifesteal'], text: '<b>사격</b>. <b>흡혈</b>' },
 
   // ── Enemy spells ───────────────────────────────────────────
   {
@@ -350,4 +360,12 @@ export const KEYWORD_INFO: Record<Keyword, { name: string; text: string }> = {
   swift: { name: '기습', text: '소환된 턴에도 바로 전진하거나 공격합니다.' },
   ranged: { name: '사격', text: '자기 줄 앞쪽 3칸 안의 첫 번째 적을 쏩니다(아군 너머로도). 적이 없으면 전진하고, 적 영웅이 사거리 안이면 영웅을 쏩니다.' },
   ward: { name: '보호막', text: '처음 받는 피해를 무시합니다.' },
+  dash: { name: '질주', text: '매 턴 2칸씩 전진합니다.' },
+  anchored: { name: '고정', text: '전진하지 않고 제자리를 지킵니다.' },
+  knockback: { name: '넉백', text: '공격한 적을 1칸 뒤로 밀어냅니다.' },
+  pierce: { name: '관통', text: '공격이 대상 바로 뒤 칸의 적까지 맞힙니다. 뒤가 끝줄 밖이면 적 영웅이 맞습니다.' },
+  flying: { name: '비행', text: '하수인을 무시하고 날아서 전진하며 적 영웅만 공격합니다. 근접 공격으로는 맞지 않고, 사격과 주문으로만 맞힐 수 있습니다.' },
+  formation: { name: '대열', text: '양옆 줄 같은 행에 아군이 있으면 공격력 +2.' },
+  lifesteal: { name: '흡혈', text: '이 하수인이 준 피해만큼 내 영웅의 생명력을 회복합니다.' },
+  undying: { name: '불사', text: '처음 죽을 때 생명력 1로 되살아납니다.' },
 };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { card, CARDS, STARTER_DECK, type MinionCard } from '../src/game/cards';
-import { Game, HERO_MAX_HEALTH } from '../src/game/engine';
+import { Game, HERO_MAX_HEALTH, unitSpeed } from '../src/game/engine';
 import { STAGES } from '../src/game/stages';
 import { LAST_ROW, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
@@ -18,7 +18,7 @@ function place(g: Game, defId: string, side: Side, lane: number, row: number, fr
   const keywords = new Set(d.keywords ?? []);
   const u: Unit = {
     uid: uidSeq++, defId, side, name: d.name, model: d.model, attack: d.attack, health: d.health, maxHealth: d.health,
-    keywords, scale: 1, lane, row, speed: d.speed ?? (d.attack > 0 ? 1 : 0), range: keywords.has('ranged') ? RANGED_RANGE : 1,
+    keywords, scale: 1, lane, row, speed: unitSpeed(d.attack, keywords), range: keywords.has('ranged') ? RANGED_RANGE : 1,
     frozen: false, fresh,
   };
   g.state.units.push(u);
@@ -304,6 +304,88 @@ describe('new cards', () => {
     for (let i = 0; i < 400; i++) for (const b of rollRewards(rng, 1 + (i % 4))) for (const id of b.cards) { expect(CARDS[id]).toBeDefined(); seen.add(id); }
     const obtainable = Object.values(CARDS).filter((c) => !c.enemy && c.id !== 'barricade_token').map((c) => c.id);
     expect(obtainable.filter((id) => !seen.has(id))).toEqual([]);
+  });
+});
+
+describe('keywords', () => {
+  const enemyIdle = (g: Game) => { g.side('enemy').hand = []; g.side('enemy').drawPile = []; g.side('enemy').powerUsed = true; };
+
+  it('넉백 pushes a surviving target back one cell', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    place(g, 'mace_knight', 'player', 2, 2);
+    const foe = place(g, 'sk_guard', 'enemy', 2, 3);
+    foe.keywords.delete('ward');
+    enemyIdle(g);
+    g.endTurn();
+    // pushed to row 4 on our turn; on its own turn it walks back to row 3
+    expect(foe.row).toBe(3);
+    expect(foe.health).toBe(6 - 3);
+  });
+
+  it('관통 also hits the unit behind the target', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    place(g, 'longbow', 'player', 1, 0);
+    const a = place(g, 'sk_warrior', 'enemy', 1, 2);
+    const b = place(g, 'sk_warrior', 'enemy', 1, 3);
+    passTurn(g);
+    expect(a.health).toBe(2);
+    expect(b.health).toBe(2);
+  });
+
+  it('관통 from the last row reaches the enemy hero behind', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    place(g, 'longbow', 'player', 1, LAST_ROW - 2);
+    place(g, 'sk_warrior', 'enemy', 1, LAST_ROW);
+    const hp = g.side('enemy').hero.health;
+    passTurn(g);
+    expect(g.side('enemy').hero.health).toBe(hp - 2);
+  });
+
+  it('비행 flies over blockers and cannot be hit by melee', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const flyer = place(g, 'glider', 'player', 3, 1);
+    const wall = place(g, 'sk_warrior', 'enemy', 3, 2);
+    passTurn(g);
+    expect(flyer.row).toBe(3); // jumped over the warrior
+    expect(flyer.health).toBe(1);
+    expect(wall.health).toBe(4);
+    expect(g.targetAhead(wall)).toBeNull();
+  });
+
+  it('대열 adds attack with an ally beside it', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const p = place(g, 'phalanx', 'player', 2, 1);
+    expect(g.attackOf(p)).toBe(1);
+    place(g, 'squire', 'player', 3, 1);
+    expect(g.attackOf(p)).toBe(3);
+  });
+
+  it('흡혈 heals our hero by the damage dealt', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    g.side('player').hero.health = 20;
+    place(g, 'blood_blade', 'player', 0, 2);
+    place(g, 'sk_brute', 'enemy', 0, 3);
+    passTurn(g);
+    expect(g.side('player').hero.health).toBe(23);
+  });
+
+  it('불사 brings a unit back once with 1 health', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const s = place(g, 'stalwart', 'player', 4, 2);
+    // The brute's counter kills it; frozen, the brute cannot finish it off on its own turn.
+    place(g, 'sk_brute', 'enemy', 4, 3).frozen = true;
+    passTurn(g);
+    expect(g.unit(s.uid)?.health).toBe(1);
+    expect(s.keywords.has('undying')).toBe(false);
+  });
+
+  it('질주 moves two cells and 고정 holds still', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    const fast = place(g, 'shadowblade', 'player', 0, 0);
+    const still = place(g, 'warden', 'player', 1, 0);
+    passTurn(g);
+    expect(fast.row).toBe(2);
+    expect(still.row).toBe(0);
   });
 });
 
