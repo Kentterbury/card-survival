@@ -33,6 +33,7 @@ class App {
   busy = false;
   aim: Aim | null = null;
   pointer = { x: 0, y: 0 };
+  lastPointerType = 'mouse';
   heroHpShown = HERO_MAX_HEALTH;
   /** Event type currently being animated (useful when debugging playback). */
   currentEvent = '';
@@ -95,6 +96,7 @@ class App {
 
   async startRun() {
     this.closeModal();
+    void enterMobileFullscreen();
     this.game = new Game(Date.now() & 0x7fffffff);
     this.heroHpShown = HERO_MAX_HEALTH;
     $('hud').classList.remove('hidden');
@@ -519,7 +521,12 @@ class App {
     window.addEventListener('pointermove', (e) => this.onMove(e));
     window.addEventListener('pointerup', (e) => this.onUp(e));
     $('scene').addEventListener('pointerdown', (e) => this.onBoardDown(e));
-    window.addEventListener('contextmenu', (e) => { e.preventDefault(); this.cancelAim(); });
+    window.addEventListener('pointerdown', (e) => { this.lastPointerType = e.pointerType; }, { capture: true });
+    // Right click cancels; a touch long-press also fires contextmenu, which must not.
+    window.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (this.lastPointerType === 'mouse') this.cancelAim();
+    });
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.cancelAim();
       if (e.key === ' ' || e.key === 'Enter') void this.endTurn();
@@ -543,8 +550,9 @@ class App {
     e.stopPropagation();
     if (this.busy) return;
     if (this.aim) {
+      const same = this.aim.kind === 'card' && this.aim.el === el;
       this.cancelAim();
-      return;
+      if (same) return;
     }
     const index = Number(el.dataset.index);
     if (!this.game.canPlay(index)) {
@@ -565,6 +573,7 @@ class App {
       return;
     }
     if (this.busy || this.aim) return;
+    this.inspectAt(e.clientX, e.clientY);
     const p = this.pick(e.clientX, e.clientY);
     if (p.uid !== undefined && p.side === 'minion' && this.game.attackTargets(p.uid).length > 0) {
       this.startAim({ kind: 'minion', uid: p.uid, sticky: false, x0: e.clientX, y0: e.clientY, moved: false });
@@ -578,7 +587,13 @@ class App {
       this.inspectAt(e.clientX, e.clientY);
       return;
     }
-    if (Math.hypot(e.clientX - aim.x0, e.clientY - aim.y0) > 12) aim.moved = true;
+    if (!aim.moved && Math.hypot(e.clientX - aim.x0, e.clientY - aim.y0) > 12) {
+      aim.moved = true;
+      if (aim.kind === 'card') {
+        const kind = this.cardTargetKind(aim.handIndex);
+        if (kind === 'slot' || kind === 'none') aim.el.classList.replace('aiming', 'dragging');
+      }
+    }
     this.updateAimVisuals();
   }
 
@@ -598,8 +613,11 @@ class App {
     this.aim = aim;
     $('inspect').classList.remove('show');
     if (aim.kind === 'card') {
-      const kind = this.cardTargetKind(aim.handIndex);
-      aim.el.classList.add(kind === 'slot' || kind === 'none' ? 'dragging' : 'aiming');
+      aim.el.classList.add('aiming');
+      const notes = keywordNotes(aim.el.dataset.defId!);
+      const inspect = $('inspect');
+      inspect.innerHTML = notes ? `<div class="notes">${notes}</div>` : '';
+      inspect.classList.toggle('show', !!notes);
     }
     this.updateAimVisuals();
   }
@@ -612,6 +630,7 @@ class App {
       aim.el.style.transform = '';
     }
     this.aim = null;
+    $('inspect').classList.remove('show');
     $('arrow-path').setAttribute('d', '');
     this.renderThreats();
   }
@@ -722,11 +741,11 @@ class App {
     let from: { x: number; y: number } | null = null;
     if (aim.kind === 'card') {
       const kind = this.cardTargetKind(aim.handIndex);
-      if (kind === 'slot' || kind === 'none') {
+      if (aim.el.classList.contains('dragging')) {
         const tx = x - window.innerWidth / 2;
         const ty = y - window.innerHeight + aim.el.offsetHeight / 2;
         aim.el.style.transform = `translate(${tx}px, ${ty}px) scale(${this.overHand(y) ? 1.1 : 0.85})`;
-      } else {
+      } else if (aim.moved && kind !== 'slot' && kind !== 'none') {
         const r = aim.el.getBoundingClientRect();
         from = { x: r.left + r.width / 2, y: r.top + r.height * 0.15 };
       }
@@ -741,7 +760,7 @@ class App {
       from = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     }
     const path = $('arrow-path');
-    if (from) {
+    if (from && aim.moved) {
       const cx = (from.x + x) / 2;
       const cy = Math.min(from.y, y) - 80;
       path.setAttribute('d', `M${from.x},${from.y} Q${cx},${cy} ${x},${y}`);
@@ -834,7 +853,7 @@ class App {
         <div><b>공격</b> 근접 하수인은 맨 앞줄(자기 줄과 양옆) 몬스터를, <b>사격</b> 하수인은 자기 줄의 몬스터라면 어디든 공격합니다.</div>
         <div><b>위험</b> 막는 하수인이 없는 줄의 몬스터는 <b>영웅</b>을 직접 공격합니다. 붉은 칸은 다음 적 턴에 공격할 몬스터입니다.</div>
         <div><b>스테이지</b> 정해진 웨이브를 모두 막으면 클리어. 클리어할 때마다 <b>카드 꾸러미</b> 하나를 골라 덱에 추가합니다.</div>
-        <div><b>조작</b> 카드를 끌어 놓거나 클릭 후 대상을 클릭하세요. 하수인을 끌어 몬스터를 공격합니다. 우클릭/ESC 취소, Space 턴 종료.</div>
+        <div><b>조작</b> 카드를 <b>탭(클릭)한 뒤 대상을 탭</b>하거나 끌어다 놓으세요. 하수인을 탭한 뒤 몬스터를 탭하면 공격합니다. 유닛을 탭하면 정보가 보입니다. 같은 카드를 다시 탭하면 취소.</div>
       </div>
       <button class="btn" id="start-btn">출정</button>`);
     m.querySelector('#start-btn')!.addEventListener('click', () => void this.startRun());
@@ -881,6 +900,17 @@ class App {
       <p>클리어한 스테이지 ${s.stagesCleared}/${STAGES.length} · 최종 덱 ${s.deckList.length}장</p>
       <button class="btn" id="again">다시 도전</button>`);
     m.querySelector('#again')!.addEventListener('click', () => void this.startRun());
+  }
+}
+
+/** On phones, go fullscreen and try to lock landscape (Android; iOS ignores both). */
+async function enterMobileFullscreen() {
+  if (!matchMedia('(pointer: coarse)').matches || document.fullscreenElement) return;
+  try {
+    await document.documentElement.requestFullscreen?.({ navigationUI: 'hide' });
+    await (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape');
+  } catch {
+    // Not supported (e.g. iPhone Safari); the rotate hint covers portrait.
   }
 }
 
