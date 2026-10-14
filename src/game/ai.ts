@@ -8,10 +8,12 @@ import { homeRow, LANES, other, type Side, type Target, type Unit } from './type
  */
 export function aiTakeTurn(g: Game, side: Side) {
   for (let guard = 0; guard < 20 && !g.over; guard++) {
+    resolvePendingChoice(g, side);
     const best = bestPlay(g, side);
     if (!best) break;
     if (!g.playCardAs(side, best.index, best.target)) break;
   }
+  resolvePendingChoice(g, side);
   if (g.over) return;
   const powerTarget = pickPowerTarget(g, side);
   if (powerTarget) g.heroPowerAs(side, powerTarget);
@@ -108,8 +110,29 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
       }
       return g.freeHomeLanes(side).length > 0 ? { target: { kind: 'none' }, score: base + 3 } : null;
     }
-    case 'draw':
-      return { target: { kind: 'none' }, score: base - (g.side(side).hand.length > 4 ? 8 : 1) };
+    case 'draw': {
+      if (ai.selfDamage && myHero.health <= ai.selfDamage + 8) return null;
+      return { target: { kind: 'none' }, score: base - (g.side(side).hand.length > 4 ? 8 : 1) + 2 };
+    }
+    case 'discover':
+      return g.side(side).hand.length < 8 ? { target: { kind: 'none' }, score: base + 3 } : null;
+    case 'disrupt':
+      return g.side(other(side)).hand.length > 0 ? { target: { kind: 'none' }, score: base + 4 } : null;
+    case 'recycle':
+      return g.side(side).discard.length >= 2 ? { target: { kind: 'none' }, score: base + 2 } : null;
+    case 'cycle': {
+      const me = g.side(side);
+      const stuck = me.hand.filter((c) => g.costOf(c) > me.maxMana + 1).length;
+      return stuck >= 2 ? { target: { kind: 'none' }, score: base + stuck } : null;
+    }
+    case 'discount':
+      return g.side(side).hand.length >= 4 ? { target: { kind: 'none' }, score: base + 3 } : null;
+    case 'copy': {
+      const allies = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : []));
+      if (allies.length === 0) return null;
+      const best = allies.sort((a, b) => card(b.defId).cost - card(a.defId).cost)[0];
+      return { target: { kind: 'unit', uid: best.uid }, score: base + 2 };
+    }
     case 'heal':
       return myHero.maxHealth - myHero.health >= 6 ? { target: { kind: 'none' }, score: base } : null;
     case 'control': {
@@ -125,6 +148,16 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
       return unlocks ? { target: { kind: 'none' }, score: 5 } : null;
     }
   }
+}
+
+/** 탐색: take the priciest option we could afford within a turn or two. */
+function resolvePendingChoice(g: Game, side: Side) {
+  const c = g.state.choice;
+  if (!c || c.side !== side) return;
+  const max = g.side(side).maxMana + 1;
+  const scored = c.options.map((id, i) => ({ i, cost: card(id).cost }));
+  const best = scored.filter((o) => o.cost <= max).sort((a, b) => b.cost - a.cost)[0] ?? scored[0];
+  g.resolveChoice(best.i);
 }
 
 function pickPowerTarget(g: Game, side: Side): Target | null {

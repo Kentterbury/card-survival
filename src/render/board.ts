@@ -29,6 +29,8 @@ export class Board {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
   private readonly cells: THREE.Mesh[][] = [];
+  /** Floor marker under the enemy hero, lit when it is a valid or hovered target. */
+  private heroMarker!: THREE.Mesh;
   private readonly torches: { light: THREE.PointLight; base: number; phase: number }[] = [];
   private shake = 0;
   private readonly camBase = new THREE.Vector3();
@@ -152,6 +154,13 @@ export class Board {
         this.scene.add(m);
       }
     }
+    this.heroMarker = new THREE.Mesh(
+      new THREE.CircleGeometry(2.1, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }),
+    );
+    this.heroMarker.position.set(ENEMY_HERO_POS.x, 0.09, ENEMY_HERO_POS.z);
+    this.heroMarker.renderOrder = 1;
+    this.scene.add(this.heroMarker);
     // Faint lines marking each side's home row.
     for (const [z, color] of [[-ROW_D / 2, 0xffc46b], [-(LAST_ROW - 0.5) * ROW_D, 0x7dff9a]] as const) {
       const line = new THREE.Mesh(
@@ -173,6 +182,7 @@ export class Board {
 
   /** Base look of the grid: both home rows are tinted, everything else invisible. */
   clearHighlights() {
+    this.setHeroHighlight('none');
     for (let lane = 0; lane < LANES; lane++) {
       for (let row = 0; row <= LAST_ROW; row++) this.setCell(lane, row, row === 0 ? 'lane' : row === LAST_ROW ? 'enemyHome' : 'none');
     }
@@ -194,7 +204,16 @@ export class Board {
     mat.opacity = style[kind][1];
   }
 
-  /** Ground point under the pointer, in board coordinates. */
+  setHeroHighlight(kind: 'none' | 'valid' | 'hover') {
+    const mat = this.heroMarker.material as THREE.MeshBasicMaterial;
+    mat.color.setHex(kind === 'hover' ? 0xfff27a : 0x5cf2a3);
+    mat.opacity = kind === 'hover' ? 0.5 : kind === 'valid' ? 0.25 : 0;
+  }
+
+  /**
+   * Board cell under the pointer. Rows past the last row (the strip in front of
+   * the gate, where the enemy hero stands) come back as `row: ROWS`.
+   */
   pickGround(ndc: THREE.Vector2): { lane: number; row: number } | null {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, this.camera);
@@ -202,7 +221,9 @@ export class Board {
     if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit)) return null;
     const lane = Math.round(hit.x / LANE_W + (LANES - 1) / 2);
     const row = Math.round(-hit.z / ROW_D);
-    if (lane < 0 || lane >= LANES || row < 0 || row > LAST_ROW) return null;
+    if (row < 0) return null;
+    if (row > LAST_ROW) return Math.abs(hit.x) < (LANES / 2) * LANE_W + 1 ? { lane: Math.min(LANES - 1, Math.max(0, lane)), row: ROWS } : null;
+    if (lane < 0 || lane >= LANES) return null;
     return { lane, row };
   }
 

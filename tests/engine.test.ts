@@ -469,6 +469,121 @@ describe('keywords (2nd batch)', () => {
   });
 });
 
+describe('utility cards', () => {
+  const setup = (id: string, extra: string[] = []) => {
+    const g = freshGame([id, ...extra, 'squire', 'squire', 'squire', 'squire', 'squire']);
+    const me = g.side('player');
+    me.hand = [{ iid: 1, defId: id }, ...extra.map((d, i) => ({ iid: 10 + i, defId: d }))];
+    me.mana = 10;
+    return g;
+  };
+
+  it('피의 계약 costs 3 health and draws 2', () => {
+    const g = setup('blood_pact');
+    g.playCard(0, { kind: 'none' });
+    expect(g.side('player').hero.health).toBe(HERO_MAX_HEALTH - 3);
+    expect(g.side('player').hand).toHaveLength(2);
+  });
+
+  it('탐색 waits for a pick, blocks other actions, then adds the card (with discount)', () => {
+    const g = setup('reinforce', ['squire']);
+    g.playCard(0, { kind: 'none' });
+    const c = g.state.choice!;
+    expect(c.options).toHaveLength(3);
+    expect(c.options.every((id) => card(id).type === 'minion' && !card(id).enemy)).toBe(true);
+    expect(g.canPlay(0)).toBe(false);
+    expect(g.endTurn()).toEqual([]);
+    g.chooseOption(1);
+    expect(g.state.choice).toBeNull();
+    const got = g.side('player').hand.at(-1)!;
+    expect(got.defId).toBe(c.options[1]);
+    expect(g.costOf(got)).toBe(Math.max(0, card(got.defId).cost - 1));
+  });
+
+  it('작전 변경 discards the hand and draws the same number', () => {
+    const g = setup('change_plans', ['firebolt', 'firebolt', 'firebolt']);
+    g.playCard(0, { kind: 'none' });
+    const me = g.side('player');
+    expect(me.hand).toHaveLength(3);
+    expect(me.discard.filter((c) => c.defId === 'firebolt')).toHaveLength(3);
+  });
+
+  it('재활용 returns cards from the discard pile, not itself', () => {
+    const g = setup('salvage');
+    g.side('player').discard = [{ iid: 50, defId: 'thunderbolt' }, { iid: 51, defId: 'meteor' }];
+    g.playCard(0, { kind: 'none' });
+    expect(g.side('player').hand.map((c) => c.defId).sort()).toEqual(['meteor', 'thunderbolt']);
+  });
+
+  it('봉인의 사슬 locks enemy cards for their next turn only', () => {
+    const g = setup('chains');
+    const en = g.side('enemy');
+    en.hand = [{ iid: 60, defId: 'e_curse' }, { iid: 61, defId: 'e_curse' }];
+    g.playCard(0, { kind: 'none' });
+    expect(en.hand.every((c) => c.locked)).toBe(true);
+    // During the enemy turn the AI cannot play them, and they unlock at its end.
+    g.endTurn();
+    expect(en.hand.filter((c) => c.defId === 'e_curse')).toHaveLength(2);
+    expect(en.hand.some((c) => c.locked)).toBe(false);
+  });
+
+  it('소매치기 takes a card from the enemy hand', () => {
+    const g = setup('pickpocket');
+    g.side('enemy').hand = [{ iid: 70, defId: 'e_soulfire' }];
+    g.playCard(0, { kind: 'none' });
+    expect(g.side('enemy').hand).toHaveLength(0);
+    expect(g.side('player').hand.map((c) => c.defId)).toEqual(['e_soulfire']);
+  });
+
+  it('stolen enemy spells work for the player', () => {
+    const g = setup('e_soulfire');
+    const hp = g.side('enemy').hero.health;
+    expect(g.playCard(0, { kind: 'hero', side: 'enemy' }).length).toBeGreaterThan(0);
+    expect(g.side('enemy').hero.health).toBe(hp - 6);
+  });
+
+  it('도굴 takes the top of the enemy deck', () => {
+    const g = setup('grave_rob');
+    const top = g.side('enemy').drawPile.at(-1)!;
+    g.playCard(0, { kind: 'none' });
+    expect(g.side('player').hand.at(-1)!.defId).toBe(top.defId);
+  });
+
+  it('망각의 저주 makes the enemy skip its next draw', () => {
+    const g = setup('oblivion');
+    g.side('enemy').hand = [];
+    g.playCard(0, { kind: 'none' });
+    const pile = g.side('enemy').drawPile.length;
+    g.endTurn();
+    expect(g.side('enemy').drawPile.length).toBe(pile);
+  });
+
+  it('거울상 copies an ally card into the hand at -1 cost', () => {
+    const g = setup('mirror_image');
+    const u = place(g, 'warlord', 'player', 1, 1);
+    g.playCard(0, { kind: 'unit', uid: u.uid });
+    const copy = g.side('player').hand.find((c) => c.defId === 'warlord')!;
+    expect(g.costOf(copy)).toBe(5);
+  });
+
+  it('보급 마차 makes the rest of the hand cheaper', () => {
+    const g = setup('supply_wagon', ['meteor', 'firebolt']);
+    g.playCard(0, { kind: 'none' });
+    const hand = g.side('player').hand;
+    expect(g.costOf(hand.find((c) => c.defId === 'meteor')!)).toBe(5);
+    expect(g.costOf(hand.find((c) => c.defId === 'firebolt')!)).toBe(0);
+  });
+
+  it('the enemy resolves its own 탐색-free utility (e_hex locks one of our cards)', () => {
+    const g = freshGame(Array(10).fill('squire'));
+    g.state.phase = 'enemy';
+    g.side('enemy').hand = [{ iid: 80, defId: 'e_hex' }];
+    g.side('enemy').mana = 2;
+    g.playCardAs('enemy', 0, { kind: 'none' });
+    expect(g.side('player').hand.filter((c) => c.locked)).toHaveLength(1);
+  });
+});
+
 describe('data and simulation', () => {
   it('every referenced card exists', () => {
     for (const s of STAGES) for (const id of s.deck) expect(CARDS[id]).toBeDefined();

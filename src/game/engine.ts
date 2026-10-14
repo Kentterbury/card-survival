@@ -1,12 +1,12 @@
 import { aiTakeTurn } from './ai';
-import { card, STARTER_DECK, type EffectApi, type MinionCard } from './cards';
+import { card, CARDS, STARTER_DECK, type EffectApi, type MinionCard } from './cards';
 import { rollRewards } from './rewards';
 import { Rng } from './rng';
 import { STAGES, type EnemyPower } from './stages';
 import {
   FORMATION_BONUS, forward, HERO_POWER_COST, homeRow, LANES, LAST_ROW, MAX_HAND, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE,
   THORNS_DAMAGE, VANGUARD_BONUS,
-  type CardInstance, type GameEvent, type HitTarget, type Keyword, type Phase, type RewardBundle, type Side, type SideState,
+  type CardInstance, type GameEvent, type HitTarget, type Keyword, type PendingChoice, type Phase, type RewardBundle, type Side, type SideState,
   type Target, type Unit,
 } from './types';
 
@@ -26,6 +26,8 @@ export interface GameState {
   sides: Record<Side, SideState>;
   units: Unit[];
   rewards: RewardBundle[];
+  /** Set while a 탐색 pick is waiting for an answer. */
+  choice: PendingChoice | null;
 }
 
 export class Game {
@@ -50,7 +52,7 @@ export class Game {
         player: this.emptySide({ ...PLAYER_HERO, health: HERO_MAX_HEALTH, maxHealth: HERO_MAX_HEALTH }),
         enemy: this.emptySide({ ...PLAYER_HERO, health: 1, maxHealth: 1 }),
       },
-      units: [], rewards: [],
+      units: [], rewards: [], choice: null,
     };
     return this.collect(() => this.beginStage());
   }
@@ -85,7 +87,7 @@ export class Game {
   }
 
   private emptySide(hero: SideState['hero']): SideState {
-    return { hero, mana: 0, maxMana: 0, reserve: 0, powerUsed: false, drawPile: [], hand: [], discard: [] };
+    return { hero, mana: 0, maxMana: 0, reserve: 0, powerUsed: false, skipDraw: false, drawPile: [], hand: [], discard: [] };
   }
 
   private beginStage() {
@@ -98,6 +100,7 @@ export class Game {
     s.sides.enemy.drawPile = this.makePile(st.deck);
     s.units = [];
     s.turn = 0;
+    s.choice = null;
     this.emit({ type: 'stageStart', stage: s.stage });
     this.draw('player', 3);
     this.draw('enemy', 3);
@@ -122,12 +125,17 @@ export class Game {
     for (const u of this.unitsOf(side)) {
       if (u.keywords.has('regenerate') && u.health < u.maxHealth) this.healUnit(u, u.maxHealth - u.health);
     }
-    this.draw(side, 1);
+    if (me.skipDraw) {
+      me.skipDraw = false;
+      this.emit({ type: 'notice', side, text: '드로우 봉쇄!' });
+    } else {
+      this.draw(side, 1);
+    }
   }
 
   /** Ends the player's turn and plays out the whole enemy turn. */
   endTurn(): GameEvent[] {
-    if (this.state.phase !== 'player') return [];
+    if (this.state.phase !== 'player' || this.state.choice) return [];
     return this.collect(() => {
       this.finishTurn('player');
       if (this.over) return;
@@ -144,6 +152,8 @@ export class Game {
   private finishTurn(side: Side) {
     const me = this.side(side);
     me.reserve = Math.min(MAX_RESERVE, me.mana);
+    // 봉인 lasts through one of the owner's turns.
+    for (const c of me.hand) c.locked = false;
     for (const u of this.unitsOf(side)) {
       const def = card(u.defId) as MinionCard;
       if (def.onEndTurn && u.health > 0) def.onEndTurn(this.apis[side], u);
@@ -170,7 +180,25 @@ export class Game {
   canPlayAs(side: Side, handIndex: number): boolean {
     const me = this.side(side);
     const inst = me.hand[handIndex];
-    return this.state.phase === side && !!inst && card(inst.defId).cost <= me.mana && this.targetsFor(side, handIndex).length > 0;
+    return this.state.phase === side && !this.state.choice && !!inst && !inst.locked
+      && this.costOf(inst) <= me.mana && this.targetsFor(side, handIndex).length > 0;
+  }
+
+  /** Current cost of a card instance, after any cost changes. */
+  costOf(inst: CardInstance): number {
+    return Math.max(0, card(inst.defId).cost + (inst.costMod ?? 0));
+  }
+
+  /** Resolves a pending 탐색 pick for the player. */
+  chooseOption(index: number): GameEvent[] {
+    return this.collect(() => this.resolveChoice(index));
+  }
+
+  resolveChoice(index: number) {
+    const c = this.state.choice;
+    if (!c || !c.options[index]) return;
+    this.state.choice = null;
+    this.addToHand(c.side, { iid: this.nextUid++, defId: c.options[index], costMod: c.costMod || undefined }, 'choice');
   }
 
   /** Every legal target for a card in `side`'s hand (`{kind:'none'}` for untargeted cards). */
@@ -205,8 +233,7 @@ export class Game {
     const me = this.side(side);
     const [inst] = me.hand.splice(handIndex, 1);
     const def = card(inst.defId);
-    me.mana -= def.cost;
-    me.discard.push(inst);
+    me.mana -= this.costOf(inst);
     this.emit({ type: 'cardPlayed', side, card: inst, target });
     if (def.type === 'minion') {
       if (target.kind === 'slot') this.summonUnit(side, def.id, target.lane);
@@ -214,6 +241,8 @@ export class Game {
       this.emit({ type: 'spell', side, defId: def.id, target });
       def.cast(this.apis[side], target);
     }
+    // Into the discard pile only after resolving, so a card cannot draw or recycle itself.
+    me.discard.push({ iid: inst.iid, defId: inst.defId });
     this.resolveDeaths();
     this.checkOutcome();
     return true;
@@ -476,6 +505,25 @@ export class Game {
     return false;
   }
 
+  private addToHand(side: Side, inst: CardInstance, from: 'steal' | 'copy' | 'choice' | 'discard') {
+    const me = this.side(side);
+    if (me.hand.length >= MAX_HAND) {
+      me.discard.push(inst);
+      this.emit({ type: 'burn', side, card: inst });
+      return;
+    }
+    me.hand.push(inst);
+    this.emit({ type: 'cardGained', side, card: inst, from });
+  }
+
+  /** Random player-collectible cards of a type, for 탐색. */
+  private discoverOptions(type: 'minion' | 'spell'): string[] {
+    const pool = Object.values(CARDS)
+      .filter((c) => c.type === type && !c.enemy && c.id !== 'barricade_token')
+      .map((c) => c.id);
+    return this.rng.shuffle(pool).slice(0, 3);
+  }
+
   private draw(side: Side, count: number) {
     const me = this.side(side);
     for (let i = 0; i < count; i++) {
@@ -589,6 +637,65 @@ export class Game {
       unitsAround: (lane, row) => this.state.units.filter((u) =>
         u.health > 0 && Math.abs(u.lane - lane) <= 1 && Math.abs(u.row - row) <= 1 && !(u.lane === lane && u.row === row)),
       explode: (lane, row) => this.emit({ type: 'explosion', lane, row }),
+      damageOwnHero: (amount) => this.damageHero(side, amount),
+      handSize: () => this.side(side).hand.length,
+      foeHandSize: () => this.side(foeSide).hand.length,
+      drawFromFoeDeck: (count) => {
+        for (let i = 0; i < count; i++) {
+          const inst = this.side(foeSide).drawPile.pop();
+          if (!inst) return;
+          this.addToHand(side, { iid: inst.iid, defId: inst.defId }, 'steal');
+        }
+      },
+      stealFromFoeHand: (count) => {
+        const foeHand = this.side(foeSide).hand;
+        for (let i = 0; i < count && foeHand.length > 0; i++) {
+          const [inst] = foeHand.splice(this.rng.int(foeHand.length), 1);
+          this.addToHand(side, { iid: inst.iid, defId: inst.defId }, 'steal');
+        }
+      },
+      lockFoeCards: (count) => {
+        const free = this.rng.shuffle(this.side(foeSide).hand.filter((c) => !c.locked)).slice(0, count);
+        for (const c of free) c.locked = true;
+        if (free.length) this.emit({ type: 'notice', side: foeSide, text: `손패 ${free.length}장 봉인!` });
+      },
+      foeSkipDraw: () => {
+        this.side(foeSide).skipDraw = true;
+        this.emit({ type: 'notice', side: foeSide, text: '다음 드로우 봉쇄' });
+      },
+      redrawHand: () => {
+        const me = this.side(side);
+        const old = me.hand.splice(0);
+        for (const c of old) {
+          me.discard.push({ iid: c.iid, defId: c.defId });
+          this.emit({ type: 'discard', side, card: c });
+        }
+        this.draw(side, old.length);
+      },
+      recycle: (count) => {
+        const me = this.side(side);
+        for (let i = 0; i < count && me.discard.length > 0; i++) {
+          const [inst] = me.discard.splice(this.rng.int(me.discard.length), 1);
+          this.addToHand(side, inst, 'discard');
+        }
+      },
+      addCopy: (defId, costMod) => this.addToHand(side, { iid: this.nextUid++, defId, costMod }, 'copy'),
+      discover: (type, costMod = 0) => {
+        const options = this.discoverOptions(type);
+        if (options.length === 0) return;
+        if (side === 'player') {
+          // The player picks in the UI (or the test bot via aiTakeTurn).
+          this.state.choice = { side, options, costMod };
+          this.emit({ type: 'choice', side, options });
+        } else {
+          const best = [...options].sort((a, b) => card(b).cost - card(a).cost)[0];
+          this.addToHand(side, { iid: this.nextUid++, defId: best, costMod: costMod || undefined }, 'choice');
+        }
+      },
+      modifyHandCosts: (delta) => {
+        for (const c of this.side(side).hand) c.costMod = (c.costMod ?? 0) + delta;
+        this.emit({ type: 'notice', side, text: delta < 0 ? `손패 비용 ${delta}` : `손패 비용 +${delta}` });
+      },
     };
   }
 }

@@ -73,6 +73,17 @@ export interface Unit {
 export interface CardInstance {
   iid: number;
   defId: string;
+  /** Added to the card's printed cost (negative = cheaper). */
+  costMod?: number;
+  /** 봉인: cannot be played until the end of its owner's next turn. */
+  locked?: boolean;
+}
+
+/** A pending 탐색 pick: choose one of these cards to add to the hand. */
+export interface PendingChoice {
+  side: Side;
+  options: string[];
+  costMod: number;
 }
 
 export interface Hero {
@@ -89,6 +100,8 @@ export interface SideState {
   maxMana: number;
   reserve: number;
   powerUsed: boolean;
+  /** Skip the draw at the start of the next turn (망각의 저주). */
+  skipDraw: boolean;
   drawPile: CardInstance[];
   hand: CardInstance[];
   discard: CardInstance[];
@@ -121,6 +134,10 @@ export type GameEvent =
   | { type: 'wardBroken'; uid: number }
   | { type: 'heal'; target: HitTarget; amount: number }
   | { type: 'keywordGained'; uid: number; keyword: Keyword }
+  | { type: 'cardGained'; side: Side; card: CardInstance; from: 'steal' | 'copy' | 'choice' | 'discard' }
+  | { type: 'discard'; side: Side; card: CardInstance }
+  | { type: 'notice'; side: Side; text: string }
+  | { type: 'choice'; side: Side; options: string[] }
   | { type: 'explosion'; lane: number; row: number }
   | { type: 'revive'; uid: number }
   | { type: 'buff'; uid: number; attack: number; health: number }

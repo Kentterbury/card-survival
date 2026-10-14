@@ -30,7 +30,7 @@ export const STAGES: StageDef[] = [
     name: '주술사의 서고', subtitle: '멀리서 날아오는 저주',
     hero: { name: '서고의 주술사', model: 'Skeleton_Mage', scale: 1.5, health: 20 },
     power: 'bolt',
-    deck: [...x('sk_minion', 3), ...x('sk_mage', 3), 'sk_leech', 'sk_shieldwall', 'sk_warrior', ...x('e_curse', 2), ...x('e_chill', 2), ...x('e_darkwave', 2), 'e_drain'],
+    deck: [...x('sk_minion', 3), ...x('sk_mage', 3), 'sk_leech', 'sk_shieldwall', 'sk_warrior', 'e_curse', 'e_hex', ...x('e_chill', 2), ...x('e_darkwave', 2), 'e_drain', 'e_insight'],
   },
   {
     name: '뼈의 납골당', subtitle: '거대한 것이 깨어난다',
@@ -44,7 +44,7 @@ export const STAGES: StageDef[] = [
     power: 'summon',
     deck: [
       ...x('sk_undying', 2), 'sk_wraith', 'sk_rogue', 'sk_pikeman', 'sk_reaper', 'sk_leech', 'sk_mage', 'sk_shieldwall', 'sk_guard', ...x('sk_brute', 2),
-      'e_darkwave', ...x('e_drain', 2), ...x('e_soulfire', 2), 'e_warcry',
+      'e_darkwave', 'e_drain', 'e_hex', ...x('e_soulfire', 2), 'e_warcry', 'e_insight',
     ],
   },
 ];

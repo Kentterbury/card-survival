@@ -59,7 +59,7 @@ button { font-family: inherit; }
 #hero-power:disabled { filter: grayscale(.85) brightness(.6); cursor: default; }
 #hero-power.used .hp-icon { opacity: .25; }
 
-#deck-info { position: absolute; right: calc(1.6vh + env(safe-area-inset-right)); top: 44vh; display: flex; flex-direction: column; align-items: center; gap: .6vh; }
+#deck-info { position: absolute; right: calc(1.6vh + env(safe-area-inset-right)); top: 60vh; display: flex; flex-direction: column; align-items: center; gap: .6vh; }
 #deck-btn { width: 6.5vh; height: 9vh; border-radius: 6px; border: 2px solid var(--gold-dim); background: repeating-linear-gradient(45deg, #3a2414 0 6px, #2a1a0e 6px 12px); color: var(--ink); font-weight: 900; font-size: 2.2vh; cursor: pointer; box-shadow: 3px 3px 0 #1a0e06, 6px 6px 0 #120a04; }
 #discard-count { font-size: 1.5vh; opacity: .8; }
 
@@ -89,11 +89,11 @@ button { font-family: inherit; }
 .card-name { position: absolute; left: 3%; right: 3%; top: 47%; height: 12%; display: grid; place-items: center; background: linear-gradient(90deg, transparent, #6a4a1e 12%, #8a6428 50%, #6a4a1e 88%, transparent); border-top: 1px solid #e0b860; border-bottom: 1px solid #e0b860; font-family: 'Gowun Batang', serif; font-weight: 700; font-size: calc(var(--card-w) * .105); white-space: nowrap; text-shadow: 0 1px 2px #000; }
 .card.spell .card-name { background: linear-gradient(90deg, transparent, #2a3a5a 12%, #3a527a 50%, #2a3a5a 88%, transparent); border-color: #a8c4ea; }
 .card-type { position: absolute; top: 60%; width: 100%; text-align: center; font-size: calc(var(--card-w) * .065); opacity: .6; letter-spacing: .1em; }
-.card-text { position: absolute; left: 9%; right: 9%; top: 66%; bottom: 13%; display: grid; place-items: center; text-align: center; font-size: calc(var(--card-w) * .078); line-height: 1.25; color: #f3e6c8; word-break: keep-all; }
+.card-text { position: absolute; left: 7%; right: 7%; top: 65%; bottom: 5%; display: grid; place-items: center; text-align: center; font-size: calc(var(--card-w) * .078); line-height: 1.25; color: #f3e6c8; word-break: keep-all; }
 .card-text b { color: #ffd47a; }
-.card-atk, .card-hp { position: absolute; bottom: -1%; width: 26%; aspect-ratio: 1; display: grid; place-items: center; font-weight: 900; font-size: calc(var(--card-w) * .17); text-shadow: 0 1px 2px #000; border: 2px solid #1a1208; }
-.card-atk { left: -1%; background: radial-gradient(circle at 35% 30%, #ffe18a, var(--atk) 60%, #8a5a10); clip-path: polygon(50% 0, 100% 30%, 100% 100%, 0 100%, 0 30%); }
-.card-hp { right: -1%; background: radial-gradient(circle at 35% 30%, #ff9a8a, var(--hp) 60%, #6a1410); border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%; }
+.card-atk, .card-hp { position: absolute; bottom: -9%; width: 27%; z-index: 2; aspect-ratio: 1; display: grid; place-items: center; font-weight: 900; font-size: calc(var(--card-w) * .17); text-shadow: 0 1px 2px #000; border: 2px solid #1a1208; }
+.card-atk { left: -10%; background: radial-gradient(circle at 35% 30%, #ffe18a, var(--atk) 60%, #8a5a10); clip-path: polygon(50% 0, 100% 30%, 100% 100%, 0 100%, 0 30%); }
+.card-hp { right: -10%; background: radial-gradient(circle at 35% 30%, #ff9a8a, var(--hp) 60%, #6a1410); border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%; }
 .card-gem { position: absolute; left: 50%; top: 45.5%; width: 7%; aspect-ratio: 1; transform: translate(-50%, -50%) rotate(45deg); border: 1px solid #000; }
 .rarity-basic .card-gem { display: none; }
 .rarity-common .card-gem { background: #e8e8e8; }
@@ -151,7 +151,8 @@ button { font-family: inherit; }
 .card.in-hand.hover { transform: translate(var(--x), calc(var(--card-h) * -0.5)) scale(1.6); z-index: 50 !important; }
 /* The card being aimed stays in the hand, dimmed; its large copy sits on the left (#aim-preview). */
 .card.in-hand.aiming { transform: translate(var(--x), calc(var(--y) - var(--card-h) * 0.12)) rotate(var(--r)); opacity: .45; z-index: 60 !important; }
-.card.dragging { opacity: .9; }
+/* The ghost under the pointer must not swallow the click that places it. */
+.card.dragging { opacity: .9; pointer-events: none; }
 #aim-preview { position: absolute; left: calc(2vh + env(safe-area-inset-left)); top: 46%; transform: translateY(-50%); display: none; gap: 1.2vh; align-items: flex-start; pointer-events: none; z-index: 61; }
 #aim-preview.show { display: flex; }
 #aim-preview .card { position: relative; left: 0; --card-w: min(22vh, 230px); animation: previewIn .18s ease-out; }
@@ -220,3 +221,39 @@ button { font-family: inherit; }
 #enemy-played { position: fixed; left: 50%; top: 18vh; transform: translateX(-50%); z-index: 65; pointer-events: none; text-align: center; }
 #enemy-played .card { position: relative; left: 0; --card-w: min(17vh, 180px); }
 #enemy-played .label { margin-bottom: .6vh; font-weight: 700; color: #b8ff9a; text-shadow: 0 2px 4px #000; font-size: clamp(12px, 1.9vh, 18px); }
+
+/* ── Hand card states from utility cards ─────── */
+.card.locked { filter: grayscale(1) brightness(.6) !important; }
+.card.locked::after { content: '봉인'; position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%) rotate(-12deg); padding: .2em .6em; font-weight: 900; font-size: calc(var(--card-w) * .16); color: #fff; background: #3a4a6add; border: 2px solid #9ab4d8; border-radius: 6px; }
+.card.cheaper .card-cost { background: linear-gradient(135deg, #b8ffcc, #2ac06a 55%, #106a32); }
+.card.pricier .card-cost { background: linear-gradient(135deg, #ffc8c0, #e0453a 55%, #6a1410); }
+#enemy-hand i.locked { background: #3a4a6a; border-color: #9ab4d8; }
+.bundles.choice { gap: 3vw; }
+.bundles.choice .card { position: relative; left: 0; --card-w: min(20vh, 200px); cursor: pointer; transition: transform .15s; }
+.bundles.choice .card:hover { transform: translateY(-8px) scale(1.05); }
+
+/* ── Recent plays (right edge) ──────────────── */
+#history { position: absolute; right: calc(1.4vh + env(safe-area-inset-right)); top: 16vh; display: flex; flex-direction: column; gap: .6vh; }
+#history .hist { position: relative; width: 5.4vh; height: 5.4vh; border-radius: 8px; background: #1a1410 center 22% / 150% no-repeat; border: 2px solid var(--gold); box-shadow: 0 2px 8px #000a; cursor: pointer; animation: histIn .3s ease-out; overflow: hidden; }
+#history .hist.enemy { border-color: #7dbf5a; }
+#history .hist.spell { display: grid; place-items: center; }
+#history .hist.spell svg { width: 70%; height: 70%; }
+#history .hist .who { position: absolute; left: 0; right: 0; bottom: 0; font-size: 1.1vh; text-align: center; background: #000a; line-height: 1.4; }
+@keyframes histIn { from { opacity: 0; transform: translateX(20px); } }
+
+/* ── Tooltip (지휘술 etc.) ───────────────────── */
+#tooltip { position: fixed; z-index: 95; max-width: 30vh; padding: 1vh 1.2vh; background: #140e0af2; border: 1px solid var(--gold-dim); border-radius: 8px; font-size: clamp(12px, 1.7vh, 16px); line-height: 1.4; pointer-events: none; display: none; box-shadow: 0 6px 18px #000c; }
+#tooltip.show { display: block; }
+#tooltip b { color: var(--gold); }
+
+@media (max-height: 520px) {
+  #history { top: 17vh; }
+  #history .hist { width: 7.5vh; height: 7.5vh; }
+  #history .hist .who { font-size: 9px; }
+  #tooltip { max-width: 44vh; }
+}
+
+/* Stat badges hang below the card corners, so grids need room for them. */
+.deck-grid { gap: 3.2vh 2.6vh; padding: 0 1.5vh 1.5vh; }
+.bundle .mini-cards { gap: 1.8vw; padding: 0 1vh 1.6vh; }
+#inspect .card, #aim-preview .card, #played-card .card { margin: 0 1.4vh 2.6vh; }

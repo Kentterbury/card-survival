@@ -35,10 +35,10 @@ function cardInner(def: CardDef, opts: { attack?: number; health?: number }): st
       <div class="card-cost">${def.cost}</div>
       <div class="card-name"><span>${def.name}</span></div>
       <div class="card-type">${typeLabel}</div>
-      <div class="card-text">${def.text}</div>
-      ${stats}
+      <div class="card-text"><span>${def.text}</span></div>
       <div class="card-gem"></div>
-    </div>`;
+    </div>
+    ${stats}`;
 }
 
 /** Keyword glossary entries for the keywords on a card (for hover tooltips). */
@@ -50,6 +50,8 @@ export function keywordNotes(defId: string): string {
   if (text.includes('등장 시')) extra.push('<b>등장 시</b>: 이 하수인을 낼 때 효과가 발동합니다.');
   if (text.includes('파괴 시')) extra.push('<b>파괴 시</b>: 이 하수인이 죽을 때 효과가 발동합니다.');
   if (text.includes('빙결')) extra.push('<b>빙결</b>: 다음 적 턴에 행동하지 못합니다.');
+  if (text.includes('탐색')) extra.push('<b>탐색</b>: 무작위 카드 3장 중 하나를 골라 손으로 가져옵니다.');
+  if (text.includes('봉인')) extra.push('<b>봉인</b>: 봉인된 카드는 그 주인의 다음 턴 동안 낼 수 없습니다.');
   return [...kws.map((k) => `<b>${KEYWORD_INFO[k].name}</b>: ${KEYWORD_INFO[k].text}`), ...extra]
     .map((t) => `<div class="kw-note">${t}</div>`).join('');
 }

@@ -56,7 +56,8 @@ class App {
     await this.board.buildEnvironment();
     $('hero-portrait').style.backgroundImage = `url(${portrait(PLAYER_HERO.model)})`;
     $('hero-power').querySelector<HTMLElement>('.hp-icon')!.innerHTML = spellIconSvg('bolt');
-    $('hero-power').title = `지휘의 번개 (${HERO_POWER_COST} 마나): 적 하나(영웅 포함)에게 피해를 ${HERO_POWER_DAMAGE} 줍니다. 턴마다 한 번.`;
+    this.bindTooltip($('hero-power'), () =>
+      `<b>지휘술 · 지휘의 번개</b> (${HERO_POWER_COST} 마나)<br>적 하나(영웅 포함)에게 피해를 ${HERO_POWER_DAMAGE} 줍니다. 턴마다 한 번 쓸 수 있습니다.`);
     this.board.clearHighlights();
     this.bindInput();
     window.addEventListener('resize', () => {
@@ -131,7 +132,8 @@ class App {
     }
     await this.sync();
     const phase = this.game.state.phase;
-    if (phase === 'reward') this.showReward();
+    if (this.game.state.choice?.side === 'player') this.showChoice();
+    else if (phase === 'reward') this.showReward();
     else if (phase === 'victory') this.showEnd(true);
     else if (phase === 'defeat') this.showEnd(false);
   }
@@ -185,6 +187,7 @@ class App {
       case 'stageStart': {
         for (const v of this.views.values()) v.dispose();
         this.views.clear();
+        $('history').innerHTML = '';
         await this.setupEnemyHero();
         this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };
         const st = STAGES[e.stage];
@@ -208,7 +211,35 @@ class App {
       case 'draw':
         if (e.side === 'enemy') this.renderEnemyInfo();
         return;
+      case 'cardGained': {
+        const name = card(e.card.defId).name;
+        const verb = { steal: '빼앗음', copy: '복사', choice: '획득', discard: '되찾음' }[e.from];
+        if (e.side === 'player') {
+          this.fx.floatText(HERO_POS.clone().setY(2.4), `${name} ${verb}`, 'info');
+          this.renderHand();
+        } else {
+          this.fx.floatText(ENEMY_HERO_POS.clone().setY(4), `상대가 카드 ${verb}`, 'info');
+        }
+        this.renderEnemyInfo();
+        await wait(0.35);
+        return;
+      }
+      case 'discard':
+        if (e.side === 'player') this.fx.floatText(HERO_POS.clone().setY(2.2), `버림: ${card(e.card.defId).name}`, 'info');
+        await wait(0.12);
+        return;
+      case 'notice': {
+        const at = e.side === 'player' ? HERO_POS.clone().setY(2.6) : ENEMY_HERO_POS.clone().setY(4);
+        this.fx.floatText(at, e.text, 'info');
+        this.renderEnemyInfo();
+        this.renderHand();
+        await wait(0.4);
+        return;
+      }
+      case 'choice':
+        return;
       case 'cardPlayed':
+        this.addHistory(e.side, e.card.defId);
         await this.showPlayedCard(e.side, e.card.defId);
         return;
       case 'summon': {
@@ -480,8 +511,8 @@ class App {
     const power = this.game.enemyPower === 'summon' ? '해골 졸개 소환' : '적 하나에게 피해 1';
     $('enemy-name').textContent = en.hero.name;
     $('enemy-mana').textContent = `마나 ${en.mana}/${en.maxMana} · 덱 ${en.drawPile.length}`;
-    $('enemy-hand').innerHTML = '<i></i>'.repeat(en.hand.length);
-    $('enemy-frame').title = `${en.hero.name} — 영웅 능력(2): ${power}`;
+    $('enemy-hand').innerHTML = en.hand.map((c) => (c.locked ? '<i class="locked"></i>' : '<i></i>')).join('');
+    $('enemy-frame').title = `${en.hero.name} — 지휘술(2): ${power}`;
   }
 
   private renderControls() {
@@ -528,7 +559,9 @@ class App {
 
   /** Marks what every unit will do at the end of its side's turn. */
   private renderThreats() {
-    if (this.aim) return;
+    // While events are playing, badges follow the events; the final state is applied by sync()
+    // afterwards. Applying it mid-playback made later damage count twice (0 HP, then "healed").
+    if (this.aim || this.busy) return;
     this.board.clearHighlights();
     for (const u of this.game.state.units) {
       const v = this.views.get(u.uid);
@@ -570,6 +603,13 @@ class App {
     const cardW = els[0]?.offsetWidth || 100;
     const spacing = Math.min(cardW * 0.85, (window.innerWidth * 0.5) / Math.max(1, n));
     els.forEach((el, i) => {
+      const inst = s.sides.player.hand[i];
+      const cost = this.game.costOf(inst);
+      const base = card(inst.defId).cost;
+      el.querySelector('.card-cost')!.textContent = String(cost);
+      el.classList.toggle('cheaper', cost < base);
+      el.classList.toggle('pricier', cost > base);
+      el.classList.toggle('locked', !!inst.locked);
       const off = i - (n - 1) / 2;
       el.style.setProperty('--x', `${off * spacing}px`);
       el.style.setProperty('--y', `${Math.abs(off) ** 2 * 2.2 + cardW * 0.08}px`);
@@ -616,9 +656,16 @@ class App {
     $('end-turn').addEventListener('click', () => void this.endTurn());
     $('hero-power').addEventListener('pointerdown', (e) => {
       e.stopPropagation();
+      if (e.pointerType !== 'mouse') return; // touch: handled on release (tap) / long-press (tooltip)
       if (this.busy || !this.game.canUseHeroPower()) return;
       if (this.aim) this.cancelAim();
       this.startAim({ kind: 'power', sticky: false, x0: e.clientX, y0: e.clientY, moved: false });
+    });
+    $('hero-power').addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'mouse' || this.tooltipWasLongPress) return;
+      if (this.busy || !this.game.canUseHeroPower()) return;
+      if (this.aim) this.cancelAim();
+      this.startAim({ kind: 'power', sticky: true, x0: e.clientX, y0: e.clientY, moved: false });
     });
     $('deck-btn').addEventListener('click', () => this.showDeck());
   }
@@ -724,26 +771,26 @@ class App {
     return def.type === 'minion' ? 'slot' : def.target;
   }
 
-  /** What is under the pointer: a unit or the enemy hero, and/or a board cell. */
+  /**
+   * What is under the pointer, judged by board tile (not by the 3D model's shape):
+   * the unit standing on that tile, or the enemy hero for the strip past the last row.
+   */
   private pick(x: number, y: number): PickResult {
     if (document.elementsFromPoint(x, y).some((el) => el.id === 'enemy-frame' || el.closest?.('#enemy-frame'))) {
       return { enemyHero: true };
     }
     const ndc = new THREE.Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-    this.ray.setFromCamera(ndc, this.board.camera);
-    const proxies = [...this.views.values()].filter((v) => !v.dead).map((v) => v.proxy);
-    if (this.enemyHero && !this.enemyHero.dead) proxies.push(this.enemyHero.proxy);
-    const hit = this.ray.intersectObjects(proxies, false)[0];
-    if (hit) {
-      const uid = hit.object.userData.uid as number;
-      if (uid === ENEMY_HERO_UID) return { enemyHero: true };
-      const unit = this.game.unit(uid);
-      if (unit && unit.health > 0) return { unit, lane: unit.lane, row: unit.row };
-    }
     const cell = this.board.pickGround(ndc);
-    if (!cell) return {};
-    const unit = this.game.unitAt(cell.lane, cell.row);
-    return { unit, lane: cell.lane, row: cell.row };
+    if (cell) {
+      if (cell.row > LAST_ROW) return { enemyHero: true };
+      return { unit: this.game.unitAt(cell.lane, cell.row), lane: cell.lane, row: cell.row };
+    }
+    // Pointing above the floor line, e.g. at the enemy hero's upper body.
+    if (this.enemyHero && !this.enemyHero.dead) {
+      this.ray.setFromCamera(ndc, this.board.camera);
+      if (this.ray.intersectObject(this.enemyHero.proxy, false).length) return { enemyHero: true };
+    }
+    return {};
   }
 
   private overHand(y: number) {
@@ -784,6 +831,7 @@ class App {
       }
       case 'hero':
         $('enemy-frame').classList.add(style === 'hover' ? 'hover' : 'targetable');
+        this.board.setHeroHighlight(style);
         return;
       case 'slot':
         this.board.setCell(t.lane, 0, style);
@@ -894,8 +942,65 @@ class App {
     inspect.dataset.uid = 'enemy';
     inspect.innerHTML = `<div class="notes"><div class="monster-note"><div class="title">${en.hero.name}</div>
       생명력 <b>${en.hero.health}/${en.hero.maxHealth}</b><br>마나 ${en.mana}/${en.maxMana} · 손패 ${en.hand.length}장 · 덱 ${en.drawPile.length}장
-      <div style="margin-top:.6vh"><b>영웅 능력 (2)</b>: ${power}</div></div></div>`;
+      <div style="margin-top:.6vh"><b>지휘술 (2)</b>: ${power}</div></div></div>`;
     inspect.classList.add('show');
+  }
+
+  // ── Tooltip & recent plays ───────────────────────────────────
+
+  private tooltipWasLongPress = false;
+
+  /** Shows `html` above `el` on mouse hover, or after a long press on touch screens. */
+  private bindTooltip(el: HTMLElement, html: () => string) {
+    let timer = 0;
+    const show = () => {
+      const tip = $('tooltip');
+      tip.innerHTML = html();
+      tip.classList.add('show');
+      const r = el.getBoundingClientRect();
+      tip.style.left = `${Math.max(8, r.left)}px`;
+      tip.style.top = '';
+      tip.style.bottom = `${window.innerHeight - r.top + 10}px`;
+    };
+    const hide = () => $('tooltip').classList.remove('show');
+    el.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') show(); });
+    el.addEventListener('pointerleave', () => { clearTimeout(timer); hide(); });
+    el.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return;
+      this.tooltipWasLongPress = false;
+      timer = window.setTimeout(() => { this.tooltipWasLongPress = true; show(); }, 450);
+    });
+    el.addEventListener('pointerup', () => {
+      clearTimeout(timer);
+      if (this.tooltipWasLongPress) window.setTimeout(hide, 600);
+    }, { capture: true });
+    el.addEventListener('pointercancel', () => { clearTimeout(timer); hide(); });
+  }
+
+  /** Newest first on the right edge; hover or tap one to see the card. */
+  private addHistory(side: Side, defId: string) {
+    const def = card(defId);
+    const el = document.createElement('div');
+    el.className = `hist ${side} ${def.type}`;
+    if (def.type === 'minion') el.style.backgroundImage = `url(${portrait(def.model)})`;
+    else el.innerHTML = spellIconSvg(def.icon);
+    el.insertAdjacentHTML('beforeend', `<span class="who">${side === 'player' ? '나' : '상대'}</span>`);
+    const showCard = () => {
+      const inspect = $('inspect');
+      inspect.dataset.uid = `hist-${defId}`;
+      inspect.innerHTML = '';
+      inspect.appendChild(createCardElement(defId));
+      const notes = keywordNotes(defId);
+      inspect.insertAdjacentHTML('beforeend',
+        `<div class="notes"><div class="kw-note">${side === 'player' ? '내가' : '상대가'} 최근에 낸 카드</div>${notes}</div>`);
+      inspect.classList.add('show');
+    };
+    el.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showCard(); });
+    el.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') $('inspect').classList.remove('show'); });
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); showCard(); });
+    const list = $('history');
+    list.prepend(el);
+    while (list.children.length > 6) list.lastElementChild!.remove();
   }
 
   // ── Banners & modals ─────────────────────────────────────────
@@ -936,6 +1041,27 @@ class App {
       </div>
       <button class="btn" id="start-btn">출정</button>`);
     m.querySelector('#start-btn')!.addEventListener('click', () => void this.startRun());
+  }
+
+  /** 탐색: pick one of three cards. */
+  private showChoice() {
+    const c = this.game.state.choice;
+    if (!c) return;
+    const extra = c.costMod < 0 ? ` 고른 카드는 비용이 ${-c.costMod} 줄어듭니다.` : '';
+    const m = this.openModal(`
+      <h2>탐색</h2>
+      <p>카드 하나를 골라 손으로 가져옵니다.${extra}</p>
+      <div class="bundles choice"></div>`);
+    const row = m.querySelector('.bundles')!;
+    c.options.forEach((id, i) => {
+      const el = createCardElement(id);
+      el.classList.add('choice-card');
+      el.addEventListener('click', () => {
+        this.closeModal();
+        void this.play(this.game.chooseOption(i));
+      });
+      row.appendChild(el);
+    });
   }
 
   private showReward() {

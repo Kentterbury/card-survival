@@ -144,21 +144,23 @@ export class UnitView {
     const action = this.mixer.clipAction(clip);
     if (action === this.current) return;
     action.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+    action.timeScale = 1;
     if (this.current) action.crossFadeFrom(this.current, fade, false);
     this.current = action;
   }
 
   /** Plays a one-shot clip; resolves after `hitAt` of its length (the moment of impact). */
-  playOnce(name: string, hitAt = 1, returnToIdle = true): Promise<void> {
+  playOnce(name: string, hitAt = 1, returnToIdle = true, speed = 1): Promise<void> {
     if (!this.mixer) return wait(0.2);
     const clip = this.clip(name);
     if (!clip) return wait(0.2);
     const action = this.mixer.clipAction(clip);
     action.reset().setLoop(THREE.LoopOnce, 1).play();
+    action.timeScale = speed;
     action.clampWhenFinished = true;
     if (this.current && this.current !== action) action.crossFadeFrom(this.current, 0.12, false);
     this.current = action;
-    const dur = clip.duration;
+    const dur = clip.duration / speed;
     if (returnToIdle && this.anims) {
       void wait(dur * 0.92).then(() => {
         if (this.current === action && !this.dead) this.loop(this.anims!.idle, 0.2);
@@ -195,7 +197,8 @@ export class UnitView {
 
   async spawnAnim() {
     if (this.anims?.spawn) {
-      await this.playOnce(this.anims.spawn, 0.85);
+      // Skeletons climbing out of the ground, played 1.5x faster than authored.
+      await this.playOnce(this.anims.spawn, 0.85, true, 1.5);
     } else {
       const s = this.model.scale.x;
       await tween(0.35, (k) => this.model.scale.setScalar(s * ease.outBack(k)));

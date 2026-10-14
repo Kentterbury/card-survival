@@ -33,6 +33,29 @@ export interface EffectApi {
   unitsAround(lane: number, row: number): Unit[];
   /** Purely visual: an explosion at a cell. */
   explode(lane: number, row: number): void;
+
+  // ── Card / hand manipulation ──
+  damageOwnHero(amount: number): void;
+  handSize(): number;
+  foeHandSize(): number;
+  /** Take the top card of the opposing deck into our hand. */
+  drawFromFoeDeck(count: number): void;
+  /** Take random cards from the opposing hand into ours. */
+  stealFromFoeHand(count: number): void;
+  /** 봉인 random cards in the opposing hand for their next turn. */
+  lockFoeCards(count: number): void;
+  /** The opposing side skips its next draw. */
+  foeSkipDraw(): void;
+  /** Discard our whole hand and draw that many cards. */
+  redrawHand(): void;
+  /** Return random cards from our discard pile to our hand. */
+  recycle(count: number): void;
+  /** Add a fresh copy of a card to our hand. */
+  addCopy(defId: string, costMod?: number): void;
+  /** 탐색: pick one of three random player cards of a type. */
+  discover(type: 'minion' | 'spell', costMod?: number): void;
+  /** Change the cost of every card in our hand (negative = cheaper). */
+  modifyHandCosts(delta: number): void;
 }
 
 export type Rarity = 'basic' | 'common' | 'rare' | 'epic';
@@ -70,10 +93,16 @@ export type SpellAi =
   | { kind: 'buffAll' }
   | { kind: 'lane' }
   | { kind: 'summon' }
-  | { kind: 'draw' }
+  | { kind: 'draw'; selfDamage?: number }
   | { kind: 'heal' }
   | { kind: 'control' }
-  | { kind: 'ramp' };
+  | { kind: 'ramp' }
+  | { kind: 'discover' }
+  | { kind: 'disrupt' }
+  | { kind: 'recycle' }
+  | { kind: 'cycle' }
+  | { kind: 'discount' }
+  | { kind: 'copy' };
 
 export interface SpellCard extends BaseCard {
   type: 'spell';
@@ -309,6 +338,67 @@ const CARD_LIST: CardDef[] = [
     },
   },
 
+  // ── Utility ────────────────────────────────────────────────
+  {
+    id: 'blood_pact', name: '피의 계약', type: 'spell', cost: 0, rarity: 'common', target: 'none', icon: 'curse', ai: { kind: 'draw', selfDamage: 3 },
+    text: '내 영웅에게 피해를 3 주고 카드를 2장 뽑습니다.',
+    cast: (api) => { api.damageOwnHero(3); api.draw(2); },
+  },
+  {
+    id: 'war_library', name: '전술 서고', type: 'spell', cost: 1, rarity: 'common', target: 'none', icon: 'scroll', ai: { kind: 'discover' },
+    text: '<b>탐색</b>: 주문 카드 하나.',
+    cast: (api) => api.discover('spell'),
+  },
+  {
+    id: 'reinforce', name: '증원 요청', type: 'spell', cost: 2, rarity: 'common', target: 'none', icon: 'sword', ai: { kind: 'discover' },
+    text: '<b>탐색</b>: 하수인 카드 하나. 그 카드의 비용이 1 줄어듭니다.',
+    cast: (api) => api.discover('minion', -1),
+  },
+  {
+    id: 'change_plans', name: '작전 변경', type: 'spell', cost: 1, rarity: 'common', target: 'none', icon: 'scroll', ai: { kind: 'cycle' },
+    text: '손패를 모두 버리고, 버린 수만큼 카드를 뽑습니다.',
+    cast: (api) => api.redrawHand(),
+  },
+  {
+    id: 'salvage', name: '재활용', type: 'spell', cost: 2, rarity: 'common', target: 'none', icon: 'shield', ai: { kind: 'recycle' },
+    text: '버린 카드 더미에서 무작위 카드 2장을 손으로 가져옵니다.',
+    cast: (api) => api.recycle(2),
+  },
+  {
+    id: 'chains', name: '봉인의 사슬', type: 'spell', cost: 2, rarity: 'rare', target: 'none', icon: 'frost', ai: { kind: 'disrupt' },
+    text: '상대 손패 무작위 2장을 <b>봉인</b>합니다. 카드를 1장 뽑습니다.',
+    cast: (api) => { api.lockFoeCards(2); api.draw(1); },
+  },
+  {
+    id: 'pickpocket', name: '소매치기', type: 'spell', cost: 2, rarity: 'rare', target: 'none', icon: 'skull', ai: { kind: 'disrupt' },
+    text: '상대 손패에서 무작위 카드 1장을 빼앗아 옵니다.',
+    cast: (api) => api.stealFromFoeHand(1),
+  },
+  {
+    id: 'grave_rob', name: '도굴', type: 'spell', cost: 1, rarity: 'common', target: 'none', icon: 'skull', ai: { kind: 'draw' },
+    text: '상대 덱 맨 위 카드를 내 손으로 가져옵니다.',
+    cast: (api) => api.drawFromFoeDeck(1),
+  },
+  {
+    id: 'oblivion', name: '망각의 저주', type: 'spell', cost: 1, rarity: 'common', target: 'none', icon: 'curse', ai: { kind: 'disrupt' },
+    text: '상대는 다음 턴에 카드를 뽑지 못합니다. 카드를 1장 뽑습니다.',
+    cast: (api) => { api.foeSkipDraw(); api.draw(1); },
+  },
+  {
+    id: 'mirror_image', name: '거울상', type: 'spell', cost: 2, rarity: 'rare', target: 'ally', icon: 'potion', ai: { kind: 'copy' },
+    text: '아군 하수인 하나의 카드를 복사해 손으로 가져옵니다. 복사본은 비용이 1 줄어듭니다.',
+    cast: (api, t) => {
+      if (t.kind !== 'unit') return;
+      const u = api.allies().find((m) => m.uid === t.uid);
+      if (u) api.addCopy(u.defId, -1);
+    },
+  },
+  {
+    id: 'supply_wagon', name: '보급 마차', type: 'spell', cost: 3, rarity: 'rare', target: 'none', icon: 'potion', ai: { kind: 'discount' },
+    text: '내 손패의 모든 카드 비용이 1 줄어듭니다. 카드를 1장 뽑습니다.',
+    cast: (api) => { api.modifyHandCosts(-1); api.draw(1); },
+  },
+
   // ── Enemy units ────────────────────────────────────────────
   { id: 'sk_minion', name: '해골 졸개', type: 'minion', cost: 1, rarity: 'basic', enemy: true, attack: 1, health: 2, model: 'Skeleton_Minion', text: '' },
   { id: 'sk_rogue', name: '해골 추적자', type: 'minion', cost: 2, rarity: 'basic', enemy: true, attack: 2, health: 2, model: 'Skeleton_Rogue', keywords: ['dash'], text: '<b>질주</b>' },
@@ -334,6 +424,16 @@ const CARD_LIST: CardDef[] = [
   {
     id: 'e_curse', name: '저주의 화살', type: 'spell', cost: 1, rarity: 'basic', enemy: true, target: 'foe', icon: 'curse', ai: { kind: 'damage', amount: 2 },
     text: '적 하나(영웅 포함)에게 피해를 2 줍니다.', cast: (api, t) => api.damage(t, 2),
+  },
+  {
+    id: 'e_hex', name: '봉인의 저주', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'none', icon: 'curse', ai: { kind: 'disrupt' },
+    text: '상대 손패 무작위 1장을 <b>봉인</b>하고 적 영웅에게 피해 1.',
+    cast: (api) => { api.lockFoeCards(1); api.damageFoeHero(1); },
+  },
+  {
+    id: 'e_insight', name: '망자의 지혜', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'none', icon: 'scroll', ai: { kind: 'draw' },
+    text: '카드를 2장 뽑습니다.',
+    cast: (api) => api.draw(2),
   },
   {
     id: 'e_bonearmor', name: '뼈 갑옷', type: 'spell', cost: 1, rarity: 'basic', enemy: true, target: 'ally', icon: 'shield', ai: { kind: 'buff' },
