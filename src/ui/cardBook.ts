@@ -38,7 +38,12 @@ function sourcesOf(def: CardDef): string[] {
     const n = st.deck.filter((id) => id === def.id).length;
     if (n) out.push(`스테이지 ${i + 1} ${st.hero.name}의 덱${n > 1 ? ` ×${n}` : ''}`);
   });
-  if (def.id === 'sk_minion') out.push('상대 지휘술 「망자 소환」');
+  const summonedBy: Record<string, string[]> = {
+    sk_minion: ['상대 지휘술 「망자 소환」', '망자 소생'],
+    sk_undying: ['상대 지휘술 「망자 군단」', '대규모 소생'],
+    sk_rogue: ['매복 습격'],
+  };
+  for (const s of summonedBy[def.id] ?? []) out.push(s.startsWith('상대') ? `${s}으로 소환` : `「${s}」로 소환`);
   if (def.id === 'barricade_token') out.push('바리케이드 설치 · 방벽 수호자가 소환하는 토큰');
   if (!def.enemy && def.id !== 'barricade_token') {
     const who = def.hero ? `${heroDef(def.hero).name}만` : '모든 용병대장';

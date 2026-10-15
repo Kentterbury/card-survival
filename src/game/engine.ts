@@ -6,7 +6,7 @@ import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, rollShop, stageGold, type ShopSt
 import { Rng } from './rng';
 import { STAGES, type EnemyPower } from './stages';
 import {
-  FIRST_TURN_MANA, FORMATION_BONUS, forward, homeRow, LANES, LAST_ROW, MANA_PER_TURN, MAX_HAND, MAX_MANA, other, RANGED_RANGE,
+  FORMATION_BONUS, forward, homeRow, LANES, LAST_ROW, MANA_PER_TURN, MAX_HAND, MAX_MANA, other, RANGED_RANGE,
   THORNS_DAMAGE, VANGUARD_BONUS,
   type CardInstance, type GameEvent, type HitTarget, type Keyword, type PendingChoice, type Phase, type RewardBundle, type Side, type SideState,
   type Target, type Unit,
@@ -213,7 +213,7 @@ export class Game {
     const me = s.sides[side];
     s.phase = side;
     if (side === 'player') s.turn++;
-    const first = side === 'player' ? heroDef(s.heroId).startMana : FIRST_TURN_MANA;
+    const first = side === 'player' ? heroDef(s.heroId).startMana : this.stageDef.startMana;
     me.maxMana = me.maxMana === 0 ? first : Math.min(MAX_MANA, me.maxMana + MANA_PER_TURN);
     // Mana refills to the maximum; whatever was left last turn is gone.
     me.mana = me.maxMana;

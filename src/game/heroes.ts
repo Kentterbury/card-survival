@@ -13,7 +13,7 @@ export interface HeroPower {
 
 export const POWERS: Record<string, HeroPower> = {
   guard: {
-    id: 'guard', name: '방패 명령', cost: 2, target: 'ally',
+    id: 'guard', name: '방패 명령', cost: 1, target: 'ally',
     text: '아군 하수인 하나에게 <b>보호막</b>을 부여합니다.',
     cast: (api, t) => { if (t.kind === 'unit') api.grantKeyword(t.uid, 'ward'); },
   },
@@ -43,6 +43,21 @@ export const POWERS: Record<string, HeroPower> = {
     text: '해골 졸개를 소환합니다.',
     cast: (api, t) => { if (t.kind === 'slot') api.summon('sk_minion', t.lane); },
   },
+  rush: {
+    id: 'rush', name: '추격 명령', cost: 3, target: 'ally',
+    text: '아군 하수인 하나를 한 칸 전진시킵니다.',
+    cast: (api, t) => { if (t.kind === 'unit') api.advance(t.uid, 1); },
+  },
+  bonewall: {
+    id: 'bonewall', name: '뼈 덧씌우기', cost: 4, target: 'ally',
+    text: '아군 하수인 하나에게 +0/+3을 부여합니다.',
+    cast: (api, t) => { if (t.kind === 'unit') api.buff(t.uid, 0, 3); },
+  },
+  legion: {
+    id: 'legion', name: '망자 군단', cost: 6, target: 'slot',
+    text: '불사 해골을 소환합니다.',
+    cast: (api, t) => { if (t.kind === 'slot') api.summon('sk_undying', t.lane); },
+  },
   curse: {
     id: 'curse', name: '저주의 손길', cost: 4, target: 'foe',
     text: '적 하나(영웅 포함)에게 피해를 1 줍니다.',
@@ -70,7 +85,7 @@ export const HEROES: HeroDef[] = [
     deck: ['squire', 'phalanx', 'phalanx', 'shieldbearer', 'crossbowman', 'crossbowman', 'veteran', 'mace_knight', 'firebolt', 'frostring'],
   },
   {
-    id: 'arcanist', name: '비전술사', title: '주문', model: 'Mage', health: 22, startMana: 5, power: 'bolt',
+    id: 'arcanist', name: '비전술사', title: '주문', model: 'Mage', health: 16, startMana: 5, power: 'bolt',
     blurb: '금화를 받고 마법을 파는 떠돌이 비전술사. 체력은 낮지만 주문이 강하다.',
     deck: ['apprentice', 'apprentice', 'shieldbearer', 'firebolt', 'firebolt', 'frostring', 'shockwave', 'thunderbolt', 'war_library', 'a_scholar'],
   },

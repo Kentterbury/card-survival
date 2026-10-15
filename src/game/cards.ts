@@ -569,6 +569,49 @@ const CARD_LIST: CardDef[] = [
     id: 'e_soulfire', name: '영혼의 불꽃', type: 'spell', cost: 10, rarity: 'rare', enemy: true, target: 'foe', icon: 'curse', ai: { kind: 'damage', amount: 6 },
     text: '적 하나(영웅 포함)에게 피해를 6 줍니다.', cast: (api, t) => api.damage(t, 6),
   },
+
+  // ── 지휘관별 적 카드 ───────────────────────────────────────
+  // 해골 하사: 졸개 물량과 진군
+  {
+    id: 'sk_drummer', name: '해골 북잡이', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 1, health: 3, model: 'Skeleton_Minion',
+    text: '<b>등장 시:</b> 다른 아군 하수인 모두에게 공격력 +1을 부여합니다.',
+    onSummon: (api, self) => { for (const m of api.allies()) if (m.uid !== self.uid) api.buff(m.uid, 1, 0); },
+  },
+  {
+    id: 'e_march', name: '진군 명령', type: 'spell', cost: 3, rarity: 'common', enemy: true, target: 'none', icon: 'sword', ai: { kind: 'buffAll' },
+    text: '아군 하수인 모두를 한 칸 전진시킵니다.',
+    cast: (api) => { for (const m of api.allies()) api.advance(m.uid, 1); },
+  },
+  // 추적자 대장: 기습과 매복
+  { id: 'sk_assassin', name: '해골 암살자', type: 'minion', cost: 5, rarity: 'rare', enemy: true, attack: 3, health: 2, model: 'Skeleton_Rogue', keywords: ['swift', 'dash'], text: '<b>기습</b>. <b>질주</b>' },
+  {
+    id: 'e_ambush', name: '매복 습격', type: 'spell', cost: 4, rarity: 'common', enemy: true, target: 'none', icon: 'skull', ai: { kind: 'summon' },
+    text: '빈 칸 두 곳에 해골 추적자를 소환합니다.',
+    cast: (api) => { for (const lane of api.rng.shuffle(api.freeHomeLanes()).slice(0, 2)) api.summon('sk_rogue', lane); },
+  },
+  // 서고의 주술사: 원거리 저주와 빙결
+  { id: 'sk_acolyte', name: '해골 수습 주술사', type: 'minion', cost: 3, rarity: 'basic', enemy: true, attack: 1, health: 2, model: 'Skeleton_Mage', keywords: ['ranged'], scale: 0.85, text: '<b>사격</b>' },
+  {
+    id: 'e_frostbolt', name: '서리 저주', type: 'spell', cost: 3, rarity: 'common', enemy: true, target: 'foeUnit', icon: 'frost', ai: { kind: 'damage', amount: 2 },
+    text: '적 하수인 하나에게 피해를 2 주고 <b>빙결</b>시킵니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.damage(t, 2); api.freeze(t.uid); } },
+  },
+  // 납골당 수호자: 뼈 장벽
+  {
+    id: 'e_bonewall', name: '뼈의 장벽', type: 'spell', cost: 5, rarity: 'common', enemy: true, target: 'none', icon: 'shield', ai: { kind: 'buffAll' },
+    text: '아군 하수인 모두에게 +0/+3을 부여합니다.',
+    cast: (api) => { for (const m of api.allies()) api.buff(m.uid, 0, 3); },
+  },
+  // 해골 군주: 사령술
+  {
+    id: 'e_mass_raise', name: '대규모 소생', type: 'spell', cost: 9, rarity: 'rare', enemy: true, target: 'none', icon: 'skull', ai: { kind: 'summon' },
+    text: '빈 칸 모두에 불사 해골을 소환합니다.',
+    cast: (api) => { for (const lane of api.freeHomeLanes()) api.summon('sk_undying', lane); },
+  },
+  {
+    id: 'sk_deathknight', name: '죽음의 기사', type: 'minion', cost: 11, rarity: 'epic', enemy: true, attack: 5, health: 8, model: 'Skeleton_Warrior', keywords: ['lifesteal', 'undying'], scale: 1.35,
+    text: '<b>흡혈</b>. <b>불사</b>',
+  },
 ];
 
 export const CARDS: Record<string, CardDef> = Object.fromEntries(CARD_LIST.map((c) => [c.id, c]));

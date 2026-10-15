@@ -4,8 +4,6 @@ export const ROWS = 6;
 export const LAST_ROW = ROWS - 1;
 /** Mana runs on a 20-point scale: each hero's first-turn mana, then +1 every turn, up to 20. Unspent mana is lost. */
 export const MAX_MANA = 20;
-/** First-turn max mana for the enemy; player heroes each have their own (HeroDef.startMana). */
-export const FIRST_TURN_MANA = 3;
 export const MANA_PER_TURN = 1;
 export const MAX_HAND = 10;
 /** How far units with the `ranged` keyword shoot along their lane. */

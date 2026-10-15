@@ -18,6 +18,11 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '해골 지휘관 덱 재구성',
+    summary: '적 덱을 20마나·매 턴 +1에 맞게 다시 짰고, 지휘관마다 전술과 지휘술을 나눴습니다(추격 명령, 뼈 덧씌우기, 망자 군단 추가). 마법사 지휘관은 첫 턴 마나 4. 균형: 방패 명령 2 → 1마나, 비전술사 생명력 22 → 16.',
+    added: ['sk_drummer', 'e_march', 'sk_assassin', 'e_ambush', 'sk_acolyte', 'e_frostbolt', 'e_bonewall', 'e_mass_raise', 'sk_deathknight'],
+  },
+  {
     title: '남은 마나 이월 없음',
     summary: '쓰지 않은 마나는 다음 턴으로 넘어가지 않습니다(양쪽 모두). 카드 변경은 없습니다. 보라색 추가 마나는 이제 마나 물약 같은 이번 턴 한정 마나만 뜻합니다.',
   },

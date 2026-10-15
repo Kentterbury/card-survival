@@ -6,7 +6,7 @@ import { CARD_PRICE, HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, stageGold } from '..
 import { ALL_BUNDLES, rollRewards } from '../src/game/rewards';
 import { Rng } from '../src/game/rng';
 import { STAGES } from '../src/game/stages';
-import { FIRST_TURN_MANA, LAST_ROW, MANA_PER_TURN, MAX_MANA, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
+import { LAST_ROW, MANA_PER_TURN, MAX_MANA, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
 import { aiTakeTurn } from '../src/game/ai';
 
@@ -114,6 +114,7 @@ describe('lane combat', () => {
     place(g, 'shieldbearer', 'player', 0, 1);
     const foe = place(g, 'sk_warrior', 'enemy', 0, 3);
     g.side('enemy').hand = [];
+    g.side('enemy').drawPile = [];
     g.endTurn();
     expect(foe.health).toBeLessThanOrEqual(4 - 2);
     expect(xbow.health).toBe(2);
@@ -139,6 +140,7 @@ describe('lane combat', () => {
     const g = freshGame(Array(10).fill('squire'));
     place(g, 'sk_warrior', 'enemy', 3, 0);
     g.side('enemy').hand = [];
+    g.side('enemy').drawPile = [];
     g.endTurn();
     expect(g.side('player').hero.health).toBe(START_HP - 3);
   });
@@ -793,7 +795,7 @@ describe('hero-exclusive cards', () => {
     return g;
   };
 
-  it('each hero starts with its own first-turn mana (비전술사 5); the enemy starts with 3', () => {
+  it('each hero starts with its own first-turn mana (비전술사 5); the stage 1 commander starts with 3', () => {
     const want: Record<string, number> = { captain: 2, arcanist: 5, warchief: 4, hunter: 3 };
     for (const [hero, mana] of Object.entries(want)) {
       const g = new Game(3);
@@ -801,7 +803,7 @@ describe('hero-exclusive cards', () => {
       expect(g.side('player').maxMana).toBe(mana);
       g.side('enemy').hand = [];
       g.endTurn();
-      expect(g.side('enemy').maxMana).toBe(FIRST_TURN_MANA);
+      expect(g.side('enemy').maxMana).toBe(STAGES[0].startMana);
     }
   });
 
@@ -901,6 +903,57 @@ describe('hero-exclusive cards', () => {
     g.playCard(rain, { kind: 'none' });
     expect(front.health).toBe(front.maxHealth - 3);
     expect(g.side('enemy').hero.health).toBe(hp - 4); // four empty lanes
+  });
+});
+
+describe('enemy commanders', () => {
+  const enemyGame = (stage: number, hand: string[]) => {
+    const g = new Game(11);
+    g.startRun(Array(10).fill('squire'), 'captain', { hero: 'captain', deck: Array(10).fill('squire'), stage, stagesCleared: stage, health: 30 });
+    g.state.units = [];
+    g.state.phase = 'enemy';
+    g.side('enemy').hand = hand.map((defId, i) => ({ iid: 700 + i, defId }));
+    g.side('enemy').mana = 20;
+    return g;
+  };
+
+  it('each commander has a concept, its own 지휘술 and a starting mana; mages start with more', () => {
+    expect(STAGES.map((s) => s.power)).toEqual(['summon', 'rush', 'curse', 'bonewall', 'legion']);
+    expect(STAGES.map((s) => s.startMana)).toEqual([3, 3, 4, 3, 4]);
+    for (const s of STAGES) expect(s.concept.length).toBeGreaterThan(0);
+    const g = new Game(1);
+    g.startRun(undefined, 'captain', { hero: 'captain', deck: Array(10).fill('squire'), stage: 2, stagesCleared: 2, health: 30 });
+    g.side('enemy').hand = [];
+    g.endTurn();
+    expect(g.side('enemy').maxMana).toBe(4);
+  });
+
+  it('해골 북잡이 gives other skeletons +1 attack; 진군 명령 moves them all up', () => {
+    const g = enemyGame(0, ['sk_drummer', 'e_march']);
+    const a = place(g, 'sk_minion', 'enemy', 0, LAST_ROW);
+    g.playCardAs('enemy', 0, { kind: 'slot', lane: 2 });
+    expect(a.attack).toBe(2);
+    g.playCardAs('enemy', 0, { kind: 'none' });
+    expect(a.row).toBe(LAST_ROW - 1);
+  });
+
+  it('매복 습격 summons two trackers; 대규모 소생 fills every free cell with 불사 해골', () => {
+    const g = enemyGame(1, ['e_ambush', 'e_mass_raise']);
+    g.playCardAs('enemy', 0, { kind: 'none' });
+    expect(g.unitsOf('enemy').filter((u) => u.defId === 'sk_rogue')).toHaveLength(2);
+    g.playCardAs('enemy', 0, { kind: 'none' });
+    expect(g.unitsOf('enemy').filter((u) => u.defId === 'sk_undying')).toHaveLength(3);
+  });
+
+  it('서리 저주 deals 2 and freezes; 뼈의 장벽 gives every skeleton +0/+3', () => {
+    const g = enemyGame(2, ['e_frostbolt', 'e_bonewall']);
+    const mine = place(g, 'veteran', 'player', 1, 1);
+    g.playCardAs('enemy', 0, { kind: 'unit', uid: mine.uid });
+    expect(mine.health).toBe(mine.maxHealth - 2);
+    expect(mine.frozen).toBe(true);
+    const sk = place(g, 'sk_minion', 'enemy', 3, LAST_ROW);
+    g.playCardAs('enemy', 0, { kind: 'none' });
+    expect(sk.health).toBe(5);
   });
 });
 
