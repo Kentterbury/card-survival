@@ -1,7 +1,7 @@
 import type { ModelId } from './types';
 
 /** `summon`: 2 mana, summon a 해골 졸개. `bolt`: 2 mana, 1 damage to any foe (hero included). */
-export type EnemyPower = 'summon' | 'bolt';
+export type EnemyPower = 'summon' | 'curse';
 
 export interface StageDef {
   name: string;
@@ -23,13 +23,13 @@ export const STAGES: StageDef[] = [
   {
     name: '횃불의 회랑', subtitle: '날랜 추적자들의 대장',
     hero: { name: '추적자 대장', model: 'Skeleton_Rogue', scale: 1.5, health: 16 },
-    power: 'bolt',
+    power: 'curse',
     deck: [...x('sk_minion', 2), ...x('sk_rogue', 3), ...x('sk_undying', 2), ...x('sk_wraith', 2), ...x('sk_berserker', 2), ...x('e_curse', 2), ...x('e_raise', 2)],
   },
   {
     name: '주술사의 서고', subtitle: '멀리서 날아오는 저주',
     hero: { name: '서고의 주술사', model: 'Skeleton_Mage', scale: 1.5, health: 20 },
-    power: 'bolt',
+    power: 'curse',
     deck: [...x('sk_minion', 3), ...x('sk_mage', 3), 'sk_leech', 'sk_shieldwall', 'sk_warrior', 'e_curse', 'e_hex', ...x('e_chill', 2), ...x('e_darkwave', 2), 'e_drain', 'e_insight'],
   },
   {

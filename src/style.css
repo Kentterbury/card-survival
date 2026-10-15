@@ -71,8 +71,10 @@ button { font-family: inherit; }
 
 #mana-bar { position: absolute; right: calc(1.6vh + env(safe-area-inset-right)); bottom: 1.6vh; display: flex; align-items: center; gap: 1vh; padding: .6vh 1.2vh; background: #0e1420dd; border: 2px solid #2a4a6a; border-radius: 999px; pointer-events: none; }
 #mana-text { font-weight: 900; font-size: 2.4vh; color: #bfe4ff; text-shadow: 0 0 6px #2a7aff; min-width: 5vh; text-align: center; }
-#mana-gems { display: flex; gap: .35vh; }
-.gem { width: 2vh; height: 2.6vh; clip-path: polygon(50% 0, 100% 30%, 80% 100%, 20% 100%, 0 30%); background: #1a2a3a; }
+#mana-gems { display: flex; gap: .2vh; }
+/* 20 mana: narrow gems, a wider gap every five. */
+.gem:nth-child(5n):not(:last-child) { margin-right: .5vh; }
+.gem { width: 1.15vh; height: 2.6vh; clip-path: polygon(50% 0, 100% 30%, 80% 100%, 20% 100%, 0 30%); background: #1a2a3a; }
 .gem.full { background: linear-gradient(#bfe8ff, var(--mana) 60%, #1a5ab0); }
 .gem.reserve { background: linear-gradient(#f0d0ff, var(--reserve) 60%, #5a1aa0); }
 .gem.locked { opacity: .25; }
@@ -174,7 +176,7 @@ button { font-family: inherit; }
   #hero-hp { min-width: 7vh; height: 7vh; font-size: 3.6vh; }
   #end-turn { width: 20vh; height: 9vh; font-size: 3.2vh; bottom: 20vh; }
   #mana-text { font-size: 3.6vh; }
-  .gem { width: 2.6vh; height: 3.4vh; }
+  .gem { width: 1.45vh; height: 3.4vh; }
   .unit-badge { font-size: 13px; }
   #inspect { top: 17vh; }
   #inspect .card { --card-w: 30vh; }

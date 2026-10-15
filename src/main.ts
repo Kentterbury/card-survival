@@ -6,7 +6,7 @@ import { heroDef, HEROES, POWERS } from './game/heroes';
 import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE } from './game/shop';
 import { STAGES } from './game/stages';
 import {
-  HERO_POWER_COST, LAST_ROW, MAX_MANA, other, RANGED_RANGE, ROWS,
+  FIRST_TURN_MANA, LAST_ROW, MANA_PER_TURN, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE, ROWS,
   type GameEvent, type HitTarget, type Side, type Target, type Unit,
 } from './game/types';
 import { CHARACTER_MODELS, preloadAll } from './render/assets';
@@ -64,8 +64,8 @@ class App {
     setPortraits(await renderPortraits([...CHARACTER_MODELS, 'barrier']));
     await this.board.buildEnvironment();
     this.bindTooltip($('hero-power'), () => {
-      const p = this.game.state ? this.game.powerOf('player') : POWERS.bolt;
-      return `<b>지휘술 · ${p.name}</b> (${HERO_POWER_COST} 마나)<br>${p.text} 턴마다 한 번 쓸 수 있습니다.`;
+      const p = this.game.state ? this.game.powerOf('player') : POWERS.guard;
+      return `<b>지휘술 · ${p.name}</b> (${p.cost} 마나)<br>${p.text} 턴마다 한 번 쓸 수 있습니다.`;
     });
     this.board.clearHighlights();
     this.bindInput();
@@ -115,8 +115,9 @@ class App {
     this.game = new Game(Date.now() & 0x7fffffff);
     const hero = heroDef(resume?.hero ?? heroId);
     $('hero-portrait').style.backgroundImage = `url(${portrait(hero.model)})`;
-    const icon = { bolt: 'bolt', insight: 'scroll', charge: 'sword', aim: 'arrows' } as const;
+    const icon = { guard: 'shield', bolt: 'bolt', charge: 'sword', aim: 'arrows' } as const;
     $('hero-power').querySelector<HTMLElement>('.hp-icon')!.innerHTML = spellIconSvg(icon[hero.power as keyof typeof icon] ?? 'bolt');
+    $('hero-power').querySelector<HTMLElement>('.hp-cost')!.textContent = String(POWERS[hero.power].cost);
     $('hud').classList.remove('hidden');
     await this.play(this.game.startRun(undefined, hero.id, resume));
   }
@@ -591,7 +592,7 @@ class App {
     $('enemy-name').textContent = en.hero.name;
     $('enemy-mana').textContent = `마나 ${en.mana}/${en.maxMana} · 덱 ${en.drawPile.length}`;
     $('enemy-hand').innerHTML = en.hand.map((c) => (c.locked ? '<i class="locked"></i>' : '<i></i>')).join('');
-    $('enemy-frame').title = `${en.hero.name} — 지휘술(2): ${power}`;
+    $('enemy-frame').title = `${en.hero.name} — 지휘술(${this.game.powerOf('enemy').cost}): ${power}`;
   }
 
   private renderControls() {
@@ -762,7 +763,7 @@ class App {
     const reason = g.state.phase !== 'player' ? '내 차례가 아닙니다.'
       : g.state.choice ? '탐색 카드를 먼저 고르세요.'
       : me.powerUsed ? '이번 턴에 이미 사용했습니다. (턴마다 한 번)'
-      : me.mana < HERO_POWER_COST ? `마나가 부족합니다. (${HERO_POWER_COST} 필요, 현재 ${me.mana})`
+      : me.mana < g.powerOf('player').cost ? `마나가 부족합니다. (${g.powerOf('player').cost} 필요, 현재 ${me.mana})`
       : kind === 'ally' ? '대상이 될 아군 하수인이 없습니다.'
       : '지금은 쓸 수 없습니다.';
     sound.play('error');
@@ -788,7 +789,7 @@ class App {
 
   private hintTimer = 0;
 
-  /** Powers without a target (비전 통찰) fire as soon as the button is pressed. */
+  /** Powers without a target fire as soon as the button is pressed. */
   private usePowerIfUntargeted(): boolean {
     if (this.game.powerOf('player').target !== 'none') return false;
     void this.play(this.game.heroPower({ kind: 'none' }));
@@ -1094,7 +1095,7 @@ class App {
     inspect.dataset.uid = 'enemy';
     inspect.innerHTML = `<div class="notes"><div class="monster-note"><div class="title">${en.hero.name}</div>
       생명력 <b>${en.hero.health}/${en.hero.maxHealth}</b><br>마나 ${en.mana}/${en.maxMana} · 손패 ${en.hand.length}장 · 덱 ${en.drawPile.length}장
-      <div style="margin-top:.6vh"><b>지휘술 (2)</b>: ${power}</div></div></div>`;
+      <div style="margin-top:.6vh"><b>지휘술 (${ep.cost})</b>: ${power}</div></div></div>`;
     inspect.classList.add('show');
   }
 
@@ -1185,7 +1186,7 @@ class App {
       <p>해골 군단의 지휘관들과 1:1로 맞붙습니다. 하수인을 보내 상대 진영으로 밀고 들어가고, 주문으로 상대 영웅을 무너뜨리세요.</p>
       <div class="rules">
         <div><b>승리</b> 상대 영웅의 생명력을 0으로 만들면 이깁니다. 내 영웅이 쓰러지면 패배합니다.</div>
-        <div><b>마나</b> 매 턴 최대 마나가 1씩 늘어납니다(최대 ${MAX_MANA}). 쓰지 않은 마나는 <b>1까지 다음 턴으로 이월</b>됩니다.</div>
+        <div><b>마나</b> 첫 턴 ${FIRST_TURN_MANA}, 이후 매 턴 최대 마나가 ${MANA_PER_TURN}씩 늘어납니다(최대 ${MAX_MANA}). 쓰지 않은 마나는 <b>${MAX_RESERVE}까지 다음 턴으로 이월</b>됩니다.</div>
         <div><b>하수인</b> 내 진영(맨 아래 줄)에 소환하면 내 턴이 끝날 때마다 <b>한 칸씩 전진</b>합니다. 앞을 막는 적이 있으면 대신 공격합니다.</div>
         <div><b>사격</b> 원거리 하수인은 자기 줄 앞쪽 ${RANGED_RANGE}칸 안의 첫 적을 쏩니다. 아군 너머로도 쏠 수 있습니다.</div>
         <div><b>영웅 공격</b> 앞에 아무도 없이 끝까지 가면 <b>상대 영웅을 직접 공격</b>합니다. 상대도 마찬가지입니다.</div>
@@ -1218,7 +1219,7 @@ class App {
       el.innerHTML = `
         <div class="hero-face" style="background-image:url(${portrait(h.model)})"></div>
         <h3>${h.name}</h3><div class="theme">${h.title} · 생명력 ${h.health}</div>
-        <div class="hero-power-desc"><b>지휘술 · ${p.name}</b><br>${p.text}</div>
+        <div class="hero-power-desc"><b>지휘술 · ${p.name} (${p.cost}마나)</b><br>${p.text}</div>
         <div class="hero-blurb">${h.blurb}<br>시작 덱: 하수인 ${minions} · 주문 ${h.deck.length - minions}</div>`;
       el.addEventListener('click', () => void this.startRun(h.id));
       row.appendChild(el);

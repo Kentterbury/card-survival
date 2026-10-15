@@ -6,7 +6,7 @@ import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, rollShop, stageGold, type ShopSt
 import { Rng } from './rng';
 import { STAGES, type EnemyPower } from './stages';
 import {
-  FORMATION_BONUS, forward, HERO_POWER_COST, homeRow, LANES, LAST_ROW, MAX_HAND, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE,
+  FIRST_TURN_MANA, FORMATION_BONUS, forward, homeRow, LANES, LAST_ROW, MANA_PER_TURN, MAX_HAND, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE,
   THORNS_DAMAGE, VANGUARD_BONUS,
   type CardInstance, type GameEvent, type HitTarget, type Keyword, type PendingChoice, type Phase, type RewardBundle, type Side, type SideState,
   type Target, type Unit,
@@ -15,7 +15,6 @@ import {
 export const HERO_MAX_HEALTH = 30;
 /** Health restored by resting at the camp between stages. */
 export const CAMP_HEAL = 12;
-export const HERO_POWER_DAMAGE = 1;
 
 /** Where a saved run resumes: the start of `stage`, with this deck and health. */
 export interface RunSave {
@@ -214,7 +213,7 @@ export class Game {
     const me = s.sides[side];
     s.phase = side;
     if (side === 'player') s.turn++;
-    me.maxMana = Math.min(MAX_MANA, me.maxMana + 1);
+    me.maxMana = me.maxMana === 0 ? FIRST_TURN_MANA : Math.min(MAX_MANA, me.maxMana + MANA_PER_TURN);
     me.mana = me.maxMana + me.reserve;
     me.reserve = 0;
     me.powerUsed = false;
@@ -348,7 +347,7 @@ export class Game {
 
   heroPowerTargets(side: Side = 'player'): Target[] {
     const me = this.side(side);
-    if (this.state.phase !== side || this.state.choice || me.powerUsed || me.mana < HERO_POWER_COST) return [];
+    if (this.state.phase !== side || this.state.choice || me.powerUsed || me.mana < this.powerOf(side).cost) return [];
     return this.targetsOfKind(side, this.powerOf(side).target);
   }
 
@@ -363,7 +362,7 @@ export class Game {
   heroPowerAs(side: Side, target: Target): boolean {
     if (!this.heroPowerTargets(side).some((t) => sameTarget(t, target))) return false;
     const me = this.side(side);
-    me.mana -= HERO_POWER_COST;
+    me.mana -= this.powerOf(side).cost;
     me.powerUsed = true;
     this.emit({ type: 'heroPower', side, target });
     this.powerOf(side).cast(this.apis[side], target);

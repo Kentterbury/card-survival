@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { card, CARDS, STARTER_DECK, type MinionCard } from '../src/game/cards';
 import { Game, unitSpeed } from '../src/game/engine';
-import { heroDef } from '../src/game/heroes';
+import { heroDef, POWERS } from '../src/game/heroes';
 import { CARD_PRICE, HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, stageGold } from '../src/game/shop';
 import { STAGES } from '../src/game/stages';
-import { LAST_ROW, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
+import { FIRST_TURN_MANA, LAST_ROW, MANA_PER_TURN, MAX_MANA, MAX_RESERVE, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
 import { aiTakeTurn } from '../src/game/ai';
 
@@ -41,11 +41,11 @@ function passTurn(g: Game) {
 }
 
 describe('turn structure', () => {
-  it('starts with one mana, four cards and both heroes at full health', () => {
+  it('starts with 3 mana, four cards and both heroes at full health', () => {
     const g = new Game(1);
     g.startRun();
     expect(g.state.phase).toBe('player');
-    expect(g.side('player').mana).toBe(1);
+    expect(g.side('player').mana).toBe(FIRST_TURN_MANA);
     expect(g.side('player').hand).toHaveLength(4);
     expect(g.side('enemy').hero.health).toBe(STAGES[0].hero.health);
     expect(g.side('player').hero.health).toBe(START_HP);
@@ -56,11 +56,13 @@ describe('turn structure', () => {
     expect(minions).toBeLessThan(STARTER_DECK.length / 2);
   });
 
-  it('carries one unspent mana into the next turn', () => {
+  it('max mana grows by 2 a turn up to 20, and up to 2 unspent mana carries over', () => {
     const g = freshGame(Array(10).fill('squire'));
     passTurn(g);
-    expect(g.side('player').maxMana).toBe(2);
-    expect(g.side('player').mana).toBe(3);
+    expect(g.side('player').maxMana).toBe(FIRST_TURN_MANA + MANA_PER_TURN);
+    expect(g.side('player').mana).toBe(FIRST_TURN_MANA + MANA_PER_TURN + MAX_RESERVE);
+    for (let i = 0; i < 12; i++) passTurn(g);
+    expect(g.side('player').maxMana).toBe(MAX_MANA);
   });
 
   it('the enemy plays cards on its turn', () => {
@@ -154,14 +156,14 @@ describe('spells', () => {
     const g = freshGame(['firebolt', 'firebolt', 'firebolt', 'firebolt', 'firebolt']);
     expect(g.cardTargets(0).some((t) => t.kind === 'hero' && t.side === 'enemy')).toBe(true);
     const hp = g.side('enemy').hero.health;
-    g.side('player').mana = 2;
+    g.side('player').mana = 4;
     g.playCard(0, { kind: 'hero', side: 'enemy' });
     expect(g.side('enemy').hero.health).toBe(hp - 3);
   });
 
   it('killing the enemy hero clears the stage and offers rewards', () => {
     const g = freshGame(Array(10).fill('pyroblast'));
-    g.side('player').mana = 10;
+    g.side('player').mana = 20;
     g.side('enemy').hero.health = 5;
     g.playCard(0, { kind: 'hero', side: 'enemy' });
     expect(g.state.phase).toBe('reward');
@@ -195,7 +197,7 @@ describe('spells', () => {
 });
 
 describe('new cards', () => {
-  const withCard = (id: string, mana = 10) => {
+  const withCard = (id: string, mana = 20) => {
     const g = freshGame(Array(6).fill(id));
     g.side('player').mana = mana;
     return g;
@@ -227,7 +229,7 @@ describe('new cards', () => {
     // The enemy kills it with a curse on its own turn.
     g.state.phase = 'enemy';
     g.side('enemy').hand = [{ iid: 1, defId: 'e_curse' }];
-    g.side('enemy').mana = 1;
+    g.side('enemy').mana = 3;
     expect(g.playCardAs('enemy', 0, { kind: 'unit', uid: bomber.uid })).toBe(true);
     expect(g.unit(bomber.uid)).toBeUndefined();
     expect(g.side('enemy').hero.health).toBe(hp - 2);
@@ -298,10 +300,10 @@ describe('new cards', () => {
     expect(g.side('player').hero.health).toBe(22);
   });
 
-  it('마나 물약 gives two extra mana this turn', () => {
+  it('마나 물약 gives four extra mana this turn', () => {
     const g = withCard('mana_potion', 1);
     g.playCard(0, { kind: 'none' });
-    expect(g.side('player').mana).toBe(3);
+    expect(g.side('player').mana).toBe(5);
   });
 
   it('수호의 축복 gives every ally a ward', () => {
@@ -472,7 +474,7 @@ describe('keywords (2nd batch)', () => {
 
   it('가시 갑옷 and 재생의 축복 grant their keywords', () => {
     const g = freshGame(['thorn_armor', 'renewal', 'thorn_armor', 'renewal']);
-    g.side('player').mana = 10;
+    g.side('player').mana = 20;
     const u = place(g, 'squire', 'player', 0, 1);
     u.health = 1;
     const thornIdx = g.side('player').hand.findIndex((c) => c.defId === 'thorn_armor');
@@ -490,7 +492,7 @@ describe('utility cards', () => {
     const g = freshGame([id, ...extra, 'squire', 'squire', 'squire', 'squire', 'squire']);
     const me = g.side('player');
     me.hand = [{ iid: 1, defId: id }, ...extra.map((d, i) => ({ iid: 10 + i, defId: d }))];
-    me.mana = 10;
+    me.mana = 20;
     return g;
   };
 
@@ -513,7 +515,7 @@ describe('utility cards', () => {
     expect(g.state.choice).toBeNull();
     const got = g.side('player').hand.at(-1)!;
     expect(got.defId).toBe(c.options[1]);
-    expect(g.costOf(got)).toBe(Math.max(0, card(got.defId).cost - 1));
+    expect(g.costOf(got)).toBe(Math.max(0, card(got.defId).cost - 2));
   });
 
   it('작전 변경 discards the hand and draws the same number', () => {
@@ -574,27 +576,27 @@ describe('utility cards', () => {
     expect(g.side('enemy').drawPile.length).toBe(pile);
   });
 
-  it('거울상 copies an ally card into the hand at -1 cost', () => {
+  it('거울상 copies an ally card into the hand at -2 cost', () => {
     const g = setup('mirror_image');
     const u = place(g, 'warlord', 'player', 1, 1);
     g.playCard(0, { kind: 'unit', uid: u.uid });
     const copy = g.side('player').hand.find((c) => c.defId === 'warlord')!;
-    expect(g.costOf(copy)).toBe(5);
+    expect(g.costOf(copy)).toBe(card('warlord').cost - 2);
   });
 
   it('보급 마차 makes the rest of the hand cheaper', () => {
     const g = setup('supply_wagon', ['meteor', 'firebolt']);
     g.playCard(0, { kind: 'none' });
     const hand = g.side('player').hand;
-    expect(g.costOf(hand.find((c) => c.defId === 'meteor')!)).toBe(5);
-    expect(g.costOf(hand.find((c) => c.defId === 'firebolt')!)).toBe(1);
+    expect(g.costOf(hand.find((c) => c.defId === 'meteor')!)).toBe(card('meteor').cost - 2);
+    expect(g.costOf(hand.find((c) => c.defId === 'firebolt')!)).toBe(card('firebolt').cost - 2);
   });
 
   it('the enemy resolves its own 탐색-free utility (e_hex locks one of our cards)', () => {
     const g = freshGame(Array(10).fill('squire'));
     g.state.phase = 'enemy';
     g.side('enemy').hand = [{ iid: 80, defId: 'e_hex' }];
-    g.side('enemy').mana = 2;
+    g.side('enemy').mana = 4;
     g.playCardAs('enemy', 0, { kind: 'none' });
     expect(g.side('player').hand.filter((c) => c.locked)).toHaveLength(1);
   });
@@ -612,23 +614,38 @@ describe('heroes, camp and saves', () => {
     }
   });
 
-  it('비전 통찰 draws a card and 돌격 명령 gives an ally +1/+1 and pushes it forward', () => {
+  it('비전 화살 deals 1 anywhere and 돌격 명령 gives an ally +1/+1 and pushes it forward', () => {
     const a = new Game(4);
     a.startRun(undefined, 'arcanist');
-    a.side('player').mana = 2;
-    const before = a.side('player').hand.length;
-    a.heroPower({ kind: 'none' });
-    expect(a.side('player').hand.length).toBe(before + 1);
+    a.side('player').mana = POWERS.bolt.cost;
+    const hp = a.side('enemy').hero.health;
+    a.heroPower({ kind: 'hero', side: 'enemy' });
+    expect(a.side('enemy').hero.health).toBe(hp - 1);
+    expect(a.side('player').mana).toBe(0);
 
     const w = new Game(4);
     w.startRun(undefined, 'warchief');
     w.state.units = [];
-    w.side('player').mana = 2;
+    w.side('player').mana = POWERS.charge.cost;
     const u = place(w, 'squire', 'player', 2, 1);
     w.heroPower({ kind: 'unit', uid: u.uid });
     expect(u.attack).toBe(2);
     expect(u.health).toBe(4);
     expect(u.row).toBe(2);
+  });
+
+  it('방패 명령 shields an ally, and the AI shields its front-most unshielded unit', () => {
+    const g = new Game(4);
+    g.startRun(undefined, 'captain');
+    g.state.units = [];
+    g.side('player').hand = [];
+    const back = place(g, 'squire', 'player', 1, 0);
+    const front = place(g, 'squire', 'player', 3, 2);
+    g.side('player').mana = POWERS.guard.cost;
+    aiTakeTurn(g, 'player');
+    expect(front.keywords.has('ward')).toBe(true);
+    expect(back.keywords.has('ward')).toBe(false);
+    expect(g.side('player').mana).toBe(0);
   });
 
   it('조준 사격 hits the front foe in a lane for 2, or the enemy hero for 1 when the lane is empty', () => {
@@ -637,7 +654,7 @@ describe('heroes, camp and saves', () => {
     g.state.units = [];
     const far = place(g, 'sk_warrior', 'enemy', 1, 5);
     const near = place(g, 'sk_warrior', 'enemy', 1, 3);
-    g.side('player').mana = 4;
+    g.side('player').mana = POWERS.aim.cost * 2;
     g.heroPower({ kind: 'lane', lane: 1 });
     expect(near.health).toBe(near.maxHealth - 2);
     expect(far.health).toBe(far.maxHealth);
@@ -654,7 +671,7 @@ describe('heroes, camp and saves', () => {
     g.side('player').hand = [];
     const big = place(g, 'sk_warrior', 'enemy', 0, 4);
     const weak = place(g, 'sk_minion', 'enemy', 3, 4);
-    g.side('player').mana = 2;
+    g.side('player').mana = POWERS.aim.cost;
     aiTakeTurn(g, 'player');
     expect(g.unit(weak.uid)).toBeUndefined();
     expect(big.health).toBe(big.maxHealth);
@@ -662,7 +679,7 @@ describe('heroes, camp and saves', () => {
 
   it('the camp can trim a card instead of resting', () => {
     const g = freshGame(Array(10).fill('pyroblast'));
-    g.side('player').mana = 10;
+    g.side('player').mana = 20;
     g.side('enemy').hero.health = 1;
     g.playCard(0, { kind: 'hero', side: 'enemy' });
     g.chooseReward(0);
@@ -676,7 +693,7 @@ describe('heroes, camp and saves', () => {
 
   it('a save made at the camp resumes at the next stage with the same deck and health', () => {
     const g = freshGame(Array(10).fill('pyroblast'));
-    g.side('player').mana = 10;
+    g.side('player').mana = 20;
     g.side('player').hero.health = 17;
     g.side('enemy').hero.health = 1;
     g.playCard(0, { kind: 'hero', side: 'enemy' });
@@ -695,7 +712,7 @@ describe('heroes, camp and saves', () => {
 describe('gold and the merchant', () => {
   const atCamp = () => {
     const g = freshGame(Array(10).fill('pyroblast'));
-    g.side('player').mana = 10;
+    g.side('player').mana = 20;
     g.side('enemy').hero.health = 1;
     g.playCard(0, { kind: 'hero', side: 'enemy' });
     g.chooseReward(0);
@@ -704,7 +721,7 @@ describe('gold and the merchant', () => {
 
   it('clearing a stage pays gold, more for a quick win', () => {
     const g = freshGame(Array(10).fill('pyroblast'));
-    g.side('player').mana = 10;
+    g.side('player').mana = 20;
     g.side('enemy').hero.health = 1;
     const events = g.playCard(0, { kind: 'hero', side: 'enemy' });
     const clear = events.find((e) => e.type === 'stageClear');

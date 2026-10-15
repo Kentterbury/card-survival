@@ -49,7 +49,8 @@ function bestPlay(g: Game, side: Side): { index: number; target: Target } | null
 }
 
 function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { target: Target; score: number } | null {
-  const base = def.cost * 10;
+  // Costs run on a 20-mana scale; half a point per mana keeps the bonuses below in proportion.
+  const base = def.cost * 5;
   const foeHero = g.side(other(side)).hero;
   const myHero = g.side(side).hero;
   const foes = g.unitsOf(other(side));
@@ -122,7 +123,7 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
       return g.side(side).discard.length >= 2 ? { target: { kind: 'none' }, score: base + 2 } : null;
     case 'cycle': {
       const me = g.side(side);
-      const stuck = me.hand.filter((c) => g.costOf(c) > me.maxMana + 1).length;
+      const stuck = me.hand.filter((c) => g.costOf(c) > me.maxMana + 2).length;
       return stuck >= 2 ? { target: { kind: 'none' }, score: base + stuck } : null;
     }
     case 'discount':
@@ -144,7 +145,7 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
     case 'ramp': {
       // Worth it only when it unlocks a card we could not afford otherwise.
       const me = g.side(side);
-      const unlocks = me.hand.some((c) => card(c.defId).cost > me.mana && card(c.defId).cost <= me.mana + 2);
+      const unlocks = me.hand.some((c) => card(c.defId).cost > me.mana && card(c.defId).cost <= me.mana + 4);
       return unlocks ? { target: { kind: 'none' }, score: 5 } : null;
     }
   }
@@ -154,7 +155,7 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
 function resolvePendingChoice(g: Game, side: Side) {
   const c = g.state.choice;
   if (!c || c.side !== side) return;
-  const max = g.side(side).maxMana + 1;
+  const max = g.side(side).maxMana + 2;
   const scored = c.options.map((id, i) => ({ i, cost: card(id).cost }));
   const best = scored.filter((o) => o.cost <= max).sort((a, b) => b.cost - a.cost)[0] ?? scored[0];
   g.resolveChoice(best.i);
@@ -165,6 +166,13 @@ function pickPowerTarget(g: Game, side: Side): Target | null {
   if (targets.length === 0) return null;
   const kind = g.powerOf(side).target;
   if (kind === 'none') return g.side(side).hand.length < 7 ? targets[0] : null;
+  if (kind === 'ally' && g.powerOf(side).id === 'guard') {
+    // 방패 명령: shield the unshielded ally closest to the enemy (it takes the next hit).
+    const allies = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : [])).filter((u) => !u.keywords.has('ward'));
+    const dist = (u: Unit) => Math.abs(homeRow(other(side)) - u.row);
+    const best = allies.sort((a, b) => dist(a) - dist(b) || b.health - a.health)[0];
+    return best ? { kind: 'unit', uid: best.uid } : null;
+  }
   if (kind === 'ally') {
     const allies = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : [])).filter((u) => u.attack > 0);
     const best = allies.sort((a, b) => b.attack - a.attack)[0];
