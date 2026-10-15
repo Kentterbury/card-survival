@@ -18,6 +18,10 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '남은 마나 이월 없음',
+    summary: '쓰지 않은 마나는 다음 턴으로 넘어가지 않습니다(양쪽 모두). 카드 변경은 없습니다. 보라색 추가 마나는 이제 마나 물약 같은 이번 턴 한정 마나만 뜻합니다.',
+  },
+  {
     title: '마나 상승 매 턴 +1',
     summary: '최대 마나가 매 턴 +2 → +1로 늘어납니다(최대 20). 카드 비용은 그대로. 균형을 위해 방패 명령 3 → 2, 돌격 명령 7 → 8마나.',
     changed: [

@@ -6,7 +6,7 @@ import { CARD_PRICE, HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, stageGold } from '..
 import { ALL_BUNDLES, rollRewards } from '../src/game/rewards';
 import { Rng } from '../src/game/rng';
 import { STAGES } from '../src/game/stages';
-import { FIRST_TURN_MANA, LAST_ROW, MANA_PER_TURN, MAX_MANA, MAX_RESERVE, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
+import { FIRST_TURN_MANA, LAST_ROW, MANA_PER_TURN, MAX_MANA, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
 import { aiTakeTurn } from '../src/game/ai';
 
@@ -58,12 +58,12 @@ describe('turn structure', () => {
     expect(minions).toBeLessThan(STARTER_DECK.length / 2);
   });
 
-  it('max mana grows by 1 a turn up to 20, and up to 2 unspent mana carries over', () => {
+  it('max mana grows by 1 a turn up to 20, and unspent mana does not carry over', () => {
     const g = freshGame(Array(10).fill('squire'));
     passTurn(g);
     const start = heroDef('captain').startMana;
     expect(g.side('player').maxMana).toBe(start + MANA_PER_TURN);
-    expect(g.side('player').mana).toBe(start + MANA_PER_TURN + MAX_RESERVE);
+    expect(g.side('player').mana).toBe(start + MANA_PER_TURN);
     for (let i = 0; i < 20; i++) passTurn(g);
     expect(g.side('player').maxMana).toBe(MAX_MANA);
   });

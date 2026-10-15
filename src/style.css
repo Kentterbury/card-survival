@@ -3,7 +3,7 @@
   --gold-dim: #a07a2c;
   --ink: #f6ead2;
   --mana: #4fb4ff;
-  --reserve: #c27bff;
+  --bonus-mana: #c27bff;
   --hp: #e0453a;
   --atk: #f0b43a;
   --card-w: min(10.5vh, 120px);
@@ -76,7 +76,7 @@ button { font-family: inherit; }
 .gem:nth-child(5n):not(:last-child) { margin-right: .5vh; }
 .gem { width: 1.15vh; height: 2.6vh; clip-path: polygon(50% 0, 100% 30%, 80% 100%, 20% 100%, 0 30%); background: #1a2a3a; }
 .gem.full { background: linear-gradient(#bfe8ff, var(--mana) 60%, #1a5ab0); }
-.gem.reserve { background: linear-gradient(#f0d0ff, var(--reserve) 60%, #5a1aa0); }
+.gem.bonus { background: linear-gradient(#f0d0ff, var(--bonus-mana) 60%, #5a1aa0); }
 .gem.locked { opacity: .25; }
 
 /* ── Cards ───────────────────────────────────── */

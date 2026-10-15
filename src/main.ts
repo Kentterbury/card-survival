@@ -6,7 +6,7 @@ import { heroDef, HEROES, POWERS } from './game/heroes';
 import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE } from './game/shop';
 import { STAGES } from './game/stages';
 import {
-  FIRST_TURN_MANA, LAST_ROW, MANA_PER_TURN, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE, ROWS,
+  FIRST_TURN_MANA, LAST_ROW, MANA_PER_TURN, MAX_MANA, other, RANGED_RANGE, ROWS,
   type GameEvent, type HitTarget, type Side, type Target, type Unit,
 } from './game/types';
 import { CHARACTER_MODELS, preloadAll } from './render/assets';
@@ -629,14 +629,15 @@ class App {
 
   private renderMana() {
     const me = this.game.state.sides.player;
-    const reserveShown = Math.max(0, me.mana - me.maxMana);
-    $('mana-text').textContent = `${me.mana - reserveShown}/${me.maxMana}${reserveShown ? ` (+${reserveShown})` : ''}`;
+    // Mana above the maximum (e.g. 마나 물약) lasts only this turn.
+    const bonus = Math.max(0, me.mana - me.maxMana);
+    $('mana-text').textContent = `${me.mana - bonus}/${me.maxMana}${bonus ? ` (+${bonus})` : ''}`;
     let html = '';
     for (let i = 0; i < MAX_MANA; i++) {
       const cls = i < Math.min(me.mana, me.maxMana) ? 'full' : i < me.maxMana ? '' : 'locked';
       html += `<div class="gem ${cls}"></div>`;
     }
-    for (let i = 0; i < reserveShown; i++) html += '<div class="gem reserve" title="이월된 마나"></div>';
+    for (let i = 0; i < bonus; i++) html += '<div class="gem bonus" title="이번 턴에만 쓸 수 있는 추가 마나"></div>';
     $('mana-gems').innerHTML = html;
   }
 
@@ -1189,7 +1190,7 @@ class App {
       <p>해골 군단이 왕국을 덮쳤습니다. 왕국은 금화를 걸고 용병을 모집했고, 당신은 그 계약을 받아들인 용병대장입니다. 다섯 해골 지휘관과 1:1로 맞붙어 쓰러뜨리고 보수를 받으세요.</p>
       <div class="rules">
         <div><b>승리</b> 상대 영웅의 생명력을 0으로 만들면 이깁니다. 내 영웅이 쓰러지면 패배합니다.</div>
-        <div><b>마나</b> 첫 턴 마나는 영웅마다 다르고(상대는 ${FIRST_TURN_MANA}), 이후 매 턴 최대 마나가 ${MANA_PER_TURN}씩 늘어납니다(최대 ${MAX_MANA}). 쓰지 않은 마나는 <b>${MAX_RESERVE}까지 다음 턴으로 이월</b>됩니다.</div>
+        <div><b>마나</b> 첫 턴 마나는 영웅마다 다르고(상대는 ${FIRST_TURN_MANA}), 이후 매 턴 최대 마나가 ${MANA_PER_TURN}씩 늘어납니다(최대 ${MAX_MANA}). 쓰지 않은 마나는 <b>다음 턴으로 넘어가지 않습니다</b>.</div>
         <div><b>하수인</b> 내 진영(맨 아래 줄)에 소환하면 내 턴이 끝날 때마다 <b>한 칸씩 전진</b>합니다. 앞을 막는 적이 있으면 대신 공격합니다.</div>
         <div><b>사격</b> 원거리 하수인은 자기 줄 앞쪽 ${RANGED_RANGE}칸 안의 첫 적을 쏩니다. 아군 너머로도 쏠 수 있습니다.</div>
         <div><b>영웅 공격</b> 앞에 아무도 없이 끝까지 가면 <b>상대 영웅을 직접 공격</b>합니다. 상대도 마찬가지입니다.</div>

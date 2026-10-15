@@ -6,7 +6,7 @@ import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, rollShop, stageGold, type ShopSt
 import { Rng } from './rng';
 import { STAGES, type EnemyPower } from './stages';
 import {
-  FIRST_TURN_MANA, FORMATION_BONUS, forward, homeRow, LANES, LAST_ROW, MANA_PER_TURN, MAX_HAND, MAX_MANA, MAX_RESERVE, other, RANGED_RANGE,
+  FIRST_TURN_MANA, FORMATION_BONUS, forward, homeRow, LANES, LAST_ROW, MANA_PER_TURN, MAX_HAND, MAX_MANA, other, RANGED_RANGE,
   THORNS_DAMAGE, VANGUARD_BONUS,
   type CardInstance, type GameEvent, type HitTarget, type Keyword, type PendingChoice, type Phase, type RewardBundle, type Side, type SideState,
   type Target, type Unit,
@@ -184,7 +184,7 @@ export class Game {
   }
 
   private emptySide(hero: SideState['hero']): SideState {
-    return { hero, mana: 0, maxMana: 0, reserve: 0, powerUsed: false, skipDraw: false, drawPile: [], hand: [], discard: [] };
+    return { hero, mana: 0, maxMana: 0, powerUsed: false, skipDraw: false, drawPile: [], hand: [], discard: [] };
   }
 
   private beginStage() {
@@ -215,8 +215,8 @@ export class Game {
     if (side === 'player') s.turn++;
     const first = side === 'player' ? heroDef(s.heroId).startMana : FIRST_TURN_MANA;
     me.maxMana = me.maxMana === 0 ? first : Math.min(MAX_MANA, me.maxMana + MANA_PER_TURN);
-    me.mana = me.maxMana + me.reserve;
-    me.reserve = 0;
+    // Mana refills to the maximum; whatever was left last turn is gone.
+    me.mana = me.maxMana;
     me.powerUsed = false;
     for (const u of s.units) if (u.side === side) u.fresh = false;
     this.emit({ type: 'turnStart', side, turn: s.turn });
@@ -249,7 +249,6 @@ export class Game {
 
   private finishTurn(side: Side) {
     const me = this.side(side);
-    me.reserve = Math.min(MAX_RESERVE, me.mana);
     // 봉인 lasts through one of the owner's turns.
     for (const c of me.hand) c.locked = false;
     for (const u of this.unitsOf(side)) {
