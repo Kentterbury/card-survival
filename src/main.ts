@@ -599,7 +599,8 @@ class App {
     const me = g.state.sides.player;
     const power = $<HTMLButtonElement>('hero-power');
     const canPower = !this.busy && g.canUseHeroPower();
-    power.disabled = !canPower;
+    // Not `disabled`: a disabled button swallows taps, and we want to say why it cannot be used.
+    power.classList.toggle('disabled', !canPower);
     power.classList.toggle('ready', canPower);
     power.classList.toggle('used', me.powerUsed);
 
@@ -736,20 +737,56 @@ class App {
     $('hero-power').addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       if (e.pointerType !== 'mouse') return; // touch: handled on release (tap) / long-press (tooltip)
-      if (this.busy || !this.game.canUseHeroPower()) return;
+      if (this.busy) return;
+      if (!this.game.canUseHeroPower()) return this.powerBlocked();
       if (this.aim) this.cancelAim();
       if (this.usePowerIfUntargeted()) return;
       this.startAim({ kind: 'power', sticky: false, x0: e.clientX, y0: e.clientY, moved: false });
     });
     $('hero-power').addEventListener('pointerup', (e) => {
       if (e.pointerType === 'mouse' || this.tooltipWasLongPress) return;
-      if (this.busy || !this.game.canUseHeroPower()) return;
+      if (this.busy) return;
+      if (!this.game.canUseHeroPower()) return this.powerBlocked();
       if (this.aim) this.cancelAim();
       if (this.usePowerIfUntargeted()) return;
       this.startAim({ kind: 'power', sticky: true, x0: e.clientX, y0: e.clientY, moved: false });
     });
     $('deck-btn').addEventListener('click', () => this.showDeck());
   }
+
+  /** Tapping the 지휘술 when it cannot be used says why instead of doing nothing. */
+  private powerBlocked() {
+    const g = this.game;
+    const me = g.state.sides.player;
+    const kind = g.powerOf('player').target;
+    const reason = g.state.phase !== 'player' ? '내 차례가 아닙니다.'
+      : g.state.choice ? '탐색 카드를 먼저 고르세요.'
+      : me.powerUsed ? '이번 턴에 이미 사용했습니다. (턴마다 한 번)'
+      : me.mana < HERO_POWER_COST ? `마나가 부족합니다. (${HERO_POWER_COST} 필요, 현재 ${me.mana})`
+      : kind === 'ally' ? '대상이 될 아군 하수인이 없습니다.'
+      : '지금은 쓸 수 없습니다.';
+    sound.play('error');
+    const btn = $('hero-power');
+    btn.classList.remove('shake');
+    void btn.offsetWidth;
+    btn.classList.add('shake');
+    this.showHint(reason, 1600);
+  }
+
+  /** A short message above the 지휘술 button (reasons, aiming instructions). */
+  private showHint(html: string, ms = 0) {
+    const hint = $('hint');
+    $('tooltip').classList.remove('show');
+    hint.innerHTML = html;
+    const r = $('hero-power').getBoundingClientRect();
+    hint.style.left = `${Math.max(8, r.left)}px`;
+    hint.style.bottom = `${window.innerHeight - r.top + 10}px`;
+    hint.classList.add('show');
+    window.clearTimeout(this.hintTimer);
+    if (ms) this.hintTimer = window.setTimeout(() => hint.classList.remove('show'), ms);
+  }
+
+  private hintTimer = 0;
 
   /** Powers without a target (비전 통찰) fire as soon as the button is pressed. */
   private usePowerIfUntargeted(): boolean {
@@ -845,6 +882,11 @@ class App {
   private startAim(aim: Aim) {
     this.aim = aim;
     $('inspect').classList.remove('show');
+    if (aim.kind === 'power') {
+      const p = this.game.powerOf('player');
+      const what = { foe: '적 하수인이나 적 영웅', foeUnit: '적 하수인', ally: '아군 하수인', lane: '줄', slot: '내 진영 빈 칸', none: '' }[p.target];
+      this.showHint(`<b>${p.name}</b>: 대상을 고르세요 (${what})`);
+    }
     if (aim.kind === 'card') {
       // The card being played is shown large on the left, out of the board's way.
       aim.el.classList.add('aiming');
@@ -867,6 +909,7 @@ class App {
       aim.el.style.transform = '';
     }
     this.aim = null;
+    if (aim.kind === 'power') $('hint').classList.remove('show');
     $('inspect').classList.remove('show');
     $('aim-preview').classList.remove('show');
     $('arrow-path').setAttribute('d', '');
