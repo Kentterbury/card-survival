@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "assets": "node tools/optimize-assets.mjs"
+    "assets": "node tools/optimize-assets.mjs",
+    "synty": "node tools/optimize-synty.mjs"
   },
   "dependencies": {
     "three": "0.186.1"

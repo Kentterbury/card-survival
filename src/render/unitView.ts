@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ModelId, Side, Unit } from '../game/types';
-import { ANIMS, instantiateCharacter, instantiateStatic, type AnimSet } from './assets';
+import { animsFor, instantiateCharacter, instantiateStatic, type AnimSet } from './assets';
 import { ease, tween, wait } from './tween';
 
 export type Facing = 'enemy' | 'player';
@@ -56,7 +56,7 @@ export class UnitView {
       this.model = inst.root;
       this.mixer = inst.mixer;
       this.clips = inst.clips;
-      this.anims = ANIMS[this.modelId];
+      this.anims = animsFor(this.modelId);
       this.model.scale.setScalar(UNIT_SCALE * this.scale);
       // Wide-brimmed mage hats read as a big disc from the top-down camera.
       const hat = this.model.getObjectByName('Mage_Hat');
@@ -199,6 +199,12 @@ export class UnitView {
     if (this.anims?.spawn) {
       // Skeletons climbing out of the ground, played 1.5x faster than authored.
       await this.playOnce(this.anims.spawn, 0.85, true, 1.5);
+    } else if (this.anims && this.modelId.startsWith('Skeleton')) {
+      // No authored spawn clip (the Synty set): the skeleton climbs out of the floor instead.
+      const y = this.model.position.y;
+      this.loop(this.anims.walk, 0);
+      await tween(0.55, (k) => { this.model.position.y = y - 2.6 * (1 - ease.outCubic(k)); });
+      this.loop(this.anims.idle, 0.3);
     } else {
       const s = this.model.scale.x;
       await tween(0.35, (k) => this.model.scale.setScalar(s * ease.outBack(k)));
@@ -227,8 +233,14 @@ export class UnitView {
     this.dead = true;
     this.badge.remove();
     this.setFrozen(false);
-    if (this.anims) {
+    if (this.anims?.death) {
       await this.playOnce(this.anims.death, 0.9, false);
+    } else if (this.anims) {
+      // No authored death clip (the Synty set): freeze the pose and topple backwards from the feet.
+      this.mixer?.stopAllAction();
+      this.current = null;
+      this.model.rotation.order = 'YXZ';
+      await tween(0.45, (k) => { this.model.rotation.x = -(k ** 3) * Math.PI * 0.5; });
     }
     const y = this.group.position.y;
     await tween(0.6, (k) => {

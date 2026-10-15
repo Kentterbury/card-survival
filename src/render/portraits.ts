@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ModelId } from '../game/types';
-import { ANIMS, instantiateCharacter, instantiateStatic } from './assets';
+import { animsFor, instantiateCharacter, instantiateStatic } from './assets';
 
 /**
  * Renders a bust shot of each model once at startup so cards and the hero
@@ -31,7 +31,7 @@ export async function renderPortraits(models: ModelId[], size = 256): Promise<Ma
     } else {
       const inst = await instantiateCharacter(id);
       obj = inst.root;
-      const idle = inst.clips.find((c) => c.name === ANIMS[id]?.idle);
+      const idle = inst.clips.find((c) => c.name === animsFor(id)?.idle);
       if (idle) {
         inst.mixer.clipAction(idle).play();
         inst.mixer.update(0.4);

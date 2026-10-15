@@ -17,8 +17,30 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Read-only token for the private Synty asset repo (docs/SYNTY.md). Without it the
+      # game ships with the bundled KayKit set only.
+      SYNTY_TOKEN: ${{ secrets.SYNTY_ASSETS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch Synty assets (private)
+        if: env.SYNTY_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: Kentterbury/cardproject
+          ref: ${{ vars.SYNTY_ASSETS_REF || 'claude/charming-darwin-ijym46' }}
+          token: ${{ env.SYNTY_TOKEN }}
+          path: .synty-src
+          sparse-checkout: WebExport/card-survival/synty
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Install Synty assets
+        if: env.SYNTY_TOKEN != ''
+        run: |
+          mkdir -p public/synty
+          cp -r .synty-src/WebExport/card-survival/synty/. public/synty/
+          rm -rf .synty-src
+          test -f public/synty/manifest.json
       - uses: actions/setup-node@v4
         with:
           node-version: 22

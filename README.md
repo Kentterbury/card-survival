@@ -63,6 +63,7 @@ src/
   main.ts      게임 ↔ 3D ↔ UI 연결, 입력, 이벤트 연출 재생
 tests/         vitest
 tools/optimize-assets.mjs   에셋 최적화 스크립트
+tools/optimize-synty.mjs    Synty 변환본 압축 + manifest 생성
 ```
 
 규칙 엔진은 행동마다 `GameEvent[]`를 반환하고, `main.ts`가 이 이벤트를 순서대로 연출한 뒤 최종 상태와 화면을 동기화합니다. 규칙을 바꿀 때 렌더링 코드를 건드릴 필요가 없습니다.
@@ -80,4 +81,12 @@ tools/optimize-assets.mjs   에셋 최적화 스크립트
 node tools/optimize-assets.mjs <KayKit 저장소들이 있는 폴더>
 ```
 
-> Synty 등 유료 에셋은 원본 파일이 그대로 공개되면 안 되므로, 이 공개 저장소에는 넣지 않았습니다.
+### Synty 세트 (선택)
+
+`public/synty/manifest.json`이 있으면 KayKit 대신 Synty POLYGON 모델(던전, 판타지 왕국, 기사, 판타지 캐릭터)을 자동으로 씁니다. 애니메이션은 DoubleL 팩을 리타깃해서 씁니다.
+
+- 유료 에셋이라 이 공개 저장소에는 넣지 않습니다.
+- 변환본은 비공개 저장소 `Kentterbury/cardproject`에 있고, Pages 배포 때 `SYNTY_ASSETS_TOKEN` 시크릿으로 받아 옵니다.
+- 토큰이 없으면 KayKit으로 배포됩니다.
+
+설정 방법과 변환 파이프라인은 [docs/SYNTY.md](docs/SYNTY.md)에 있습니다.
