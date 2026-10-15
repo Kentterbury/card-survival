@@ -95,8 +95,13 @@ rm -rf public/synty && cp -r ../cardproject/WebExport/card-survival/synty public
    - Skin: **Without Skin**
    - Frames per second: **30**
    - Keyframe Reduction: **none**
-3. 파일 이름을 아래 표의 이름으로 바꿔 `cardproject`의 `Assets/Mixamo/`에 넣습니다.
-4. `build_card_survival.sh`부터 다시 실행합니다. 없는 파일은 건너뛰고, 그 카드들은 코드 연출로 넘어집니다.
+   - Pose: **T-pose** (Synty 리그도 T자라서 보정이 가장 적습니다)
+3. Mixamo 이름 그대로(예: `Sword And Shield Death.fbx`) 또는 아래 표의 파일 이름으로 `cardproject`의 `Assets/Mixamo/`에 넣습니다.
+4. `build_card_survival.sh`부터 다시 실행합니다. 없는 파일은 건너뜁니다.
+   - `Death_Back`이 없으면 기본 유닛은 `Death_Caster`(Dying Backwards)를 씁니다. 둘 다 없으면 코드로 넘어집니다.
+   - 사망 클립은 엉덩이 이동의 60%를 남기고(뒤로 넘어지기, 앞으로 고꾸라지기), 게임에서는 길이와 상관없이 약 1.6초에 맞춰 재생합니다.
+
+현재 들어 있는 동작: Sword And Shield Death, Two Handed Sword Death, Falling Forward Death, Death From Front Headshot, Dying, Dying Backwards, Zombie Dying (Falling Back Death는 아직 없음).
 
 | 파일 이름 | Mixamo 검색어 | 쓰는 카드 |
 | --- | --- | --- |

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { ModelId, Side, Unit } from '../game/types';
 import { animsFor, instantiateCharacter, instantiateStatic, useSynty, type AnimSet } from './assets';
-import { deathClipFor } from './syntySet';
+import { deathClipsFor } from './syntySet';
 import { ease, tween, wait } from './tween';
 
 export type Facing = 'enemy' | 'player';
@@ -61,8 +61,8 @@ export class UnitView {
       this.clips = inst.clips;
       this.anims = animsFor(this.modelId);
       // Synty: a per-concept death clip when the library has it (else die() topples the unit).
-      const death = useSynty ? deathClipFor(this.look) : '';
-      if (this.anims && death && this.clips.some((c) => c.name === death)) this.anims = { ...this.anims, death };
+      const death = useSynty ? deathClipsFor(this.look).find((d) => this.clips.some((c) => c.name === d)) : undefined;
+      if (this.anims && death) this.anims = { ...this.anims, death };
       this.model.scale.setScalar(UNIT_SCALE * this.scale);
       // Wide-brimmed mage hats read as a big disc from the top-down camera.
       const hat = this.model.getObjectByName('Mage_Hat');
@@ -240,7 +240,9 @@ export class UnitView {
     this.badge.remove();
     this.setFrozen(false);
     if (this.anims?.death) {
-      await this.playOnce(this.anims.death, 0.9, false);
+      // Mixamo deaths run 2–5 s; keep every death to about 1.6 s of game time.
+      const len = this.clip(this.anims.death)?.duration ?? 1;
+      await this.playOnce(this.anims.death, 0.92, false, Math.max(1, len / 1.6));
     } else if (this.anims) {
       // No authored death clip (the Synty set): freeze the current pose (stopping the actions
       // would snap the rig to its T-pose) and topple backwards from the feet.

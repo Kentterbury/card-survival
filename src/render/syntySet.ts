@@ -247,7 +247,11 @@ const DEATHS: Record<string, string[]> = {
 };
 const DEATH_OF = new Map(Object.entries(DEATHS).flatMap(([clip, keys]) => keys.map((k) => [k, clip] as const)));
 
-/** The death clip a look wants; "Falling Back Death" (Death_Back) for everyone else. */
-export function deathClipFor(key: string | undefined): string {
-  return (key && DEATH_OF.get(key)) || 'Death_Back';
+/**
+ * Death clips a look can use, best first: its own, then "Falling Back Death" (Death_Back) for
+ * everyone else, then "Dying Backwards" while Death_Back is not downloaded.
+ */
+export function deathClipsFor(key: string | undefined): string[] {
+  const own = key && DEATH_OF.get(key);
+  return [...(own ? [own] : []), 'Death_Back', 'Death_Caster'];
 }
