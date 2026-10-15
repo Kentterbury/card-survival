@@ -275,6 +275,12 @@ button { font-family: inherit; }
 .hero-power-desc, .hero-blurb { font-size: clamp(11px, 1.6vh, 15px); line-height: 1.4; margin-top: .8vh; }
 .hero-power-desc b { color: var(--gold); }
 .bundle.disabled { opacity: .4; pointer-events: none; }
+/* Reward bundles: three across, cards at their real proportions (flex must not squeeze their width). */
+.panel.wide { width: min(96vw, 1600px); padding: 3vh 1.5vw; }
+.bundles.rewards { gap: 1.6vw; flex-wrap: wrap; }
+.bundles.rewards .bundle { width: auto; flex: 0 0 auto; padding: 1.4vh 1vw; }
+.bundles.rewards .mini-cards { gap: .8vw; padding: 0 .6vw 2vh; }
+.bundles.rewards .card { flex: none; --card-w: min(7.8vw, 17vh, 118px); }
 #resume-btn { margin-bottom: .4vh; }
 @media (max-height: 520px) {
   .hero-face { width: 14vh; height: 14vh; }

@@ -1364,8 +1364,9 @@ class App {
     const m = this.openModal(`
       <h2>스테이지 ${s.stage + 1} 완수!</h2>
       <p>왕국이 지원 물자를 보냈습니다. 꾸러미 하나를 골라 덱에 추가하세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장 · <span class="gold">${s.gold}</span></p>
-      <div class="bundles">${bundles}</div>
+      <div class="bundles rewards">${bundles}</div>
       <button class="btn secondary" id="view-deck">현재 덱 보기</button>`);
+    m.querySelector('.panel')!.classList.add('wide');
     m.querySelectorAll<HTMLElement>('.mini-cards').forEach((el) => {
       for (const id of el.dataset.cards!.split(',')) el.appendChild(createCardElement(id));
     });
