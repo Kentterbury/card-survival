@@ -58,7 +58,7 @@ src/
     changelog.ts 카드 변경 기록 (카드북 「최근 변경」 탭)
   audio/       WebAudio 효과음·배경음 합성
   render/      Three.js (보드, 유닛, 이펙트, 초상화 렌더링)
-  ui/          카드 DOM, 아이콘
+  ui/          카드 DOM, 아이콘, 카드북
   sim/bot.ts   밸런스 확인용 자동 플레이(플레이어 쪽에 ai.ts 사용)
   main.ts      게임 ↔ 3D ↔ UI 연결, 입력, 이벤트 연출 재생
 tests/         vitest
