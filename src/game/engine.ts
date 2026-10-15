@@ -213,7 +213,8 @@ export class Game {
     const me = s.sides[side];
     s.phase = side;
     if (side === 'player') s.turn++;
-    me.maxMana = me.maxMana === 0 ? FIRST_TURN_MANA : Math.min(MAX_MANA, me.maxMana + MANA_PER_TURN);
+    const first = side === 'player' ? heroDef(s.heroId).startMana : FIRST_TURN_MANA;
+    me.maxMana = me.maxMana === 0 ? first : Math.min(MAX_MANA, me.maxMana + MANA_PER_TURN);
     me.mana = me.maxMana + me.reserve;
     me.reserve = 0;
     me.powerUsed = false;

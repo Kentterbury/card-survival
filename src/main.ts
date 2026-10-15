@@ -1186,7 +1186,7 @@ class App {
       <p>해골 군단의 지휘관들과 1:1로 맞붙습니다. 하수인을 보내 상대 진영으로 밀고 들어가고, 주문으로 상대 영웅을 무너뜨리세요.</p>
       <div class="rules">
         <div><b>승리</b> 상대 영웅의 생명력을 0으로 만들면 이깁니다. 내 영웅이 쓰러지면 패배합니다.</div>
-        <div><b>마나</b> 첫 턴 ${FIRST_TURN_MANA}, 이후 매 턴 최대 마나가 ${MANA_PER_TURN}씩 늘어납니다(최대 ${MAX_MANA}). 쓰지 않은 마나는 <b>${MAX_RESERVE}까지 다음 턴으로 이월</b>됩니다.</div>
+        <div><b>마나</b> 첫 턴 마나는 영웅마다 다르고(상대는 ${FIRST_TURN_MANA}), 이후 매 턴 최대 마나가 ${MANA_PER_TURN}씩 늘어납니다(최대 ${MAX_MANA}). 쓰지 않은 마나는 <b>${MAX_RESERVE}까지 다음 턴으로 이월</b>됩니다.</div>
         <div><b>하수인</b> 내 진영(맨 아래 줄)에 소환하면 내 턴이 끝날 때마다 <b>한 칸씩 전진</b>합니다. 앞을 막는 적이 있으면 대신 공격합니다.</div>
         <div><b>사격</b> 원거리 하수인은 자기 줄 앞쪽 ${RANGED_RANGE}칸 안의 첫 적을 쏩니다. 아군 너머로도 쏠 수 있습니다.</div>
         <div><b>영웅 공격</b> 앞에 아무도 없이 끝까지 가면 <b>상대 영웅을 직접 공격</b>합니다. 상대도 마찬가지입니다.</div>
@@ -1208,7 +1208,7 @@ class App {
   private showHeroSelect() {
     const m = this.openModal(`
       <h2>영웅 선택</h2>
-      <p>영웅마다 생명력, 지휘술, 시작 덱이 다릅니다.</p>
+      <p>영웅마다 생명력, 시작 마나, 지휘술, 시작 덱이 다릅니다.</p>
       <div class="heroes"></div>`);
     const row = m.querySelector('.heroes')!;
     for (const h of HEROES) {
@@ -1218,7 +1218,7 @@ class App {
       el.className = 'hero-pick';
       el.innerHTML = `
         <div class="hero-face" style="background-image:url(${portrait(h.model)})"></div>
-        <h3>${h.name}</h3><div class="theme">${h.title} · 생명력 ${h.health}</div>
+        <h3>${h.name}</h3><div class="theme"><span class="nw">${h.title}</span> · <span class="nw">생명력 ${h.health}</span> · <span class="nw">시작 마나 ${h.startMana}</span></div>
         <div class="hero-power-desc"><b>지휘술 · ${p.name} (${p.cost}마나)</b><br>${p.text}</div>
         <div class="hero-blurb">${h.blurb}<br>시작 덱: 하수인 ${minions} · 주문 ${h.deck.length - minions}</div>`;
       el.addEventListener('click', () => void this.startRun(h.id));

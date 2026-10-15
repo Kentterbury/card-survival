@@ -43,11 +43,11 @@ function passTurn(g: Game) {
 }
 
 describe('turn structure', () => {
-  it('starts with 3 mana, four cards and both heroes at full health', () => {
+  it('starts with the hero\'s starting mana, four cards and both heroes at full health', () => {
     const g = new Game(1);
     g.startRun();
     expect(g.state.phase).toBe('player');
-    expect(g.side('player').mana).toBe(FIRST_TURN_MANA);
+    expect(g.side('player').mana).toBe(heroDef('captain').startMana);
     expect(g.side('player').hand).toHaveLength(4);
     expect(g.side('enemy').hero.health).toBe(STAGES[0].hero.health);
     expect(g.side('player').hero.health).toBe(START_HP);
@@ -61,8 +61,9 @@ describe('turn structure', () => {
   it('max mana grows by 2 a turn up to 20, and up to 2 unspent mana carries over', () => {
     const g = freshGame(Array(10).fill('squire'));
     passTurn(g);
-    expect(g.side('player').maxMana).toBe(FIRST_TURN_MANA + MANA_PER_TURN);
-    expect(g.side('player').mana).toBe(FIRST_TURN_MANA + MANA_PER_TURN + MAX_RESERVE);
+    const start = heroDef('captain').startMana;
+    expect(g.side('player').maxMana).toBe(start + MANA_PER_TURN);
+    expect(g.side('player').mana).toBe(start + MANA_PER_TURN + MAX_RESERVE);
     for (let i = 0; i < 12; i++) passTurn(g);
     expect(g.side('player').maxMana).toBe(MAX_MANA);
   });
@@ -791,6 +792,18 @@ describe('hero-exclusive cards', () => {
     g.side('player').mana = 20;
     return g;
   };
+
+  it('each hero starts with its own first-turn mana (비전술사 5); the enemy starts with 3', () => {
+    const want: Record<string, number> = { captain: 2, arcanist: 5, warchief: 4, hunter: 3 };
+    for (const [hero, mana] of Object.entries(want)) {
+      const g = new Game(3);
+      g.startRun(undefined, hero);
+      expect(g.side('player').maxMana).toBe(mana);
+      g.side('enemy').hand = [];
+      g.endTurn();
+      expect(g.side('enemy').maxMana).toBe(FIRST_TURN_MANA);
+    }
+  });
 
   it('every hero has four exclusive cards, and rewards always include one bundle of them', () => {
     for (const h of HERO_IDS) {

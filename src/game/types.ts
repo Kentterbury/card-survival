@@ -4,6 +4,7 @@ export const ROWS = 6;
 export const LAST_ROW = ROWS - 1;
 /** Mana runs on a 20-point scale: 3 on the first turn, +2 every turn after, up to 20. */
 export const MAX_MANA = 20;
+/** First-turn max mana for the enemy; player heroes each have their own (HeroDef.startMana). */
 export const FIRST_TURN_MANA = 3;
 export const MANA_PER_TURN = 2;
 export const MAX_HAND = 10;

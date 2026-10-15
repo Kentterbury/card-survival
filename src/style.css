@@ -316,3 +316,4 @@ button { font-family: inherit; }
 /* Hero-exclusive cards: the hero's name in gold on the type line. */
 .card-type b { color: var(--gold); font-weight: 700; letter-spacing: 0; }
 .hero-card .card-type { opacity: .9; }
+.nw { white-space: nowrap; }

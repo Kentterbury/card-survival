@@ -23,7 +23,7 @@ export const POWERS: Record<string, HeroPower> = {
     cast: (api, t) => api.damage(t, 1),
   },
   charge: {
-    id: 'charge', name: '돌격 명령', cost: 5, target: 'ally',
+    id: 'charge', name: '돌격 명령', cost: 7, target: 'ally',
     text: '아군 하수인 하나에게 +1/+1을 주고 한 칸 전진시킵니다.',
     cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 1, 1); api.advance(t.uid, 1); } },
   },
@@ -56,6 +56,8 @@ export interface HeroDef {
   title: string;
   model: ModelId;
   health: number;
+  /** Max mana on the first turn; it then grows by MANA_PER_TURN as usual. */
+  startMana: number;
   power: string;
   deck: string[];
   blurb: string;
@@ -63,22 +65,22 @@ export interface HeroDef {
 
 export const HEROES: HeroDef[] = [
   {
-    id: 'captain', name: '수비대장', title: '방어', model: 'Knight', health: 36, power: 'guard',
+    id: 'captain', name: '수비대장', title: '방어', model: 'Knight', health: 36, startMana: 2, power: 'guard',
     blurb: '단단한 전열을 세우고 버티며 반격한다.',
     deck: ['squire', 'phalanx', 'phalanx', 'shieldbearer', 'crossbowman', 'crossbowman', 'veteran', 'mace_knight', 'firebolt', 'frostring'],
   },
   {
-    id: 'arcanist', name: '비전술사', title: '주문', model: 'Mage', health: 22, power: 'bolt',
+    id: 'arcanist', name: '비전술사', title: '주문', model: 'Mage', health: 22, startMana: 5, power: 'bolt',
     blurb: '체력은 낮지만 주문과 비전 화살로 멀리서 적을 무너뜨린다.',
     deck: ['apprentice', 'apprentice', 'shieldbearer', 'firebolt', 'firebolt', 'frostring', 'shockwave', 'thunderbolt', 'war_library', 'stormcaller'],
   },
   {
-    id: 'warchief', name: '전쟁 족장', title: '돌격', model: 'Barbarian', health: 32, power: 'charge',
+    id: 'warchief', name: '전쟁 족장', title: '돌격', model: 'Barbarian', health: 32, startMana: 4, power: 'charge',
     blurb: '하수인을 쏟아내고 밀어붙이는 공격형 영웅.',
     deck: ['squire', 'crossbowman', 'phalanx', 'phalanx', 'brawler', 'berserker', 'war_drums', 'firebolt', 'firebolt', 'shockwave'],
   },
   {
-    id: 'hunter', name: '숲의 사냥꾼', title: '원거리', model: 'Rogue_Hooded', health: 20, power: 'aim',
+    id: 'hunter', name: '숲의 사냥꾼', title: '원거리', model: 'Rogue_Hooded', health: 20, startMana: 3, power: 'aim',
     blurb: '방패병 뒤에서 궁수들이 줄째로 쏘아 떨어뜨린다.',
     deck: ['crossbowman', 'crossbowman', 'longbow', 'glider', 'shieldbearer', 'squire', 'firebolt', 'volley', 'frostring', 'regroup'],
   },
