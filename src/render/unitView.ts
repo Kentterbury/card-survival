@@ -59,7 +59,7 @@ export class UnitView {
       this.model = inst.root;
       this.mixer = inst.mixer;
       this.clips = inst.clips;
-      this.anims = animsFor(this.modelId);
+      this.anims = animsFor(this.modelId, this.look);
       // Synty: a per-concept death clip when the library has it (else die() topples the unit).
       const death = useSynty ? deathClipsFor(this.look).find((d) => this.clips.some((c) => c.name === d)) : undefined;
       if (this.anims && death) this.anims = { ...this.anims, death };

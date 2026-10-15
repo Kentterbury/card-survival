@@ -32,6 +32,7 @@ export class Board {
   /** Floor marker under the enemy hero, lit when it is a valid or hovered target. */
   private heroMarker!: THREE.Mesh;
   private readonly torches: { light: THREE.PointLight; base: number; phase: number }[] = [];
+  private readonly flames: { sprite: THREE.Sprite; phase: number }[] = [];
   private shake = 0;
   private readonly camBase = new THREE.Vector3();
 
@@ -109,12 +110,8 @@ export class Board {
     }
     // Side-wall torches; real lights only on the defenders' end to keep the shader light count low.
     for (const [z, lit] of [[-2, true], [-10, false]] as const) {
-      jobs.push(add('torch_mounted', -9.0, z, Math.PI / 2, 2.2));
-      jobs.push(add('torch_mounted', 9.0, z, -Math.PI / 2, 2.2));
-      if (lit) {
-        this.addTorchLight(-8.2, z);
-        this.addTorchLight(8.2, z);
-      }
+      jobs.push(this.addTorch(-9.0, z, Math.PI / 2, 2.2, lit));
+      jobs.push(this.addTorch(9.0, z, -Math.PI / 2, 2.2, lit));
     }
     jobs.push(add('banner_patternA_red', -9.0, -6, Math.PI / 2));
     jobs.push(add('banner_shield_blue', 9.0, -6, -Math.PI / 2));
@@ -124,12 +121,11 @@ export class Board {
     jobs.push(add('wall_gated', 2, -17.5));
     jobs.push(add('wall', 6, -17.5));
     jobs.push(add('rubble_large', -7.6, -16, 0.3));
-    // Torches flanking the gate, lighting the enemy commander's end like the defenders' end.
-    jobs.push(add('torch_mounted', -4.6, -16.95, 0, 2.2));
-    jobs.push(add('torch_mounted', 4.6, -16.95, 0, 2.2));
-    this.addTorchLight(-4.6, -16.2);
-    this.addTorchLight(4.6, -16.2);
-    this.addTorchLight(0, -16.2, 0x7cff9a, 9);
+    // Torches flanking the gate, lighting the enemy commander's end like the defenders' end. They
+    // hang lower than the side ones so the flame and its pool of light stay on screen.
+    jobs.push(this.addTorch(-4.6, -16.95, 0, 1.6, true, 20));
+    jobs.push(this.addTorch(4.6, -16.95, 0, 1.6, true, 20));
+    this.addTorchLight(new THREE.Vector3(0, 2.9, -16.2), 0x7cff9a, 9);
     // The defenders' side.
     jobs.push(add('barrier_column', -6.5, 1.6));
     jobs.push(add('barrier_column', 6.5, 1.6));
@@ -140,11 +136,50 @@ export class Board {
     await Promise.all(jobs);
   }
 
-  private addTorchLight(x: number, z: number, color = 0xff9a3c, intensity = 14) {
+  /** A wall torch with a visible flame; `lit` also gives it a real (flickering) light. */
+  private async addTorch(x: number, z: number, rotY: number, y: number, lit: boolean, intensity = 14) {
+    const o = await instantiateStatic('torch_mounted');
+    o.position.set(x, y, z);
+    o.rotation.y = rotY;
+    this.scene.add(o);
+    // The torch head sits up and out from the wall bracket.
+    const head = new THREE.Vector3(0, 0.62, 0.42).applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY).add(o.position);
+    const flame = new THREE.Sprite(this.flameMaterial());
+    flame.position.copy(head);
+    flame.scale.setScalar(0.9);
+    this.scene.add(flame);
+    const phase = Math.random() * 10;
+    this.flames.push({ sprite: flame, phase });
+    if (lit) this.addTorchLight(head.clone().add(new THREE.Vector3(0, 0.3, 0)).addScaledVector(new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY)), 0.4), 0xff9a3c, intensity, phase);
+  }
+
+  private flameMat: THREE.SpriteMaterial | null = null;
+
+  /** A soft additive glow (white core, orange edge) drawn once on a canvas. */
+  private flameMaterial() {
+    if (!this.flameMat) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d')!;
+      const grad = g.createRadialGradient(32, 36, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255,250,220,1)');
+      grad.addColorStop(0.25, 'rgba(255,200,90,.95)');
+      grad.addColorStop(0.55, 'rgba(255,110,30,.45)');
+      grad.addColorStop(1, 'rgba(255,60,0,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 64, 64);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.flameMat = new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+    }
+    return this.flameMat;
+  }
+
+  private addTorchLight(at: THREE.Vector3, color = 0xff9a3c, intensity = 14, phase = Math.random() * 10) {
     const light = new THREE.PointLight(color, intensity, 11, 1.6);
-    light.position.set(x, 2.9, z);
+    light.position.copy(at);
     this.scene.add(light);
-    this.torches.push({ light, base: intensity, phase: Math.random() * 10 });
+    this.torches.push({ light, base: intensity, phase });
   }
 
   private buildCells() {
@@ -241,6 +276,10 @@ export class Board {
   update(dt: number, time: number) {
     for (const t of this.torches) {
       t.light.intensity = t.base * (0.85 + 0.15 * Math.sin(time * 9 + t.phase) * Math.sin(time * 3.7 + t.phase * 2));
+    }
+    for (const f of this.flames) {
+      const k = 0.9 + 0.12 * Math.sin(time * 11 + f.phase) * Math.sin(time * 4.3 + f.phase * 3);
+      f.sprite.scale.set(1.1 * k, 1.35 * k, 1);
     }
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt * 2.5);

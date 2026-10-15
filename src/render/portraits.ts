@@ -37,7 +37,7 @@ export async function renderPortraits(subjects: { key: string; model: ModelId }[
     } else {
       const inst = await instantiateCharacter(id, key);
       obj = inst.root;
-      const idle = inst.clips.find((c) => c.name === animsFor(id)?.idle);
+      const idle = inst.clips.find((c) => c.name === animsFor(id, key)?.idle);
       if (idle) {
         inst.mixer.clipAction(idle).play();
         inst.mixer.update(0.4);

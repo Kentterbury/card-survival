@@ -94,10 +94,19 @@ export const ANIMS: Partial<Record<ModelId, AnimSet>> = {
   Skeleton_Mage: { idle: 'Idle_Combat', walk: 'Walking_D_Skeletons', attack: 'Spellcast_Shoot', hit: 'Hit_B', death: 'Death_A', spawn: 'Spawn_Ground_Skeletons', cheer: 'Taunt' },
 };
 
-/** The clips a model uses for each role, in whichever asset set is active. */
-export function animsFor(model: ModelId): AnimSet | undefined {
+/**
+ * The clips a unit uses for each role, in whichever asset set is active. In the Synty set the
+ * look's weapons decide: a bow or crossbow shoots, anything else (swords, staffs, daggers, bare
+ * hands) swings, so a dagger scout or a staff-wielding shaman never plays a bow draw.
+ */
+export function animsFor(model: ModelId, key?: string): AnimSet | undefined {
   if (model === 'barrier') return undefined;
-  return useSynty ? SYNTY_ANIMS[model] : ANIMS[model];
+  if (!useSynty) return ANIMS[model];
+  const base = SYNTY_ANIMS[model];
+  const look = lookFor(key, model);
+  if ([look.r, look.l].some((f) => f && /bow/i.test(f))) return { ...base, idle: 'Idle_Bow', attack: 'Shoot' };
+  if (base.attack === 'Shoot' || base.attack === 'Spellcast_Shoot') return { ...base, idle: 'Idle', attack: 'Attack_2' };
+  return base;
 }
 
 let animLibs: { adventurer: THREE.AnimationClip[]; skeleton: THREE.AnimationClip[] } | null = null;
