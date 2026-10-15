@@ -1,4 +1,5 @@
 import { card, KEYWORD_INFO, type CardDef } from '../game/cards';
+import { heroDef } from '../game/heroes';
 import type { Keyword, ModelId } from '../game/types';
 import { SPELL_BACKDROP, spellIconSvg } from './icons';
 
@@ -15,7 +16,7 @@ export function portrait(model: ModelId): string {
 export function createCardElement(defId: string, opts: { attack?: number; health?: number } = {}): HTMLDivElement {
   const def = card(defId);
   const el = document.createElement('div');
-  el.className = `card ${def.type} rarity-${def.rarity}${def.enemy ? ' enemy-card' : ''}`;
+  el.className = `card ${def.type} rarity-${def.rarity}${def.enemy ? ' enemy-card' : ''}${def.hero ? ' hero-card' : ''}`;
   el.dataset.defId = defId;
   el.innerHTML = cardInner(def, opts);
   return el;
@@ -34,7 +35,7 @@ function cardInner(def: CardDef, opts: { attack?: number; health?: number }): st
       ${art}
       <div class="card-cost">${def.cost}</div>
       <div class="card-name"><span>${def.name}</span></div>
-      <div class="card-type">${typeLabel}</div>
+      <div class="card-type">${def.hero ? `<b>${heroDef(def.hero).name}</b> · ` : ''}${typeLabel}</div>
       <div class="card-text"><span>${def.text}</span></div>
       <div class="card-gem"></div>
     </div>

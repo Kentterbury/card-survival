@@ -71,6 +71,8 @@ interface BaseCard {
   text: string;
   /** Cards only the enemy plays (shown with a different frame). */
   enemy?: boolean;
+  /** Hero-exclusive card: only that hero is offered it (rewards, merchant, 탐색). */
+  hero?: string;
 }
 
 export interface MinionCard extends BaseCard {
@@ -397,6 +399,104 @@ const CARD_LIST: CardDef[] = [
     id: 'supply_wagon', name: '보급 마차', type: 'spell', cost: 6, rarity: 'rare', target: 'none', icon: 'potion', ai: { kind: 'discount' },
     text: '내 손패의 모든 카드 비용이 2 줄어듭니다. 카드를 1장 뽑습니다.',
     cast: (api) => { api.modifyHandCosts(-2); api.draw(1); },
+  },
+
+  // ── 수비대장 전용: 보호막과 단단한 전열 ─────────────────────
+  {
+    id: 'c_shieldwall', name: '방패벽', type: 'spell', cost: 4, rarity: 'common', hero: 'captain', target: 'none', icon: 'shield', ai: { kind: 'buffAll' },
+    text: '아군 하수인 모두에게 +1/+3을 부여합니다.',
+    cast: (api) => { for (const u of api.allies()) api.buff(u.uid, 1, 3); },
+  },
+  {
+    id: 'c_shield_bash', name: '방패 강타', type: 'spell', cost: 3, rarity: 'common', hero: 'captain', target: 'foeUnit', icon: 'sword', ai: { kind: 'damage', amount: 3 },
+    text: '적 하수인 하나에게 피해를 3 줍니다. <b>보호막</b>이 있는 아군 하수인 하나마다 피해 +1.',
+    cast: (api, t) => api.damage(t, 3 + api.allies().filter((u) => u.keywords.has('ward')).length),
+  },
+  {
+    id: 'c_standard', name: '깃발 기수', type: 'minion', cost: 5, rarity: 'rare', hero: 'captain', attack: 2, health: 6, model: 'Knight', keywords: ['anchored'],
+    text: '<b>고정</b>. 내 턴이 끝날 때 <b>보호막</b>이 없는 무작위 다른 아군 하수인 하나에게 <b>보호막</b>을 부여합니다.',
+    onEndTurn: (api, self) => {
+      const bare = api.allies().filter((u) => u.uid !== self.uid && !u.keywords.has('ward'));
+      if (bare.length) api.grantKeyword(api.rng.pick(bare).uid, 'ward');
+    },
+  },
+  {
+    id: 'c_commander', name: '근위 기사단장', type: 'minion', cost: 9, rarity: 'epic', hero: 'captain', attack: 5, health: 7, model: 'Knight', keywords: ['ward'], scale: 1.15,
+    text: '<b>보호막</b>. <b>등장 시:</b> 다른 아군 하수인 모두에게 <b>보호막</b>을 부여합니다.',
+    onSummon: (api, self) => { for (const u of api.allies()) if (u.uid !== self.uid) api.grantKeyword(u.uid, 'ward'); },
+  },
+
+  // ── 비전술사 전용: 주문과 비전 ──────────────────────────────
+  {
+    id: 'a_missiles', name: '비전 화살비', type: 'spell', cost: 5, rarity: 'common', hero: 'arcanist', target: 'none', icon: 'bolt', ai: { kind: 'aoe' },
+    text: '무작위 적에게 피해 1을 4번 나누어 줍니다(적 하수인이 없으면 적 영웅).',
+    cast: (api) => { for (let i = 0; i < 4; i++) randomFoeOrHero(api, 1); },
+  },
+  {
+    id: 'a_scholar', name: '비전 학자', type: 'minion', cost: 4, rarity: 'common', hero: 'arcanist', attack: 2, health: 3, model: 'Mage', keywords: ['ranged'], scale: 0.9,
+    text: '<b>사격</b>. <b>등장 시:</b> <b>탐색</b>: 주문 카드 하나.',
+    onSummon: (api) => api.discover('spell'),
+  },
+  {
+    id: 'a_focus', name: '정신 집중', type: 'spell', cost: 5, rarity: 'rare', hero: 'arcanist', target: 'none', icon: 'scroll', ai: { kind: 'draw' },
+    text: '카드를 2장 뽑습니다. 그 뒤 내 손패의 모든 카드 비용이 1 줄어듭니다.',
+    cast: (api) => { api.draw(2); api.modifyHandCosts(-1); },
+  },
+  {
+    id: 'a_storm', name: '비전 폭풍', type: 'spell', cost: 12, rarity: 'epic', hero: 'arcanist', target: 'none', icon: 'storm', ai: { kind: 'aoe' },
+    text: '모든 적 하수인과 적 영웅에게 피해를 3 줍니다.',
+    cast: (api) => { for (const u of api.foes()) api.damage({ kind: 'unit', uid: u.uid }, 3); api.damageFoeHero(3); },
+  },
+
+  // ── 전쟁 족장 전용: 돌격과 밀어붙이기 ───────────────────────
+  {
+    id: 'w_horn', name: '돌격 나팔', type: 'spell', cost: 3, rarity: 'common', hero: 'warchief', target: 'ally', icon: 'sword', ai: { kind: 'buff' },
+    text: '아군 하수인 하나에게 공격력 +2를 주고 두 칸 전진시킵니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 2, 0); api.advance(t.uid, 2); } },
+  },
+  { id: 'w_rider', name: '돌격 기병', type: 'minion', cost: 7, rarity: 'common', hero: 'warchief', attack: 4, health: 4, model: 'Barbarian', keywords: ['dash', 'knockback'], text: '<b>질주</b>. <b>넉백</b>' },
+  {
+    id: 'w_warcry', name: '전투의 함성', type: 'spell', cost: 6, rarity: 'rare', hero: 'warchief', target: 'none', icon: 'sword', ai: { kind: 'buffAll' },
+    text: '아군 하수인 모두에게 +2/+1을 부여합니다.',
+    cast: (api) => { for (const u of api.allies()) api.buff(u.uid, 2, 1); },
+  },
+  {
+    id: 'w_axelord', name: '족장의 도끼잡이', type: 'minion', cost: 11, rarity: 'epic', hero: 'warchief', attack: 6, health: 7, model: 'Barbarian', keywords: ['cleave'], scale: 1.15,
+    text: '<b>휩쓸기</b>. <b>등장 시:</b> 다른 아군 하수인 모두를 한 칸 전진시킵니다.',
+    onSummon: (api, self) => { for (const u of api.allies()) if (u.uid !== self.uid) api.advance(u.uid, 1); },
+  },
+
+  // ── 숲의 사냥꾼 전용: 원거리와 덫 ──────────────────────────
+  {
+    id: 'h_aimed', name: '정밀 사격', type: 'spell', cost: 3, rarity: 'common', hero: 'hunter', target: 'foeUnit', icon: 'arrows', ai: { kind: 'damage', amount: 3 },
+    text: '적 하수인 하나에게 피해를 3 줍니다. 그 하수인이 죽으면 카드를 1장 뽑습니다.',
+    cast: (api, t) => {
+      if (t.kind !== 'unit') return;
+      const u = api.foes().find((f) => f.uid === t.uid);
+      api.damage(t, 3);
+      if (u && u.health <= 0) api.draw(1);
+    },
+  },
+  {
+    id: 'h_trapper', name: '덫 사냥꾼', type: 'minion', cost: 5, rarity: 'common', hero: 'hunter', attack: 2, health: 3, model: 'Rogue_Hooded', keywords: ['ranged'],
+    text: '<b>사격</b>. <b>등장 시:</b> 이 줄의 맨 앞 적을 빙결시킵니다.',
+    onSummon: (api, self) => { const f = api.frontFoe(self.lane); if (f) api.freeze(f.uid); },
+  },
+  {
+    id: 'h_sniper', name: '숲의 저격수', type: 'minion', cost: 9, rarity: 'rare', hero: 'hunter', attack: 3, health: 5, model: 'Rogue', keywords: ['ranged', 'pierce'],
+    text: '<b>사격</b>. <b>관통</b>. <b>등장 시:</b> 무작위 적에게 피해를 3 줍니다.',
+    onSummon: (api) => randomFoeOrHero(api, 3),
+  },
+  {
+    id: 'h_rain', name: '화살비', type: 'spell', cost: 10, rarity: 'epic', hero: 'hunter', target: 'none', icon: 'arrows', ai: { kind: 'aoe' },
+    text: '모든 줄의 맨 앞 적에게 피해를 3 줍니다. 비어 있는 줄마다 적 영웅에게 피해 1.',
+    cast: (api) => {
+      for (let lane = 0; lane < 5; lane++) {
+        const m = api.frontFoe(lane);
+        if (m) api.damage({ kind: 'unit', uid: m.uid }, 3);
+        else api.damageFoeHero(1);
+      }
+    },
   },
 
   // ── Enemy units ────────────────────────────────────────────

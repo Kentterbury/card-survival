@@ -33,10 +33,35 @@ const BUNDLES: (RewardBundle & { tier: number })[] = [
   { id: 'cataclysm', name: '대재앙', theme: '전장 정리', tier: 3, cards: ['pyroblast', 'flamewave', 'thunderbolt'] },
 ];
 
-/** `cleared` is how many stages have been beaten so far (1 after the first stage). */
-export function rollRewards(rng: Rng, cleared: number): RewardBundle[] {
+/** Bundles of hero-exclusive cards; one is always among the offers for that hero. */
+const HERO_BUNDLES: (RewardBundle & { tier: number; hero: string })[] = [
+  { id: 'bulwark', name: '방패 대열', theme: '수비대장 전용 · 보호막', hero: 'captain', tier: 1, cards: ['c_shieldwall', 'c_shield_bash', 'phalanx'] },
+  { id: 'banner', name: '수비대의 깃발', theme: '수비대장 전용 · 보호막 유지', hero: 'captain', tier: 2, cards: ['c_standard', 'c_shield_bash', 'shieldbearer'] },
+  { id: 'royalguard', name: '근위대', theme: '수비대장 전용 · 전설', hero: 'captain', tier: 3, cards: ['c_commander', 'c_shieldwall', 'veteran'] },
+  { id: 'arcana', name: '비전 입문', theme: '비전술사 전용 · 비전 화살', hero: 'arcanist', tier: 1, cards: ['a_missiles', 'a_scholar', 'firebolt'] },
+  { id: 'study', name: '비전 연구', theme: '비전술사 전용 · 드로우', hero: 'arcanist', tier: 2, cards: ['a_focus', 'a_scholar', 'frostring'] },
+  { id: 'tempest', name: '비전 폭풍', theme: '비전술사 전용 · 전설', hero: 'arcanist', tier: 3, cards: ['a_storm', 'a_missiles', 'apprentice'] },
+  { id: 'charge', name: '돌격대', theme: '전쟁 족장 전용 · 돌격', hero: 'warchief', tier: 1, cards: ['w_horn', 'w_rider', 'phalanx'] },
+  { id: 'warhost', name: '전쟁 무리', theme: '전쟁 족장 전용 · 전체 강화', hero: 'warchief', tier: 2, cards: ['w_warcry', 'w_rider', 'brawler'] },
+  { id: 'axelord', name: '족장의 친위대', theme: '전쟁 족장 전용 · 전설', hero: 'warchief', tier: 3, cards: ['w_axelord', 'w_horn', 'berserker'] },
+  { id: 'traps', name: '덫과 화살', theme: '숲의 사냥꾼 전용 · 빙결', hero: 'hunter', tier: 1, cards: ['h_trapper', 'h_aimed', 'crossbowman'] },
+  { id: 'sniper', name: '저격', theme: '숲의 사냥꾼 전용 · 정밀 사격', hero: 'hunter', tier: 2, cards: ['h_sniper', 'h_aimed', 'longbow'] },
+  { id: 'arrowstorm', name: '화살 폭풍', theme: '숲의 사냥꾼 전용 · 전설', hero: 'hunter', tier: 3, cards: ['h_rain', 'h_trapper', 'glider'] },
+];
+
+/** Every bundle, for data checks. */
+export const ALL_BUNDLES: RewardBundle[] = [...BUNDLES, ...HERO_BUNDLES];
+
+/**
+ * `cleared` is how many stages have been beaten so far (1 after the first stage).
+ * Offers one bundle of the hero's own cards (the best tier unlocked) and two general ones.
+ */
+export function rollRewards(rng: Rng, cleared: number, hero = ''): RewardBundle[] {
   const maxTier = cleared >= 3 ? 3 : cleared >= 2 ? 2 : 1;
+  const mine = rng.shuffle(HERO_BUNDLES.filter((b) => b.hero === hero && b.tier <= maxTier)).sort((a, b) => b.tier - a.tier);
   const newest = rng.shuffle(BUNDLES.filter((b) => b.tier === maxTier));
   const rest = rng.shuffle(BUNDLES.filter((b) => b.tier <= maxTier && b !== newest[0]));
-  return [newest[0], ...rest.slice(0, 2)].map(({ tier: _tier, ...b }) => b);
+  const general = [newest[0], ...rest.slice(0, 2)];
+  const picks = mine[0] ? [mine[0], ...general.slice(0, 2)] : general;
+  return rng.shuffle(picks).map(({ id, name, theme, cards }) => ({ id, name, theme, cards }));
 }

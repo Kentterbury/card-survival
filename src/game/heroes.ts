@@ -63,7 +63,7 @@ export interface HeroDef {
 
 export const HEROES: HeroDef[] = [
   {
-    id: 'captain', name: '수비대장', title: '방어', model: 'Knight', health: 32, power: 'guard',
+    id: 'captain', name: '수비대장', title: '방어', model: 'Knight', health: 36, power: 'guard',
     blurb: '단단한 전열을 세우고 버티며 반격한다.',
     deck: ['squire', 'phalanx', 'phalanx', 'shieldbearer', 'crossbowman', 'crossbowman', 'veteran', 'mace_knight', 'firebolt', 'frostring'],
   },

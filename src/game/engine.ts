@@ -105,7 +105,7 @@ export class Game {
     s.deckList.push(...bundle.cards);
     s.rewards = [];
     s.phase = 'camp';
-    s.shop = rollShop(this.rng);
+    s.shop = rollShop(this.rng, s.heroId);
     return [];
   }
 
@@ -602,7 +602,7 @@ export class Game {
         this.emit({ type: 'victory' });
       } else {
         s.phase = 'reward';
-        s.rewards = rollRewards(this.rng, s.stagesCleared);
+        s.rewards = rollRewards(this.rng, s.stagesCleared, s.heroId);
       }
       return true;
     }
@@ -626,9 +626,11 @@ export class Game {
   }
 
   /** Random player-collectible cards of a type, for 탐색. */
-  private discoverOptions(type: 'minion' | 'spell'): string[] {
+  /** 탐색 pool: player cards of a type, including the player's own hero cards (never another hero's). */
+  private discoverOptions(type: 'minion' | 'spell', side: Side): string[] {
+    const hero = side === 'player' ? this.state.heroId : '';
     const pool = Object.values(CARDS)
-      .filter((c) => c.type === type && !c.enemy && c.id !== 'barricade_token')
+      .filter((c) => c.type === type && !c.enemy && c.id !== 'barricade_token' && (!c.hero || c.hero === hero))
       .map((c) => c.id);
     return this.rng.shuffle(pool).slice(0, 3);
   }
@@ -790,7 +792,7 @@ export class Game {
       },
       addCopy: (defId, costMod) => this.addToHand(side, { iid: this.nextUid++, defId, costMod }, 'copy'),
       discover: (type, costMod = 0) => {
-        const options = this.discoverOptions(type);
+        const options = this.discoverOptions(type, side);
         if (options.length === 0) return;
         if (side === 'player') {
           // The player picks in the UI (or the test bot via aiTakeTurn).

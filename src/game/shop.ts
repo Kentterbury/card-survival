@@ -26,13 +26,14 @@ export interface ShopState {
   healed: boolean;
 }
 
-/** Cards the player can be offered: non-basic player cards (no enemy cards or tokens). */
-const POOL = Object.values(CARDS).filter((c) => !c.enemy && c.rarity !== 'basic');
+/** General cards the merchant sells: non-basic player cards (no enemy, hero-exclusive or token cards). */
+const POOL = Object.values(CARDS).filter((c) => !c.enemy && !c.hero && c.rarity !== 'basic');
 
-/** Two commons, two rares and one epic, different cards each. */
-export function rollShop(rng: Rng): ShopState {
+/** Two commons, two rares and one epic, plus one card exclusive to the hero; all different. */
+export function rollShop(rng: Rng, hero = ''): ShopState {
   const pick = (rarity: Rarity, n: number) => rng.shuffle(POOL.filter((c) => c.rarity === rarity)).slice(0, n);
-  const cards = [...pick('common', 2), ...pick('rare', 2), ...pick('epic', 1)];
+  const own = rng.shuffle(Object.values(CARDS).filter((c) => c.hero === hero)).slice(0, 1);
+  const cards = [...pick('common', 2), ...pick('rare', 2), ...pick('epic', 1), ...own];
   return {
     offers: cards.map((c) => ({ defId: c.id, price: CARD_PRICE[c.rarity], sold: false })),
     removed: false,

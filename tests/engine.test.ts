@@ -3,6 +3,8 @@ import { card, CARDS, STARTER_DECK, type MinionCard } from '../src/game/cards';
 import { Game, unitSpeed } from '../src/game/engine';
 import { heroDef, POWERS } from '../src/game/heroes';
 import { CARD_PRICE, HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, stageGold } from '../src/game/shop';
+import { ALL_BUNDLES, rollRewards } from '../src/game/rewards';
+import { Rng } from '../src/game/rng';
 import { STAGES } from '../src/game/stages';
 import { FIRST_TURN_MANA, LAST_ROW, MANA_PER_TURN, MAX_MANA, MAX_RESERVE, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
@@ -319,7 +321,8 @@ describe('new cards', () => {
     const { Rng } = await import('../src/game/rng');
     const seen = new Set<string>(STARTER_DECK);
     const rng = new Rng(1);
-    for (let i = 0; i < 400; i++) for (const b of rollRewards(rng, 1 + (i % 4))) for (const id of b.cards) { expect(CARDS[id]).toBeDefined(); seen.add(id); }
+    const heroes = ['captain', 'arcanist', 'warchief', 'hunter'];
+    for (let i = 0; i < 800; i++) for (const b of rollRewards(rng, 1 + (i % 4), heroes[Math.floor(i / 4) % 4])) for (const id of b.cards) { expect(CARDS[id]).toBeDefined(); seen.add(id); }
     const obtainable = Object.values(CARDS).filter((c) => !c.enemy && c.id !== 'barricade_token').map((c) => c.id);
     expect(obtainable.filter((id) => !seen.has(id))).toEqual([]);
   });
@@ -730,16 +733,18 @@ describe('gold and the merchant', () => {
     expect(stageGold(0, 1)).toBeGreaterThan(stageGold(0, 15));
   });
 
-  it('the merchant offers five different cards at rarity prices', () => {
+  it('the merchant offers six different cards at rarity prices, one of them for our hero', () => {
     const g = atCamp();
     const offers = g.state.shop!.offers;
-    expect(offers).toHaveLength(5);
-    expect(new Set(offers.map((o) => o.defId)).size).toBe(5);
+    expect(offers).toHaveLength(6);
+    expect(new Set(offers.map((o) => o.defId)).size).toBe(6);
     for (const o of offers) {
       const c = card(o.defId);
       expect(c.enemy).toBeFalsy();
+      expect(!c.hero || c.hero === g.state.heroId).toBe(true);
       expect(o.price).toBe(CARD_PRICE[c.rarity]);
     }
+    expect(offers.filter((o) => card(o.defId).hero === g.state.heroId)).toHaveLength(1);
   });
 
   it('buying a card spends gold and adds it to the deck, once', () => {
@@ -773,6 +778,116 @@ describe('gold and the merchant', () => {
     g.campRest();
     expect(g.state.shop).toBeNull();
     expect(g.shopBuy(0)).toBe(false);
+  });
+});
+
+describe('hero-exclusive cards', () => {
+  const HERO_IDS = ['captain', 'arcanist', 'warchief', 'hunter'];
+  const heroGame = (hero: string, hand: string[]) => {
+    const g = new Game(7);
+    g.startRun(undefined, hero);
+    g.state.units = [];
+    g.side('player').hand = hand.map((defId, i) => ({ iid: 500 + i, defId }));
+    g.side('player').mana = 20;
+    return g;
+  };
+
+  it('every hero has four exclusive cards, and rewards always include one bundle of them', () => {
+    for (const h of HERO_IDS) {
+      expect(Object.values(CARDS).filter((c) => c.hero === h)).toHaveLength(4);
+      for (let cleared = 1; cleared <= 4; cleared++) {
+        const offers = rollRewards(new Rng(cleared * 13), cleared, h);
+        expect(offers).toHaveLength(3);
+        const cardsOffered = offers.flatMap((b) => b.cards).map((id) => card(id));
+        expect(cardsOffered.some((c) => c.hero === h)).toBe(true);
+        expect(cardsOffered.every((c) => !c.hero || c.hero === h)).toBe(true);
+      }
+    }
+    for (const b of ALL_BUNDLES) for (const id of b.cards) expect(CARDS[id]).toBeDefined();
+  });
+
+  it('탐색 never offers another hero\'s cards', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const g = new Game(seed);
+      g.startRun(undefined, 'hunter');
+      g.side('player').hand = [{ iid: 1, defId: 'war_library' }];
+      g.side('player').mana = 20;
+      g.playCard(0, { kind: 'none' });
+      for (const id of g.state.choice!.options) expect([undefined, 'hunter']).toContain(card(id).hero);
+    }
+  });
+
+  it('방패 강타 deals 1 more per shielded ally; 근위 기사단장 shields every other ally', () => {
+    const g = heroGame('captain', ['c_commander', 'c_shield_bash']);
+    const a = place(g, 'squire', 'player', 0, 1);
+    const b = place(g, 'squire', 'player', 1, 1);
+    const foe = place(g, 'sk_brute', 'enemy', 3, 4);
+    g.playCard(0, { kind: 'slot', lane: 2 });
+    expect(a.keywords.has('ward') && b.keywords.has('ward')).toBe(true);
+    g.playCard(0, { kind: 'unit', uid: foe.uid });
+    expect(foe.health).toBe(foe.maxHealth - 6); // 3 + three shielded allies
+  });
+
+  it('깃발 기수 shields an unshielded ally at the end of our turn', () => {
+    const g = heroGame('captain', []);
+    place(g, 'c_standard', 'player', 0, 0);
+    const ally = place(g, 'squire', 'player', 2, 1);
+    g.side('enemy').hand = [];
+    g.endTurn();
+    expect(ally.keywords.has('ward')).toBe(true);
+  });
+
+  it('비전 화살비 splits 4 damage; 비전 폭풍 hits every foe and the hero; 정신 집중 draws and discounts', () => {
+    const g = heroGame('arcanist', ['a_missiles', 'a_storm', 'a_focus', 'meteor']);
+    const foes = [place(g, 'sk_brute', 'enemy', 0, 4), place(g, 'sk_brute', 'enemy', 4, 4)];
+    g.playCard(0, { kind: 'none' });
+    expect(foes.reduce((n, u) => n + u.maxHealth - u.health, 0)).toBe(4);
+    const hp = g.side('enemy').hero.health;
+    g.playCard(0, { kind: 'none' });
+    expect(g.side('enemy').hero.health).toBe(hp - 3);
+    expect(foes.reduce((n, u) => n + u.maxHealth - u.health, 0)).toBe(10);
+    g.side('player').mana = 20;
+    const size = g.side('player').hand.length;
+    g.playCard(0, { kind: 'none' });
+    expect(g.side('player').hand).toHaveLength(size - 1 + 2);
+    const meteor = g.side('player').hand.find((c) => c.defId === 'meteor')!;
+    expect(g.costOf(meteor)).toBe(card('meteor').cost - 1);
+  });
+
+  it('비전 학자 starts a 탐색 for a spell when summoned', () => {
+    const g = heroGame('arcanist', ['a_scholar']);
+    g.playCard(0, { kind: 'slot', lane: 1 });
+    expect(g.state.choice?.options.every((id) => card(id).type === 'spell')).toBe(true);
+  });
+
+  it('돌격 나팔 pushes an ally two rows; 족장의 도끼잡이 moves the other allies up', () => {
+    const g = heroGame('warchief', ['w_horn', 'w_axelord']);
+    const a = place(g, 'squire', 'player', 0, 0);
+    const b = place(g, 'squire', 'player', 1, 0);
+    g.playCard(0, { kind: 'unit', uid: a.uid });
+    expect(a.row).toBe(2);
+    expect(a.attack).toBe(3);
+    g.playCard(0, { kind: 'slot', lane: 3 });
+    expect(a.row).toBe(3);
+    expect(b.row).toBe(1);
+  });
+
+  it('정밀 사격 draws when it kills; 덫 사냥꾼 freezes the lane front; 화살비 hits every lane', () => {
+    const g = heroGame('hunter', ['h_aimed', 'h_trapper', 'h_rain']);
+    const weak = place(g, 'sk_minion', 'enemy', 0, 3);
+    const size = g.side('player').hand.length;
+    g.playCard(0, { kind: 'unit', uid: weak.uid });
+    expect(g.unit(weak.uid)).toBeUndefined();
+    expect(g.side('player').hand).toHaveLength(size - 1 + 1);
+    const front = place(g, 'sk_warrior', 'enemy', 2, 3);
+    const idx = g.side('player').hand.findIndex((c) => c.defId === 'h_trapper');
+    g.playCard(idx, { kind: 'slot', lane: 2 });
+    expect(front.frozen).toBe(true);
+    const hp = g.side('enemy').hero.health;
+    const rain = g.side('player').hand.findIndex((c) => c.defId === 'h_rain');
+    g.playCard(rain, { kind: 'none' });
+    expect(front.health).toBe(front.maxHealth - 3);
+    expect(g.side('enemy').hero.health).toBe(hp - 4); // four empty lanes
   });
 });
 
