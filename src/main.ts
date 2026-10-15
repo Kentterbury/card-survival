@@ -6,7 +6,7 @@ import { heroDef, HEROES, POWERS } from './game/heroes';
 import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE } from './game/shop';
 import { STAGES } from './game/stages';
 import {
-  HERO_POWER_COST, LAST_ROW, MAX_MANA, RANGED_RANGE, ROWS,
+  HERO_POWER_COST, LAST_ROW, MAX_MANA, other, RANGED_RANGE, ROWS,
   type GameEvent, type HitTarget, type Side, type Target, type Unit,
 } from './game/types';
 import { CHARACTER_MODELS, preloadAll } from './render/assets';
@@ -115,7 +115,7 @@ class App {
     this.game = new Game(Date.now() & 0x7fffffff);
     const hero = heroDef(resume?.hero ?? heroId);
     $('hero-portrait').style.backgroundImage = `url(${portrait(hero.model)})`;
-    const icon = { bolt: 'bolt', insight: 'scroll', charge: 'sword' } as const;
+    const icon = { bolt: 'bolt', insight: 'scroll', charge: 'sword', aim: 'arrows' } as const;
     $('hero-power').querySelector<HTMLElement>('.hp-icon')!.innerHTML = spellIconSvg(icon[hero.power as keyof typeof icon] ?? 'bolt');
     $('hud').classList.remove('hidden');
     await this.play(this.game.startRun(undefined, hero.id, resume));
@@ -449,6 +449,16 @@ class App {
           const v = this.views.get(e.target.uid);
           if (v) this.fx.burst(v.group.position.clone().setY(1), 0xffd34d, 20, 2.5);
           await wait(0.15);
+        } else if (e.target.kind === 'lane') {
+          // Aim at the nearest live foe view in that lane (the unit may already be dead in the final state).
+          const lane = e.target.lane;
+          const from = this.casterPos(e.side);
+          const laneX = cellPos(lane, 0).x;
+          const front = [...this.views.values()]
+            .filter((v) => !v.dead && v.side === other(e.side) && Math.abs(v.group.position.x - laneX) < 0.5)
+            .sort((a, b) => a.group.position.distanceTo(from) - b.group.position.distanceTo(from))[0];
+          const to = front ? front.group.position.clone().setY(1.1 * front.scale) : this.hitPos(other(e.side), lane);
+          await this.fx.projectile(this.casterPos(e.side), to, 'arrow', 22);
         } else if (e.target.kind === 'none') {
           this.fx.burst(this.casterPos(e.side), 0x9ad8ff, 20, 2);
           await wait(0.15);

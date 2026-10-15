@@ -26,6 +26,16 @@ export const POWERS: Record<string, HeroPower> = {
     text: '아군 하수인 하나에게 +1/+1을 주고 한 칸 전진시킵니다.',
     cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 1, 1); api.advance(t.uid, 1); } },
   },
+  aim: {
+    id: 'aim', name: '조준 사격', target: 'lane',
+    text: '줄 하나의 맨 앞 적 하수인에게 피해를 2 줍니다. 줄이 비었으면 적 영웅에게 피해 1.',
+    cast: (api, t) => {
+      if (t.kind !== 'lane') return;
+      const m = api.frontFoe(t.lane);
+      if (m) api.damage({ kind: 'unit', uid: m.uid }, 2);
+      else api.damageFoeHero(1);
+    },
+  },
   // Enemy commanders
   summon: {
     id: 'summon', name: '망자 소환', target: 'slot',
@@ -60,6 +70,11 @@ export const HEROES: HeroDef[] = [
     id: 'warchief', name: '전쟁 족장', title: '돌격', model: 'Barbarian', health: 32, power: 'charge',
     blurb: '하수인을 쏟아내고 밀어붙이는 공격형 영웅.',
     deck: ['squire', 'crossbowman', 'phalanx', 'phalanx', 'brawler', 'berserker', 'war_drums', 'firebolt', 'firebolt', 'shockwave'],
+  },
+  {
+    id: 'hunter', name: '숲의 사냥꾼', title: '원거리', model: 'Rogue_Hooded', health: 22, power: 'aim',
+    blurb: '방패병 뒤에서 궁수들이 줄째로 쏘아 떨어뜨린다.',
+    deck: ['crossbowman', 'crossbowman', 'longbow', 'glider', 'shieldbearer', 'squire', 'firebolt', 'volley', 'frostring', 'regroup'],
   },
 ];
 

@@ -210,7 +210,7 @@ const CARD_LIST: CardDef[] = [
 
   // ── Player spells ──────────────────────────────────────────
   {
-    id: 'firebolt', name: '불꽃 화살', type: 'spell', cost: 1, rarity: 'basic', target: 'foe', icon: 'fire', ai: { kind: 'damage', amount: 3 },
+    id: 'firebolt', name: '불꽃 화살', type: 'spell', cost: 2, rarity: 'basic', target: 'foe', icon: 'fire', ai: { kind: 'damage', amount: 3 },
     text: '적 하나(영웅 포함)에게 피해를 3 줍니다.', cast: (api, t) => api.damage(t, 3),
   },
   {
@@ -289,7 +289,7 @@ const CARD_LIST: CardDef[] = [
     cast: (api) => { for (let lane = 0; lane < 5; lane++) hitLaneFront(api, lane, 1); },
   },
   {
-    id: 'execute', name: '처형', type: 'spell', cost: 2, rarity: 'common', target: 'foeUnit', icon: 'skull', ai: { kind: 'damage', amount: 2 },
+    id: 'execute', name: '처형', type: 'spell', cost: 3, rarity: 'common', target: 'foeUnit', icon: 'skull', ai: { kind: 'damage', amount: 2 },
     text: '적 하수인 하나에게 피해를 2 줍니다. 이미 피해를 입은 하수인이면 처치합니다.',
     cast: (api, t) => {
       if (t.kind !== 'unit') return;

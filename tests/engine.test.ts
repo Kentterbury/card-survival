@@ -6,6 +6,7 @@ import { CARD_PRICE, HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, stageGold } from '..
 import { STAGES } from '../src/game/stages';
 import { LAST_ROW, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
+import { aiTakeTurn } from '../src/game/ai';
 
 const START_HP = heroDef('captain').health;
 
@@ -153,6 +154,7 @@ describe('spells', () => {
     const g = freshGame(['firebolt', 'firebolt', 'firebolt', 'firebolt', 'firebolt']);
     expect(g.cardTargets(0).some((t) => t.kind === 'hero' && t.side === 'enemy')).toBe(true);
     const hp = g.side('enemy').hero.health;
+    g.side('player').mana = 2;
     g.playCard(0, { kind: 'hero', side: 'enemy' });
     expect(g.side('enemy').hero.health).toBe(hp - 3);
   });
@@ -585,7 +587,7 @@ describe('utility cards', () => {
     g.playCard(0, { kind: 'none' });
     const hand = g.side('player').hand;
     expect(g.costOf(hand.find((c) => c.defId === 'meteor')!)).toBe(5);
-    expect(g.costOf(hand.find((c) => c.defId === 'firebolt')!)).toBe(0);
+    expect(g.costOf(hand.find((c) => c.defId === 'firebolt')!)).toBe(1);
   });
 
   it('the enemy resolves its own 탐색-free utility (e_hex locks one of our cards)', () => {
@@ -627,6 +629,35 @@ describe('heroes, camp and saves', () => {
     expect(u.attack).toBe(2);
     expect(u.health).toBe(4);
     expect(u.row).toBe(2);
+  });
+
+  it('조준 사격 hits the front foe in a lane for 2, or the enemy hero for 1 when the lane is empty', () => {
+    const g = new Game(4);
+    g.startRun(undefined, 'hunter');
+    g.state.units = [];
+    const far = place(g, 'sk_warrior', 'enemy', 1, 5);
+    const near = place(g, 'sk_warrior', 'enemy', 1, 3);
+    g.side('player').mana = 4;
+    g.heroPower({ kind: 'lane', lane: 1 });
+    expect(near.health).toBe(near.maxHealth - 2);
+    expect(far.health).toBe(far.maxHealth);
+    g.side('player').powerUsed = false;
+    const hp = g.side('enemy').hero.health;
+    g.heroPower({ kind: 'lane', lane: 3 });
+    expect(g.side('enemy').hero.health).toBe(hp - 1);
+  });
+
+  it('the AI aims 조준 사격 at a unit it can kill', () => {
+    const g = new Game(4);
+    g.startRun(undefined, 'hunter');
+    g.state.units = [];
+    g.side('player').hand = [];
+    const big = place(g, 'sk_warrior', 'enemy', 0, 4);
+    const weak = place(g, 'sk_minion', 'enemy', 3, 4);
+    g.side('player').mana = 2;
+    aiTakeTurn(g, 'player');
+    expect(g.unit(weak.uid)).toBeUndefined();
+    expect(big.health).toBe(big.maxHealth);
   });
 
   it('the camp can trim a card instead of resting', () => {

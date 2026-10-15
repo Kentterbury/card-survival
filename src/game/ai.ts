@@ -170,6 +170,21 @@ function pickPowerTarget(g: Game, side: Side): Target | null {
     const best = allies.sort((a, b) => b.attack - a.attack)[0];
     return best ? { kind: 'unit', uid: best.uid } : null;
   }
+  if (kind === 'lane') {
+    // 조준 사격: kill a front unit if possible (strongest first), else hit the strongest one, else the hero.
+    const fronts = targets.flatMap((t) => {
+      if (t.kind !== 'lane') return [];
+      const u = g.state.units.filter((x) => x.side !== side && x.lane === t.lane)
+        .sort((a, b) => (side === 'player' ? a.row - b.row : b.row - a.row))[0];
+      return [{ lane: t.lane, u }];
+    });
+    const hittable = fronts.filter((f) => f.u && !f.u.keywords.has('ward'));
+    const kill = hittable.filter((f) => f.u!.health <= 2).sort((a, b) => b.u!.attack - a.u!.attack)[0];
+    const strongest = hittable.sort((a, b) => b.u!.attack - a.u!.attack)[0];
+    const empty = fronts.find((f) => !f.u);
+    const pick = kill ?? strongest ?? empty;
+    return pick ? { kind: 'lane', lane: pick.lane } : null;
+  }
   if (targets[0].kind === 'slot') {
     const lanes = targets.flatMap((t) => (t.kind === 'slot' ? [t.lane] : []));
     return { kind: 'slot', lane: pickLane(g, side, lanes) };
