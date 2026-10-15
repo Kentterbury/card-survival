@@ -865,6 +865,18 @@ class App {
   private bindInput() {
     window.addEventListener('pointermove', (e) => this.onMove(e));
     window.addEventListener('pointerup', (e) => this.onUp(e));
+    // iOS Safari cancels a touch when it decides the swipe is its own gesture (e.g. an upward
+    // swipe from the bottom edge brings its toolbar back). Keep the card in hand, aimed, so the
+    // next tap picks the target instead of leaving a half-dragged card stuck on screen.
+    window.addEventListener('pointercancel', () => this.onCancel());
+    // iOS also needs touchmove itself prevented to keep its page gestures (toolbar, bounce,
+    // pinch) out of a drag; touch-action alone is not always enough there. Scrollable panels
+    // (card book, modals) keep their scrolling.
+    document.addEventListener('touchmove', (e) => {
+      const t = e.target as Element | null;
+      if (!t?.closest?.('.book-grid, .book-detail-inner, .panel')) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
     $('scene').addEventListener('pointerdown', (e) => this.onBoardDown(e));
     $('enemy-frame').addEventListener('pointerdown', (e) => {
       this.pointer = { x: e.clientX, y: e.clientY };
@@ -986,6 +998,8 @@ class App {
     }
     el.classList.remove('hover');
     $('inspect').classList.remove('show');
+    // Keep getting this finger's moves even when it leaves the card (and the card moves with it).
+    try { el.setPointerCapture(e.pointerId); } catch { /* not supported */ }
     sound.play('draw');
     this.startAim({ kind: 'card', handIndex: index, el, sticky: false, x0: e.clientX, y0: e.clientY, moved: false });
   }
@@ -1014,6 +1028,16 @@ class App {
       }
     }
     this.updateAimVisuals();
+  }
+
+  private onCancel() {
+    const aim = this.aim;
+    if (!aim || aim.sticky) return;
+    aim.sticky = true;
+    if (aim.kind === 'card') aim.el.classList.replace('dragging', 'aiming');
+    if (aim.kind === 'card') aim.el.style.transform = '';
+    this.updateAimVisuals();
+    if (aim.kind === 'card' && !$('hint').classList.contains('show')) this.showHint('대상을 탭하세요', 2500);
   }
 
   private onUp(e: PointerEvent) {
@@ -1097,8 +1121,12 @@ class App {
     return {};
   }
 
+  /** Over the hand itself: the strip the cards actually cover, not a fixed share of the screen. */
   private overHand(y: number) {
-    return y > window.innerHeight * 0.8;
+    const cards = $('hand').querySelectorAll<HTMLElement>('.card:not(.aiming):not(.dragging)');
+    let top = window.innerHeight * 0.86;
+    for (const c of cards) top = Math.min(top, c.getBoundingClientRect().top + c.offsetHeight * 0.35);
+    return y > Math.max(top, window.innerHeight * 0.7);
   }
 
   /** Turns a pointer position into a target for the current aim, if any. */
