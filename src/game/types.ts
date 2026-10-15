@@ -18,7 +18,9 @@ export const homeRow = (s: Side): number => (s === 'player' ? 0 : LAST_ROW);
 export type Keyword =
   | 'swift' | 'ranged' | 'ward'
   | 'dash' | 'anchored' | 'knockback' | 'pierce' | 'flying' | 'formation' | 'lifesteal' | 'undying'
-  | 'cleave' | 'thorns' | 'cover' | 'regenerate' | 'enrage' | 'vanguard';
+  | 'cleave' | 'thorns' | 'cover' | 'regenerate' | 'enrage' | 'vanguard'
+  /** 환영: a copy that deals no damage and vanishes when hit. */
+  | 'illusion';
 
 /** Attack bonus a `formation` unit gets with an ally beside it. */
 export const FORMATION_BONUS = 2;
@@ -30,21 +32,38 @@ export const THORNS_DAMAGE = 2;
 export type ModelId =
   | 'Knight' | 'Barbarian' | 'Mage' | 'Rogue' | 'Rogue_Hooded'
   | 'Skeleton_Minion' | 'Skeleton_Warrior' | 'Skeleton_Rogue' | 'Skeleton_Mage'
-  | 'barrier';
+  | 'barrier' | 'ice_wall';
+
+/** Structures: walls with no character model (바리케이드, 빙벽). */
+export type StructureModel = 'barrier' | 'ice_wall';
+export type CharModel = Exclude<ModelId, StructureModel>;
+export const isStructure = (m: ModelId): m is StructureModel => m === 'barrier' || m === 'ice_wall';
 
 export type Target =
   | { kind: 'none' }
   | { kind: 'unit'; uid: number }
   | { kind: 'hero'; side: Side }
   | { kind: 'lane'; lane: number }
-  | { kind: 'slot'; lane: number };
+  | { kind: 'slot'; lane: number }
+  /** Any cell on the board (빙벽: the left cell of a horizontal pair). */
+  | { kind: 'cell'; lane: number; row: number }
+  /** A unit and a cell for it (환영: copy it there; 염력: move it there). */
+  | { kind: 'unitTo'; uid: number; lane: number; row: number };
 
 /**
  * What a card may target, relative to whoever plays it:
  * `foe` = an opposing unit or the opposing hero, `foeUnit` = opposing units only,
  * `ally` = own units, `lane` = a whole lane, `slot` = an empty cell on the own home row.
  */
-export type TargetKind = 'none' | 'foe' | 'foeUnit' | 'ally' | 'lane' | 'slot';
+export type TargetKind = 'none' | 'foe' | 'foeUnit' | 'ally' | 'lane' | 'slot'
+  /** 빙벽: two empty cells side by side, anywhere. */
+  | 'wallCell'
+  /** Any unit or structure, either side. */
+  | 'anyUnit'
+  /** 환영: an ally, then an empty cell on the own home row. */
+  | 'allySlot'
+  /** 염력: any unit, then the cell behind it or beside it. */
+  | 'move';
 
 export interface Unit {
   uid: number;
@@ -64,7 +83,12 @@ export interface Unit {
   speed: number;
   /** Cells ahead this unit can strike (1 = melee). */
   range: number;
+  /** 빙결: skips its actions and takes no damage. */
   frozen: boolean;
+  /** Own turns a freeze still lasts (missing = 1). */
+  frozenTurns?: number;
+  /** Structures that melt: own turns left before it disappears (빙벽). */
+  lifetime?: number;
   /** Summoned this turn: does not act at the end of it unless `swift`. */
   fresh: boolean;
 }
@@ -91,6 +115,8 @@ export interface Hero {
   scale: number;
   health: number;
   maxHealth: number;
+  /** 보호막 on a hero: absorbs this much damage first (얼음 방패). */
+  armor?: number;
 }
 
 export interface SideState {
@@ -100,6 +126,8 @@ export interface SideState {
   powerUsed: boolean;
   /** Skip the draw at the start of the next turn (망각의 저주). */
   skipDraw: boolean;
+  /** 주문 강화: bonus damage for each hit of the next spell played this turn. */
+  empower: number;
   drawPile: CardInstance[];
   hand: CardInstance[];
   discard: CardInstance[];
@@ -138,6 +166,23 @@ export type GameEvent =
   | { type: 'notice'; side: Side; text: string }
   | { type: 'choice'; side: Side; options: string[] }
   | { type: 'explosion'; lane: number; row: number }
+  /** A frozen unit shrugs off a hit. */
+  | { type: 'immune'; uid: number }
+  /** Hero armor changed (`total` is the new value). */
+  | { type: 'armor'; side: Side; total: number }
+  /** A cell got wet (`on`) or dried up. */
+  | { type: 'wet'; lane: number; row: number; on: boolean }
+  /** 주문 강화 set (`amount` > 0) or used up / faded (0). */
+  | { type: 'empower'; side: Side; amount: number }
+  /** An illusion was hit and vanishes. */
+  | { type: 'illusionBroken'; uid: number }
+  /** A unit moved to another cell, possibly another lane (염력). */
+  | { type: 'shift'; uid: number; lane: number; row: number }
+  /** A moved unit slammed into another (충돌). */
+  | { type: 'collide'; uid: number; into: number }
+  /** Visual sweeps: 눈보라 over the board, 부패 around a cell. */
+  | { type: 'blizzard' }
+  | { type: 'decay'; lane: number; row: number }
   | { type: 'revive'; uid: number }
   | { type: 'buff'; uid: number; attack: number; health: number }
   | { type: 'freeze'; uid: number }

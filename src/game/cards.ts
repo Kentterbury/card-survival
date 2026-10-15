@@ -23,7 +23,24 @@ export interface EffectApi {
   gainMana(amount: number): void;
   /** Move an allied unit forward, toward the foe's side. */
   advance(uid: number, rows: number): void;
-  freeze(uid: number): void;
+  /** 빙결 for `turns` of the unit's own turns (default 1): it skips its actions and takes no damage. */
+  freeze(uid: number, turns?: number): void;
+  /** Damage every unit and both heroes (눈보라). */
+  damageEverything(amount: number): void;
+  /** Summon anywhere on the board; `lifetime` makes it melt after that many own turns. */
+  summonAt(defId: string, lane: number, row: number, lifetime?: number): void;
+  /** 보호막 on our hero: absorbs this much more damage. */
+  armorHero(amount: number): void;
+  /** 주문 강화: the next spell this turn deals this much more per hit. */
+  empower(amount: number): void;
+  /** 환영: copy an ally onto an empty home-row cell. */
+  illusion(uid: number, lane: number): void;
+  /** 염력: move a unit to a neighbouring cell (충돌 if it is taken). */
+  telekinesis(uid: number, lane: number, row: number): void;
+  /** Kill an ally outright; returns the health it had. */
+  sacrifice(uid: number): number;
+  /** Units in the four cells next to a cell (north, south, east, west). */
+  unitsBeside(lane: number, row: number): Unit[];
   /** Push an opposing unit back toward its own side. */
   push(uid: number, rows: number): void;
   /** Summon on the caster's home row (no-op if that cell is taken). */
@@ -104,13 +121,24 @@ export type SpellAi =
   | { kind: 'recycle' }
   | { kind: 'cycle' }
   | { kind: 'discount' }
-  | { kind: 'copy' };
+  | { kind: 'copy' }
+  | { kind: 'blizzard' }
+  | { kind: 'armor' }
+  | { kind: 'wall' }
+  | { kind: 'illusion' }
+  | { kind: 'empower' }
+  | { kind: 'telekinesis' }
+  | { kind: 'decay' }
+  /** Cards the AI leaves alone. */
+  | { kind: 'skip' };
 
 export interface SpellCard extends BaseCard {
   type: 'spell';
   target: TargetKind;
   icon: SpellIcon;
   ai: SpellAi;
+  /** X-cost: also costs the targeted unit's health in mana (염력). */
+  xCost?: boolean;
   cast: (api: EffectApi, target: Target) => void;
 }
 
@@ -209,6 +237,10 @@ const CARD_LIST: CardDef[] = [
   { id: 'brawler', name: '광기의 투사', type: 'minion', cost: 4, rarity: 'common', attack: 1, health: 4, model: 'Barbarian', keywords: ['enrage'], scale: 0.9, text: '<b>분노</b>' },
   { id: 'vanguard_captain', name: '선봉장', type: 'minion', cost: 6, rarity: 'common', attack: 2, health: 4, model: 'Knight', keywords: ['vanguard'], text: '<b>선봉</b>' },
   { id: 'barricade_token', name: '바리케이드', type: 'minion', cost: 0, rarity: 'basic', attack: 0, health: 6, model: 'barrier', text: '움직이지도 공격하지도 않습니다.' },
+  {
+    id: 'ice_wall_token', name: '빙벽', type: 'minion', cost: 0, rarity: 'basic', attack: 0, health: 5, model: 'ice_wall',
+    text: '움직이지도 공격하지도 않습니다. 3턴 뒤 녹고, 부서지거나 녹은 칸은 <b>젖습니다</b>.',
+  },
 
   // ── Player spells ──────────────────────────────────────────
   {
@@ -612,6 +644,72 @@ const CARD_LIST: CardDef[] = [
     id: 'sk_deathknight', name: '죽음의 기사', type: 'minion', cost: 11, rarity: 'epic', enemy: true, attack: 5, health: 8, model: 'Skeleton_Warrior', keywords: ['lifesteal', 'undying'], scale: 1.35,
     text: '<b>흡혈</b>. <b>불사</b>',
   },
+  // ── 얼음 (common) ──────────────────────────────────────────
+  {
+    id: 'ice_wall', name: '빙벽', type: 'spell', cost: 3, rarity: 'common', target: 'wallCell', icon: 'frost', ai: { kind: 'wall' },
+    text: '빈 칸 두 개(가로)에 0/5 <b>빙벽</b>을 세웁니다. 아무도 지나가지 못하며 3턴 뒤 녹습니다. 부서지거나 녹은 칸은 <b>젖습니다</b>.',
+    cast: (api, t) => {
+      if (t.kind !== 'cell') return;
+      api.summonAt('ice_wall_token', t.lane, t.row, 3);
+      api.summonAt('ice_wall_token', t.lane + 1, t.row, 3);
+    },
+  },
+  {
+    id: 'blizzard', name: '눈보라', type: 'spell', cost: 5, rarity: 'rare', target: 'none', icon: 'frost', ai: { kind: 'blizzard' },
+    text: '<b>모든</b> 하수인과 양쪽 영웅에게 피해를 2 줍니다(아군 포함).',
+    cast: (api) => api.damageEverything(2),
+  },
+  {
+    id: 'deep_freeze', name: '동결', type: 'spell', cost: 2, rarity: 'common', target: 'anyUnit', icon: 'frost', ai: { kind: 'control' },
+    text: '하수인 하나를 2턴 동안 <b>빙결</b>시킵니다. 아군에게 쓰면 지켜 줄 수 있습니다.',
+    cast: (api, t) => { if (t.kind === 'unit') api.freeze(t.uid, 2); },
+  },
+  {
+    id: 'ice_shield', name: '얼음 방패', type: 'spell', cost: 1, rarity: 'common', target: 'none', icon: 'shield', ai: { kind: 'armor' },
+    text: '내 영웅에게 <b>보호막</b> +2. 영웅이 받는 피해를 먼저 막아 줍니다.',
+    cast: (api) => api.armorHero(2),
+  },
+  // ── 비전술사: 주문 마법사 ───────────────────────────────────
+  {
+    id: 'a_empower', name: '주문 강화', type: 'spell', cost: 1, rarity: 'rare', hero: 'arcanist', target: 'none', icon: 'storm', ai: { kind: 'empower' },
+    text: '이번 턴에 내는 다음 주문의 피해가 타격마다 +2. 이번 턴에 주문을 내지 않으면 사라집니다.',
+    cast: (api) => api.empower(2),
+  },
+  {
+    id: 'a_energy', name: '에너지 미사일', type: 'spell', cost: 6, rarity: 'common', hero: 'arcanist', target: 'none', icon: 'bolt', ai: { kind: 'aoe' },
+    text: '무작위 적(영웅 포함)에게 피해 2를 3번 줍니다.',
+    cast: (api) => {
+      for (let i = 0; i < 3; i++) {
+        const foes = api.foes();
+        const pick = api.rng.int(foes.length + 1);
+        if (pick < foes.length) api.damage({ kind: 'unit', uid: foes[pick].uid }, 2);
+        else api.damageFoeHero(2);
+      }
+    },
+  },
+  {
+    id: 'a_illusion', name: '환영', type: 'spell', cost: 2, rarity: 'rare', hero: 'arcanist', target: 'allySlot', icon: 'potion', ai: { kind: 'illusion' },
+    text: '아군 하나를 고른 뒤 내 진영 빈 칸을 골라, 똑같이 생긴 <b>환영</b>을 만듭니다.',
+    cast: (api, t) => { if (t.kind === 'unitTo') api.illusion(t.uid, t.lane); },
+  },
+  {
+    id: 'a_telekinesis', name: '염력', type: 'spell', cost: 0, rarity: 'epic', hero: 'arcanist', target: 'move', icon: 'wave', ai: { kind: 'telekinesis' }, xCost: true,
+    text: '하수인이나 구조물을 한 칸 뒤나 옆으로 옮깁니다. 대상의 체력만큼 마나가 듭니다. 그 칸이 차 있으면 <b>충돌</b>합니다.',
+    cast: (api, t) => { if (t.kind === 'unitTo') api.telekinesis(t.uid, t.lane, t.row); },
+  },
+  // ── 부패 (common) ──────────────────────────────────────────
+  {
+    id: 'decay', name: '부패', type: 'spell', cost: 2, rarity: 'rare', target: 'ally', icon: 'curse', ai: { kind: 'decay' },
+    text: '아군 하나를 희생해, 그 체력만큼 상하좌우 칸의 모든 대상에게 피해를 줍니다(아군 포함).',
+    cast: (api, t) => {
+      if (t.kind !== 'unit') return;
+      const u = api.allies().find((a) => a.uid === t.uid);
+      if (!u) return;
+      const { lane, row } = u;
+      const hp = api.sacrifice(u.uid);
+      for (const n of api.unitsBeside(lane, row)) api.damage({ kind: 'unit', uid: n.uid }, hp);
+    },
+  },
 ];
 
 export const CARDS: Record<string, CardDef> = Object.fromEntries(CARD_LIST.map((c) => [c.id, c]));
@@ -629,6 +727,7 @@ export const STARTER_DECK = [
 ];
 
 export const KEYWORD_INFO: Record<Keyword, { name: string; text: string }> = {
+  illusion: { name: '환영', text: '똑같이 생겼지만 피해를 주지 못하고, 피해를 받으면 체력과 상관없이 사라집니다.' },
   swift: { name: '기습', text: '소환된 턴에도 바로 전진하거나 공격합니다.' },
   ranged: { name: '사격', text: '자기 줄 앞쪽 3칸 안의 첫 번째 적을 쏩니다(아군 너머로도). 적이 없으면 전진하고, 적 영웅이 사거리 안이면 영웅을 쏩니다.' },
   ward: { name: '보호막', text: '처음 받는 피해를 무시합니다.' },

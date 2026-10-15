@@ -5,7 +5,7 @@ import { CAMP_HEAL, Game, HERO_MAX_HEALTH, sameTarget, type RunSave } from './ga
 import { heroDef, HEROES, POWERS } from './game/heroes';
 import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE } from './game/shop';
 import { STAGES } from './game/stages';
-import type { ModelId } from './game/types';
+import { isStructure, type ModelId, type TargetKind } from './game/types';
 import {
   LAST_ROW, MANA_PER_TURN, MAX_MANA, other, RANGED_RANGE, ROWS,
   type GameEvent, type HitTarget, type Side, type Target, type Unit,
@@ -24,6 +24,18 @@ import { CardBook } from './ui/cardBook';
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** The sound each spell icon makes when cast. */
+/** What each target kind asks the player to pick. */
+const TARGET_WORDS: Record<TargetKind, string> = {
+  foe: '적 하수인이나 적 영웅', foeUnit: '적 하수인', ally: '아군 하수인', lane: '줄', slot: '내 진영 빈 칸', none: '',
+  wallCell: '나란한 빈 칸 두 개', anyUnit: '하수인(아군도 가능)', allySlot: '아군 하수인', move: '하수인이나 구조물',
+};
+
+/** Two-step cards: the prompt for picking the unit, then the cell. */
+const TWO_STEP: Partial<Record<TargetKind, [string, string]>> = {
+  allySlot: ['환영으로 만들 아군을 고르세요', '환영을 세울 내 진영 빈 칸을 고르세요'],
+  move: ['옮길 하수인이나 구조물을 고르세요', '한 칸 뒤나 옆을 고르세요 (차 있으면 충돌)'],
+};
+
 const SPELL_SOUND: Record<SpellIcon, SfxName> = {
   bolt: 'zap', storm: 'zap', fire: 'fire', meteor: 'fire', frost: 'frost', wave: 'whoosh', heart: 'heal', potion: 'heal',
   shield: 'buff', sword: 'buff', scroll: 'magic', skull: 'curse', curse: 'curse', arrows: 'shoot',
@@ -33,7 +45,8 @@ const SPELL_SOUND: Record<SpellIcon, SfxName> = {
 const ENEMY_HERO_UID = -2;
 
 type Aim =
-  | { kind: 'card'; handIndex: number; el: HTMLElement; sticky: boolean; x0: number; y0: number; moved: boolean }
+  /** `first`: the unit already picked by a two-step card (환영, 염력). */
+  | { kind: 'card'; handIndex: number; el: HTMLElement; sticky: boolean; x0: number; y0: number; moved: boolean; first?: number }
   | { kind: 'power'; sticky: boolean; x0: number; y0: number; moved: boolean };
 
 type PickResult = { unit?: Unit; enemyHero?: boolean; lane?: number; row?: number };
@@ -51,6 +64,8 @@ class App {
   lastPointerType = 'mouse';
   /** Hero health as currently shown, updated event by event during playback. */
   heroHp: Record<Side, number> = { player: HERO_MAX_HEALTH, enemy: 0 };
+  /** Hero 보호막 as shown (follows events during playback, like heroHp). */
+  heroArmor: Record<Side, number> = { player: 0, enemy: 0 };
   /** Event type currently being animated (useful when debugging playback). */
   currentEvent = '';
   /** `?speed=4` speeds up all animation (handy for testing). */
@@ -64,10 +79,10 @@ class App {
       $('loading-fill').style.width = `${(done / total) * 100}%`;
     });
     $('loading-text').textContent = '초상화 그리는 중…';
-    const subjects = [...CHARACTER_MODELS, 'barrier' as ModelId].map((m) => ({ key: m as string, model: m }));
+    const subjects = [...CHARACTER_MODELS, 'barrier' as ModelId, 'ice_wall' as ModelId].map((m) => ({ key: m as string, model: m }));
     if (useSynty) {
       // The Synty set gives every card, hero and commander its own look, so each gets a picture.
-      for (const c of Object.values(CARDS)) if (c.type === 'minion' && c.model !== 'barrier') subjects.push({ key: c.id, model: c.model });
+      for (const c of Object.values(CARDS)) if (c.type === 'minion' && !isStructure(c.model)) subjects.push({ key: c.id, model: c.model });
       for (const h of HEROES) subjects.push({ key: `hero:${h.id}`, model: h.model });
       for (const st of STAGES) subjects.push({ key: `boss:${st.hero.name}`, model: st.hero.model });
     }
@@ -431,6 +446,96 @@ class App {
         await wait(0.12);
         return;
       }
+      case 'immune': {
+        const v = this.views.get(e.uid);
+        if (!v) return;
+        sound.play('wardBreak');
+        v.flash(0x9fe8ff);
+        this.fx.floatText(v.headPosition(), '빙결 · 무적', 'buff');
+        await wait(0.15);
+        return;
+      }
+      case 'armor': {
+        const before = this.heroArmor[e.side];
+        this.heroArmor[e.side] = e.total;
+        this.renderHeroHp();
+        const at = e.side === 'player' ? HERO_POS.clone().setY(2.6) : ENEMY_HERO_POS.clone().setY(4);
+        if (e.total > before) {
+          sound.play('buff');
+          this.fx.floatText(at, `보호막 +${e.total - before}`, 'buff');
+          this.fx.burst(at.clone().setY(1.2), 0x9fe8ff, 20, 2);
+        } else {
+          sound.play('wardBreak');
+          this.fx.floatText(at, `보호막 -${before - e.total}`, 'info');
+        }
+        await wait(0.2);
+        return;
+      }
+      case 'wet':
+        this.board.setWet(e.lane, e.row, e.on);
+        if (e.on) this.fx.burst(cellPos(e.lane, e.row).setY(0.3), 0x6ab8ff, 14, 1.5);
+        return;
+      case 'empower':
+        if (e.side === 'player') {
+          this.renderEmpower();
+          if (e.amount > 0) {
+            sound.play('magic');
+            this.fx.floatText(HERO_POS.clone().setY(2.6), `주문 강화 +${e.amount}`, 'buff');
+            this.fx.burst(HERO_POS.clone().setY(1.4), 0xb07dff, 26, 2.5);
+            await wait(0.3);
+          }
+        }
+        return;
+      case 'illusionBroken': {
+        const v = this.views.get(e.uid);
+        if (!v) return;
+        sound.play('magic');
+        this.fx.floatText(v.headPosition(), '환영이었다!', 'info');
+        this.fx.burst(v.group.position.clone().setY(1), 0xc9a8ff, 30, 3);
+        await wait(0.15);
+        return;
+      }
+      case 'shift': {
+        const v = this.views.get(e.uid);
+        if (!v) return;
+        sound.play('magic');
+        await v.moveTo(cellPos(e.lane, e.row), 0.35, false);
+        return;
+      }
+      case 'collide': {
+        const a = this.views.get(e.uid);
+        const b = this.views.get(e.into);
+        if (!a || !b) return;
+        const home = a.group.position.clone();
+        const mid = home.clone().lerp(b.group.position, 0.45);
+        await a.moveTo(mid, 0.14, false);
+        sound.play('explosion');
+        this.fx.burst(mid.clone().setY(1), 0xffe0a0, 26, 3.5);
+        this.fx.floatText(mid.clone().setY(2.6), '충돌!', 'dmg');
+        this.board.addShake(0.35);
+        void a.moveTo(home, 0.2, false);
+        await wait(0.15);
+        return;
+      }
+      case 'blizzard':
+        sound.play('frost');
+        this.board.addShake(0.3);
+        await this.fx.nova('frost');
+        return;
+      case 'decay': {
+        const at = cellPos(e.lane, e.row).setY(0.8);
+        sound.play('curse');
+        this.fx.burst(at, 0x7dff5a, 36, 4);
+        this.fx.burst(at, 0x3a6a1a, 24, 2.5);
+        for (const [dl, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (e.lane + dl >= 0 && e.lane + dl < 5 && e.row + dr >= 0 && e.row + dr <= LAST_ROW) {
+            this.fx.burst(cellPos(e.lane + dl, e.row + dr).setY(0.6), 0x9dff6a, 12, 2);
+          }
+        }
+        this.board.addShake(0.3);
+        await wait(0.3);
+        return;
+      }
       case 'freeze':
         sound.play('frost');
         this.views.get(e.uid)?.setFrozen(true);
@@ -549,6 +654,16 @@ class App {
         return;
       case 'slot':
         return;
+      case 'cell':
+        for (const lane of [target.lane, target.lane + 1]) this.fx.burst(cellPos(lane, target.row).setY(0.8), 0xbff0ff, 20, 2.5);
+        await wait(0.15);
+        return;
+      case 'unitTo': {
+        const v = this.views.get(target.uid);
+        if (v) this.fx.burst(v.group.position.clone().setY(1), def.icon === 'potion' ? 0xc9a8ff : 0x9ad8ff, 22, 2.5);
+        await wait(0.15);
+        return;
+      }
     }
   }
 
@@ -572,7 +687,10 @@ class App {
       }
     }
     this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };
+    this.heroArmor = { player: s.sides.player.hero.armor ?? 0, enemy: s.sides.enemy.hero.armor ?? 0 };
+    this.board.syncWet(s.wet);
     this.renderHud();
+    this.renderEmpower();
   }
 
   // ── HUD ──────────────────────────────────────────────────────
@@ -633,6 +751,19 @@ class App {
   private renderHeroHp() {
     $('hero-hp').textContent = String(this.heroHp.player);
     $('enemy-hp').textContent = String(this.heroHp.enemy);
+    for (const side of ['player', 'enemy'] as const) {
+      const el = $(side === 'player' ? 'hero-armor' : 'enemy-armor');
+      const a = this.heroArmor[side];
+      el.textContent = String(a);
+      el.classList.toggle('on', a > 0);
+    }
+  }
+
+  /** 주문 강화: glow on the hero and a +N tag on every spell in hand. */
+  private renderEmpower() {
+    const n = this.game.state?.sides.player.empower ?? 0;
+    $('hero-frame').classList.toggle('empowered', n > 0);
+    this.renderHand();
   }
 
   private renderMana() {
@@ -663,7 +794,7 @@ class App {
       // Show situational attack (대열) on the badge.
       v.setStats({ ...u, attack: this.game.attackOf(u) });
       const mark = next && u.side === 'enemy' ? '<span class="threat" title="다음 턴에 공격">!</span>' : '';
-      v.renderBadge(mark + (u.frozen ? '<span class="frozen-tag">❄</span>' : ''));
+      v.renderBadge(mark + (u.frozen ? `<span class="frozen-tag">❄${(u.frozenTurns ?? 1) > 1 ? u.frozenTurns : ''}</span>` : ''));
     }
   }
 
@@ -698,7 +829,12 @@ class App {
       const inst = s.sides.player.hand[i];
       const cost = this.game.costOf(inst);
       const base = card(inst.defId).cost;
-      el.querySelector('.card-cost')!.textContent = String(cost);
+      const def = card(inst.defId);
+      el.querySelector('.card-cost')!.textContent = def.type === 'spell' && def.xCost ? 'X' : String(cost);
+      // 주문 강화: every spell in hand shows the bonus it would get.
+      const boost = def.type === 'spell' ? s.sides.player.empower : 0;
+      el.classList.toggle('empowered', boost > 0);
+      if (boost > 0) el.dataset.empower = `+${boost}`;
       el.classList.toggle('cheaper', cost < base);
       el.classList.toggle('pricier', cost > base);
       el.classList.toggle('locked', !!inst.locked);
@@ -897,7 +1033,7 @@ class App {
     $('inspect').classList.remove('show');
     if (aim.kind === 'power') {
       const p = this.game.powerOf('player');
-      const what = { foe: '적 하수인이나 적 영웅', foeUnit: '적 하수인', ally: '아군 하수인', lane: '줄', slot: '내 진영 빈 칸', none: '' }[p.target];
+      const what = TARGET_WORDS[p.target];
       this.showHint(`<b>${p.name}</b>: 대상을 고르세요 (${what})`);
     }
     if (aim.kind === 'card') {
@@ -910,6 +1046,10 @@ class App {
       const notes = keywordNotes(defId);
       if (notes) preview.insertAdjacentHTML('beforeend', `<div class="notes">${notes}</div>`);
       preview.classList.add('show');
+      const def = card(defId);
+      const steps = def.type === 'spell' ? TWO_STEP[def.target] : undefined;
+      if (steps) this.showHint(`<b>${def.name}</b>: ${steps[0]}`);
+      else if (def.type === 'spell' && (def.target === 'wallCell' || def.target === 'anyUnit')) this.showHint(`<b>${def.name}</b>: ${TARGET_WORDS[def.target]}을 고르세요`);
     }
     this.updateAimVisuals();
   }
@@ -922,7 +1062,7 @@ class App {
       aim.el.style.transform = '';
     }
     this.aim = null;
-    if (aim.kind === 'power') $('hint').classList.remove('show');
+    $('hint').classList.remove('show');
     $('inspect').classList.remove('show');
     $('aim-preview').classList.remove('show');
     $('arrow-path').setAttribute('d', '');
@@ -969,8 +1109,25 @@ class App {
     const foe = (): Target | null =>
       p.enemyHero ? { kind: 'hero', side: 'enemy' } : p.unit?.side === 'enemy' ? { kind: 'unit', uid: p.unit.uid } : null;
     const kind = aim.kind === 'power' ? this.game.powerOf('player').target : this.cardTargetKind(aim.handIndex);
+    const cell = p.lane !== undefined && p.row !== undefined && p.row <= LAST_ROW ? { lane: p.lane, row: p.row } : null;
     switch (kind) {
       case 'none': return { kind: 'none' };
+      case 'wallCell': {
+        if (!cell) return null;
+        // The wall covers this cell and the one to its right; on the right edge, the one to its left.
+        const valid = this.validTargets();
+        const at = (lane: number): Target => ({ kind: 'cell', lane, row: cell.row });
+        if (valid.some((v) => sameTarget(v, at(cell.lane)))) return at(cell.lane);
+        return cell.lane > 0 ? at(cell.lane - 1) : at(cell.lane);
+      }
+      case 'anyUnit': return p.unit ? { kind: 'unit', uid: p.unit.uid } : null;
+      case 'allySlot':
+      case 'move': {
+        if (aim.kind !== 'card') return null;
+        // Step one picks the unit (returned as a plain unit target); step two the cell.
+        if (aim.first === undefined) return p.unit ? { kind: 'unit', uid: p.unit.uid } : null;
+        return cell ? { kind: 'unitTo', uid: aim.first, lane: cell.lane, row: cell.row } : null;
+      }
       case 'slot': return p.lane !== undefined ? { kind: 'slot', lane: p.lane } : null;
       case 'lane': return p.lane !== undefined ? { kind: 'lane', lane: p.lane } : null;
       case 'foe': return foe();
@@ -982,8 +1139,15 @@ class App {
   private validTargets(): Target[] {
     const aim = this.aim;
     if (!aim) return [];
-    if (aim.kind === 'card') return this.game.cardTargets(aim.handIndex);
-    return this.game.heroPowerTargets('player');
+    if (aim.kind !== 'card') return this.game.heroPowerTargets('player');
+    const all = this.game.cardTargets(aim.handIndex);
+    if (!TWO_STEP[this.cardTargetKind(aim.handIndex)]) return all;
+    // Two-step cards: first the units that have somewhere to go, then that unit's cells.
+    if (aim.first === undefined) {
+      const uids = [...new Set(all.flatMap((t) => (t.kind === 'unitTo' ? [t.uid] : [])))];
+      return uids.map((uid) => ({ kind: 'unit', uid }));
+    }
+    return all.filter((t) => t.kind === 'unitTo' && t.uid === aim.first);
   }
 
   private highlightTarget(t: Target, style: 'valid' | 'hover') {
@@ -999,6 +1163,13 @@ class App {
         return;
       case 'slot':
         this.board.setCell(t.lane, 0, style);
+        return;
+      case 'cell':
+        this.board.setCell(t.lane, t.row, style);
+        if (style === 'hover') this.board.setCell(t.lane + 1, t.row, style);
+        return;
+      case 'unitTo':
+        this.board.setCell(t.lane, t.row, style);
         return;
       case 'lane':
         for (let r = 0; r <= LAST_ROW; r++) {
@@ -1022,6 +1193,10 @@ class App {
     for (const t of valid) this.highlightTarget(t, 'valid');
     const t = this.targetAt(x, y);
     if (t && valid.some((v) => sameTarget(v, t))) this.highlightTarget(t, 'hover');
+    if (aim.kind === 'card' && aim.first !== undefined) {
+      const u = this.game.unit(aim.first);
+      if (u) this.board.setCell(u.lane, u.row, 'hover');
+    }
 
     let from: { x: number; y: number } | null = null;
     if (aim.kind === 'card') {
@@ -1054,6 +1229,21 @@ class App {
     if (!aim) return;
     const t = this.targetAt(x, y);
     const valid = t && this.validTargets().some((v) => sameTarget(v, t));
+    // Two-step cards: the first pick chooses the unit and keeps aiming for the cell.
+    if (aim.kind === 'card' && aim.first === undefined && TWO_STEP[this.cardTargetKind(aim.handIndex)]) {
+      if (!t || !valid || t.kind !== 'unit') {
+        this.cancelAim();
+        return;
+      }
+      aim.first = t.uid;
+      aim.sticky = true;
+      const def = card(aim.el.dataset.defId!);
+      const u = this.game.unit(t.uid)!;
+      const cost = def.type === 'spell' && def.xCost ? ` (마나 ${u.health})` : '';
+      this.showHint(`<b>${def.name}</b>: ${u.name}${cost} — ${TWO_STEP[this.cardTargetKind(aim.handIndex)]![1]}`);
+      this.updateAimVisuals();
+      return;
+    }
     this.cancelAim();
     if (!t || !valid) return;
     if (aim.kind === 'card') {
@@ -1090,7 +1280,8 @@ class App {
     const status = [
       unit.side === 'enemy' ? '<b>적</b> 하수인' : '<b>아군</b> 하수인',
       `이동 ${unit.speed}칸 · 사거리 ${unit.range}칸`,
-      unit.frozen ? '빙결됨: 다음 행동을 건너뜀' : '',
+      unit.frozen ? `빙결: 행동하지 못하고 피해를 받지 않음 (${unit.frozenTurns ?? 1}턴)` : '',
+      this.game.state.wet.some((w) => w.lane === unit.lane && w.row === unit.row) ? '젖은 칸: 받는 피해 +1' : '',
       unit.fresh && !unit.keywords.has('swift') ? '이번 턴에 소환됨' : '',
     ].filter(Boolean).join('<br>');
     inspect.insertAdjacentHTML('beforeend', `<div class="notes"><div class="kw-note">${status}</div>${keywordNotes(unit.defId)}</div>`);

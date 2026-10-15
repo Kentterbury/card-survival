@@ -1,4 +1,4 @@
-import type { ModelId } from '../game/types';
+import type { CharModel } from '../game/types';
 import type { AnimSet } from './assets';
 
 /**
@@ -10,7 +10,6 @@ import type { AnimSet } from './assets';
 /** Synty rigs are in centimetres; this brings them to the KayKit characters' height. */
 export const SYNTY_CHAR_SCALE = 0.014;
 
-type CharModel = Exclude<ModelId, 'barrier'>;
 
 export type Pack = 'Knights' | 'Kingdom' | 'Dungeon' | 'Fantasy';
 

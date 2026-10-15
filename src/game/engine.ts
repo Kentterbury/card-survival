@@ -6,11 +6,18 @@ import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, rollShop, stageGold, type ShopSt
 import { Rng } from './rng';
 import { STAGES, type EnemyPower } from './stages';
 import {
-  FORMATION_BONUS, forward, homeRow, LANES, LAST_ROW, MANA_PER_TURN, MAX_HAND, MAX_MANA, other, RANGED_RANGE,
+  FORMATION_BONUS, forward, homeRow, isStructure, LANES, LAST_ROW, MANA_PER_TURN, MAX_HAND, MAX_MANA, other, RANGED_RANGE,
   THORNS_DAMAGE, VANGUARD_BONUS,
   type CardInstance, type GameEvent, type HitTarget, type Keyword, type PendingChoice, type Phase, type RewardBundle, type Side, type SideState,
   type Target, type Unit,
 } from './types';
+
+/** Rounds a soaked cell stays wet. */
+export const WET_TURNS = 3;
+/** Extra damage a unit standing on a wet cell takes from every hit. */
+export const WET_BONUS = 1;
+/** Keywords an illusion does not copy: it has no real body to shield, heal or hit back with. */
+const ILLUSION_DROPS: Keyword[] = ['ward', 'undying', 'regenerate', 'thorns', 'enrage', 'lifesteal', 'cleave', 'pierce', 'knockback'];
 
 export const HERO_MAX_HEALTH = 30;
 /** Health restored by resting at the camp between stages. */
@@ -46,6 +53,8 @@ export interface GameState {
   gold: number;
   /** The merchant's stock while at the camp. */
   shop: ShopState | null;
+  /** 젖은 칸: left by a broken or melted 빙벽; units there take +1 from every hit. */
+  wet: { lane: number; row: number; turns: number }[];
 }
 
 export class Game {
@@ -53,6 +62,8 @@ export class Game {
   state!: GameState;
   private nextUid = 1;
   private events: GameEvent[] = [];
+  /** 주문 강화 bonus added to every hit of the spell being cast. */
+  private spellBonus = 0;
   private readonly apis: Record<Side, EffectApi>;
 
   constructor(seed = Date.now()) {
@@ -79,7 +90,7 @@ export class Game {
         player: this.emptySide({ name: hero.name, model: hero.model, scale: 1.3, health: resume?.health ?? maxHealth, maxHealth }),
         enemy: this.emptySide({ name: '', model: 'Skeleton_Minion', scale: 1, health: 1, maxHealth: 1 }),
       },
-      units: [], rewards: [], choice: null,
+      units: [], rewards: [], choice: null, wet: [],
     };
     return this.collect(() => this.beginStage());
   }
@@ -184,7 +195,7 @@ export class Game {
   }
 
   private emptySide(hero: SideState['hero']): SideState {
-    return { hero, mana: 0, maxMana: 0, powerUsed: false, skipDraw: false, drawPile: [], hand: [], discard: [] };
+    return { hero, mana: 0, maxMana: 0, powerUsed: false, skipDraw: false, empower: 0, drawPile: [], hand: [], discard: [] };
   }
 
   private beginStage() {
@@ -196,8 +207,11 @@ export class Game {
     s.sides.player.drawPile = this.makePile(s.deckList);
     s.sides.enemy.drawPile = this.makePile(st.deck);
     s.units = [];
+    s.wet = [];
     s.turn = 0;
     s.choice = null;
+    // Hero armor does not carry over between stages.
+    s.sides.player.hero.armor = 0;
     this.emit({ type: 'stageStart', stage: s.stage });
     this.draw('player', 3);
     this.draw('enemy', 3);
@@ -220,6 +234,19 @@ export class Game {
     me.powerUsed = false;
     for (const u of s.units) if (u.side === side) u.fresh = false;
     this.emit({ type: 'turnStart', side, turn: s.turn });
+    // Structures with a lifetime (빙벽) melt after that many of their owner's turns.
+    for (const u of this.unitsOf(side)) {
+      if (u.lifetime === undefined) continue;
+      u.lifetime--;
+      if (u.lifetime <= 0) u.health = 0;
+    }
+    this.resolveDeaths();
+    // Wet cells dry out over whole rounds.
+    if (side === 'player') {
+      for (const w of s.wet) w.turns--;
+      for (const w of s.wet.filter((x) => x.turns <= 0)) this.emit({ type: 'wet', lane: w.lane, row: w.row, on: false });
+      s.wet = s.wet.filter((x) => x.turns > 0);
+    }
     for (const u of this.unitsOf(side)) {
       if (u.keywords.has('regenerate') && u.health < u.maxHealth) this.healUnit(u, u.maxHealth - u.health);
     }
@@ -251,9 +278,14 @@ export class Game {
     const me = this.side(side);
     // 봉인 lasts through one of the owner's turns.
     for (const c of me.hand) c.locked = false;
+    // 주문 강화 only lasts for the turn it was cast in.
+    if (me.empower > 0) {
+      me.empower = 0;
+      this.emit({ type: 'empower', side, amount: 0 });
+    }
     for (const u of this.unitsOf(side)) {
       const def = card(u.defId) as MinionCard;
-      if (def.onEndTurn && u.health > 0) def.onEndTurn(this.apis[side], u);
+      if (def.onEndTurn && u.health > 0 && !u.keywords.has('illusion')) def.onEndTurn(this.apis[side], u);
       this.resolveDeaths();
       if (this.checkOutcome()) return;
     }
@@ -281,6 +313,13 @@ export class Game {
       && this.costOf(inst) <= me.mana && this.targetsFor(side, handIndex).length > 0;
   }
 
+  /** Extra mana a card costs for a given target (염력: the moved unit's health). */
+  targetCost(defId: string, target: Target): number {
+    const def = card(defId);
+    if (def.type !== 'spell' || !def.xCost || target.kind !== 'unitTo') return 0;
+    return this.unit(target.uid)?.health ?? 0;
+  }
+
   /** Current cost of a card instance, after any cost changes. */
   costOf(inst: CardInstance): number {
     return Math.max(0, card(inst.defId).cost + (inst.costMod ?? 0));
@@ -304,7 +343,10 @@ export class Game {
     if (!inst) return [];
     const def = card(inst.defId);
     const kind = def.type === 'minion' ? 'slot' : def.target;
-    return this.targetsOfKind(side, kind);
+    const targets = this.targetsOfKind(side, kind);
+    // X-cost cards: only targets we can pay for.
+    const left = this.side(side).mana - this.costOf(inst);
+    return def.type === 'spell' && def.xCost ? targets.filter((t) => this.targetCost(def.id, t) <= left) : targets;
   }
 
   private targetsOfKind(side: Side, kind: string): Target[] {
@@ -319,6 +361,34 @@ export class Game {
       case 'ally': return this.unitsOf(side).map((u) => ({ kind: 'unit' as const, uid: u.uid }));
       case 'lane': return Array.from({ length: LANES }, (_, lane) => ({ kind: 'lane' as const, lane }));
       case 'slot': return this.freeHomeLanes(side).map((lane) => ({ kind: 'slot' as const, lane }));
+      case 'wallCell': {
+        const out: Target[] = [];
+        for (let row = 0; row <= LAST_ROW; row++) {
+          for (let lane = 0; lane < LANES - 1; lane++) {
+            if (!this.unitAt(lane, row) && !this.unitAt(lane + 1, row)) out.push({ kind: 'cell', lane, row });
+          }
+        }
+        return out;
+      }
+      case 'anyUnit': return [...foeUnits(), ...this.unitsOf(side).map((u) => ({ kind: 'unit' as const, uid: u.uid }))];
+      case 'allySlot': {
+        const lanes = this.freeHomeLanes(side);
+        const row = homeRow(side);
+        return this.unitsOf(side)
+          .filter((u) => !isStructure(u.model) && !u.keywords.has('illusion'))
+          .flatMap((u) => lanes.map((lane) => ({ kind: 'unitTo' as const, uid: u.uid, lane, row })));
+      }
+      case 'move': {
+        const out: Target[] = [];
+        const units = [...this.unitsOf(other(side)).filter((u) => !this.coverFor(u)), ...this.unitsOf(side)];
+        for (const u of units) {
+          // Back (toward the unit's own side) or sideways.
+          for (const [lane, row] of [[u.lane, u.row - forward(u.side)], [u.lane - 1, u.row], [u.lane + 1, u.row]]) {
+            if (lane >= 0 && lane < LANES && row >= 0 && row <= LAST_ROW) out.push({ kind: 'unitTo', uid: u.uid, lane, row });
+          }
+        }
+        return out;
+      }
       default: return [];
     }
   }
@@ -330,13 +400,21 @@ export class Game {
     const me = this.side(side);
     const [inst] = me.hand.splice(handIndex, 1);
     const def = card(inst.defId);
-    me.mana -= this.costOf(inst);
+    me.mana -= this.costOf(inst) + this.targetCost(def.id, target);
     this.emit({ type: 'cardPlayed', side, card: inst, target });
     if (def.type === 'minion') {
       if (target.kind === 'slot') this.summonUnit(side, def.id, target.lane);
     } else {
+      // 주문 강화 is spent by the next spell, whatever it is.
+      const bonus = me.empower;
+      if (bonus > 0) {
+        me.empower = 0;
+        this.emit({ type: 'empower', side, amount: 0 });
+      }
       this.emit({ type: 'spell', side, defId: def.id, target });
+      this.spellBonus = bonus;
       def.cast(this.apis[side], target);
+      this.spellBonus = 0;
     }
     // Into the discard pile only after resolving, so a card cannot draw or recycle itself.
     me.discard.push({ iid: inst.iid, defId: inst.defId });
@@ -379,7 +457,11 @@ export class Game {
     for (const u of order) {
       if (u.health <= 0) continue;
       if (u.frozen) {
-        u.frozen = false;
+        u.frozenTurns = (u.frozenTurns ?? 1) - 1;
+        if (u.frozenTurns <= 0) {
+          u.frozen = false;
+          u.frozenTurns = undefined;
+        }
         continue;
       }
       if (u.fresh && !u.keywords.has('swift')) continue;
@@ -458,7 +540,8 @@ export class Game {
   private strike(u: Unit, hit: Unit | Side, dist: number) {
     const ranged = dist > 1;
     const dir = forward(u.side);
-    const atk = this.attackOf(u);
+    // An illusion swings like the real thing but its blows do nothing.
+    const atk = u.keywords.has('illusion') ? 0 : this.attackOf(u);
     const target: HitTarget = typeof hit === 'string' ? hit : hit.uid;
     this.emit({ type: 'attack', attacker: u.uid, target, ranged });
     let dealt = 0;
@@ -482,8 +565,9 @@ export class Game {
           if (behind && behind.side !== u.side) dealt += this.damageUnit(behind, atk);
         }
       }
-      // Melee blows are simultaneous: the target strikes back even if this kills it.
-      if (!ranged && hit.attack > 0) {
+      // Melee blows are simultaneous: the target strikes back even if this kills it
+      // (unless it is frozen solid, or only an illusion).
+      if (!ranged && hit.attack > 0 && !hit.frozen && !hit.keywords.has('illusion')) {
         const back = this.damageUnit(u, this.attackOf(hit));
         if (back > 0 && hit.keywords.has('lifesteal')) this.healHero(hit.side, back);
       }
@@ -507,9 +591,8 @@ export class Game {
 
   // ── Shared mechanics ─────────────────────────────────────────
 
-  private summonUnit(side: Side, defId: string, lane: number) {
-    const row = homeRow(side);
-    if (lane < 0 || lane >= LANES || this.unitAt(lane, row)) return;
+  private summonUnit(side: Side, defId: string, lane: number, row = homeRow(side)): Unit | undefined {
+    if (lane < 0 || lane >= LANES || row < 0 || row > LAST_ROW || this.unitAt(lane, row)) return undefined;
     const def = card(defId) as MinionCard;
     const keywords = new Set(def.keywords ?? []);
     const u: Unit = {
@@ -521,6 +604,51 @@ export class Game {
     this.state.units.push(u);
     this.emit({ type: 'summon', uid: u.uid, side, lane, row, defId });
     def.onSummon?.(this.apis[side], u);
+    return u;
+  }
+
+  /** 환영: a copy of an ally on an empty cell; it hits for nothing and dies to any damage. */
+  private summonIllusion(side: Side, of: Unit, lane: number) {
+    const row = homeRow(side);
+    if (this.unitAt(lane, row)) return;
+    const keywords = new Set([...of.keywords].filter((k) => !ILLUSION_DROPS.includes(k)));
+    keywords.add('illusion');
+    const u: Unit = {
+      ...of, uid: this.nextUid++, keywords, lane, row, frozen: false, frozenTurns: undefined, lifetime: undefined, fresh: true,
+      speed: unitSpeed(of.attack, keywords),
+    };
+    this.state.units.push(u);
+    this.emit({ type: 'summon', uid: u.uid, side, lane, row, defId: u.defId });
+  }
+
+  /** 염력: move a unit to a neighbouring cell; into an occupied one, both take half its health (충돌). */
+  private telekinesis(uid: number, lane: number, row: number) {
+    const u = this.unit(uid);
+    if (!u || u.health <= 0) return;
+    const there = this.unitAt(lane, row);
+    if (!there) {
+      u.lane = lane;
+      u.row = row;
+      this.emit({ type: 'shift', uid, lane, row });
+      return;
+    }
+    const hit = Math.ceil(u.health / 2);
+    this.emit({ type: 'collide', uid, into: there.uid });
+    this.damageUnit(u, hit);
+    this.damageUnit(there, hit);
+  }
+
+  private isWet(lane: number, row: number) {
+    return this.state.wet.some((w) => w.lane === lane && w.row === row);
+  }
+
+  private soak(lane: number, row: number) {
+    const w = this.state.wet.find((x) => x.lane === lane && x.row === row);
+    if (w) w.turns = WET_TURNS;
+    else {
+      this.state.wet.push({ lane, row, turns: WET_TURNS });
+      this.emit({ type: 'wet', lane, row, on: true });
+    }
   }
 
   private damage(target: Target, amount: number) {
@@ -534,6 +662,20 @@ export class Game {
   /** Returns the damage actually dealt (0 when a ward soaks it). */
   private damageUnit(u: Unit, amount: number): number {
     if (amount <= 0 || u.health <= 0) return 0;
+    // 빙결: frozen solid, nothing gets through.
+    if (u.frozen) {
+      this.emit({ type: 'immune', uid: u.uid });
+      return 0;
+    }
+    // 환영: any hit makes it vanish, whatever its health.
+    if (u.keywords.has('illusion')) {
+      this.emit({ type: 'illusionBroken', uid: u.uid });
+      const all = u.health;
+      u.health = 0;
+      this.emit({ type: 'damage', target: u.uid, amount: all });
+      return 0;
+    }
+    if (this.isWet(u.lane, u.row)) amount += WET_BONUS;
     if (u.keywords.has('ward')) {
       u.keywords.delete('ward');
       this.emit({ type: 'wardBroken', uid: u.uid });
@@ -565,6 +707,13 @@ export class Game {
   private damageHero(side: Side, amount: number): number {
     if (amount <= 0) return 0;
     const hero = this.side(side).hero;
+    if (hero.armor) {
+      const soaked = Math.min(hero.armor, amount);
+      hero.armor -= soaked;
+      amount -= soaked;
+      this.emit({ type: 'armor', side, total: hero.armor });
+      if (amount <= 0) return 0;
+    }
     hero.health = Math.max(0, hero.health - amount);
     this.emit({ type: 'damage', target: side, amount });
     return amount;
@@ -584,7 +733,9 @@ export class Game {
       if (dead.length === 0) return;
       s.units = s.units.filter((u) => u.health > 0);
       for (const u of dead) this.emit({ type: 'death', uid: u.uid });
-      for (const u of dead) (card(u.defId) as MinionCard).onDeath?.(this.apis[u.side], u);
+      // A broken or melted 빙벽 leaves its cell wet.
+      for (const u of dead) if (u.model === 'ice_wall') this.soak(u.lane, u.row);
+      for (const u of dead) if (!u.keywords.has('illusion')) (card(u.defId) as MinionCard).onDeath?.(this.apis[u.side], u);
     }
   }
 
@@ -630,7 +781,7 @@ export class Game {
   private discoverOptions(type: 'minion' | 'spell', side: Side): string[] {
     const hero = side === 'player' ? this.state.heroId : '';
     const pool = Object.values(CARDS)
-      .filter((c) => c.type === type && !c.enemy && c.id !== 'barricade_token' && (!c.hero || c.hero === hero))
+      .filter((c) => c.type === type && !c.enemy && !c.id.endsWith('_token') && (!c.hero || c.hero === hero))
       .map((c) => c.id);
     return this.rng.shuffle(pool).slice(0, 3);
   }
@@ -709,8 +860,47 @@ export class Game {
       // Ordered from the caster's side outward.
       foesInLane: (lane) => this.unitsOf(foeSide).filter((u) => u.lane === lane).sort((a, b) => (a.row - b.row) * dir),
       frontFoe: (lane) => this.unitsOf(foeSide).filter((u) => u.lane === lane).sort((a, b) => (a.row - b.row) * dir)[0],
-      damage: (target, amount) => this.damage(target, amount),
-      damageFoeHero: (amount) => this.damageHero(foeSide, amount),
+      // Spell damage gets the 주문 강화 bonus while a spell is being cast.
+      damage: (target, amount) => this.damage(target, amount + this.spellBonus),
+      damageFoeHero: (amount) => this.damageHero(foeSide, amount + this.spellBonus),
+      damageEverything: (amount) => {
+        const hit = amount + this.spellBonus;
+        this.emit({ type: 'blizzard' });
+        for (const u of [...this.state.units]) if (u.health > 0) this.damageUnit(u, hit);
+        this.damageHero(side, hit);
+        this.damageHero(foeSide, hit);
+      },
+      summonAt: (defId, lane, row, lifetime) => {
+        const u = this.summonUnit(side, defId, lane, row);
+        if (u && lifetime) u.lifetime = lifetime;
+      },
+      armorHero: (amount) => {
+        const hero = this.side(side).hero;
+        hero.armor = (hero.armor ?? 0) + amount;
+        this.emit({ type: 'armor', side, total: hero.armor });
+      },
+      empower: (amount) => {
+        this.side(side).empower = amount;
+        this.emit({ type: 'empower', side, amount });
+      },
+      illusion: (uid, lane) => {
+        const u = this.unit(uid);
+        if (u && u.health > 0) this.summonIllusion(side, u, lane);
+      },
+      telekinesis: (uid, lane, row) => this.telekinesis(uid, lane, row),
+      sacrifice: (uid) => {
+        const u = this.unit(uid);
+        if (!u || u.health <= 0) return 0;
+        const hp = u.health;
+        // A sacrifice is final: no 불사 comeback.
+        u.keywords.delete('undying');
+        u.health = 0;
+        this.emit({ type: 'decay', lane: u.lane, row: u.row });
+        this.emit({ type: 'damage', target: u.uid, amount: hp });
+        return hp;
+      },
+      unitsBeside: (lane, row) => this.state.units.filter((u) =>
+        u.health > 0 && Math.abs(u.lane - lane) + Math.abs(u.row - row) === 1),
       healHero: (amount) => this.healHero(side, amount),
       healUnit: (uid, amount) => {
         const u = this.unit(uid);
@@ -734,10 +924,11 @@ export class Game {
         u.maxHealth += health;
         this.emit({ type: 'buff', uid, attack, health });
       },
-      freeze: (uid) => {
+      freeze: (uid, turns = 1) => {
         const u = this.unit(uid);
         if (!u || u.health <= 0) return;
         u.frozen = true;
+        u.frozenTurns = Math.max(u.frozenTurns ?? 0, turns);
         this.emit({ type: 'freeze', uid });
       },
       // Both move a unit in the caster's forward direction: foes get pushed back, allies advance.
@@ -825,5 +1016,10 @@ export function sameTarget(a: Target, b: Target): boolean {
     case 'hero': return a.side === (b as typeof a).side;
     case 'lane':
     case 'slot': return a.lane === (b as typeof a).lane;
+    case 'cell': return a.lane === (b as typeof a).lane && a.row === (b as typeof a).row;
+    case 'unitTo': {
+      const o = b as typeof a;
+      return a.uid === o.uid && a.lane === o.lane && a.row === o.row;
+    }
   }
 }

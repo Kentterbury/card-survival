@@ -223,6 +223,40 @@ export class Board {
   }
 
   /** Base look of the grid: both home rows are tinted, everything else invisible. */
+  private readonly wet = new Map<string, THREE.Mesh>();
+  private wetMat: THREE.MeshStandardMaterial | null = null;
+
+  /** 젖은 칸: a glossy puddle on the cell. */
+  setWet(lane: number, row: number, on: boolean) {
+    const key = `${lane},${row}`;
+    const had = this.wet.get(key);
+    if (!on) {
+      had?.removeFromParent();
+      this.wet.delete(key);
+      return;
+    }
+    if (had) return;
+    this.wetMat ??= new THREE.MeshStandardMaterial({
+      color: 0x3a7fb0, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.55, depthWrite: false,
+    });
+    const m = new THREE.Mesh(new THREE.CircleGeometry(1.0, 20).rotateX(-Math.PI / 2), this.wetMat);
+    m.scale.set(LANE_W * 0.45, 1, ROW_D * 0.42);
+    m.position.copy(cellPos(lane, row)).setY(0.06);
+    m.renderOrder = 0;
+    this.scene.add(m);
+    this.wet.set(key, m);
+  }
+
+  /** Match the puddles to the game state. */
+  syncWet(cells: { lane: number; row: number }[]) {
+    const want = new Set(cells.map((c) => `${c.lane},${c.row}`));
+    for (const key of [...this.wet.keys()]) if (!want.has(key)) {
+      const [l, r] = key.split(',').map(Number);
+      this.setWet(l, r, false);
+    }
+    for (const c of cells) this.setWet(c.lane, c.row, true);
+  }
+
   clearHighlights() {
     this.setHeroHighlight('none');
     for (let lane = 0; lane < LANES; lane++) {

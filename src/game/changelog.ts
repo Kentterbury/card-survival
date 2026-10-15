@@ -18,6 +18,18 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '얼음 · 주문 마법 · 부패',
+    summary: '빙결 규칙 변경: 빙결된 하수인은 행동하지 못하는 대신 어떤 피해도 받지 않고 반격도 하지 않습니다. 새 개념: 젖은 칸(받는 피해 +1, 3턴), 영웅 보호막, 주문 강화, 환영, 충돌, 구조물 빙벽. 균형: 빙결 규칙으로 약해진 비전술사 생명력 16 → 18.',
+    added: ['ice_wall', 'blizzard', 'deep_freeze', 'ice_shield', 'a_empower', 'a_energy', 'a_illusion', 'a_telekinesis', 'decay', 'ice_wall_token'],
+    changed: [
+      { id: 'frostring', note: '빙결된 적은 이후 피해를 받지 않음' },
+      { id: 'ice_prison', note: '빙결된 적은 이후 피해를 받지 않음' },
+      { id: 'h_trapper', note: '빙결된 적은 이후 피해를 받지 않음' },
+      { id: 'e_chill', note: '빙결된 아군은 이후 피해를 받지 않음' },
+      { id: 'e_frostbolt', note: '빙결된 아군은 이후 피해를 받지 않음' },
+    ],
+  },
+  {
     title: '주문 카드 그림 교체',
     summary: '같은 계열 주문이 같은 그림을 쓰던 것을 고쳐, 주문 55장이 모두 서로 다른 그림을 씁니다(일제 사격·정밀 사격·화살비 등). 색은 계열별로 그대로입니다. 성능 변경은 없습니다.',
     changed: [

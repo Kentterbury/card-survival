@@ -37,6 +37,10 @@ const ART = {
   // curses
   blood_pact: 'blood', oblivion: 'brain-leak', e_curse: 'chemical-arrow', e_hex: 'cursed-star',
   e_drain: 'heart-drop', e_soulfire: 'burning-skull',
+  // ice, spellcraft and rot
+  ice_wall: 'frozen-block', blizzard: 'snowing', deep_freeze: 'frozen-body', ice_shield: 'ice-shield',
+  a_empower: 'magic-swirl', a_energy: 'triorb', a_illusion: 'two-shadows', a_telekinesis: 'glowing-hands',
+  decay: 'poison-cloud',
 };
 
 const missing = Object.entries(ART).filter(([, n]) => !icons[n]);

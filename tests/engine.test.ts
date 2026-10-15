@@ -32,6 +32,14 @@ function place(g: Game, defId: string, side: Side, lane: number, row: number, fr
   return u;
 }
 
+/**
+ * Runs only the player's end-of-turn unit phase: enemy units never get to act. (Freezing them
+ * used to do this, but frozen units are now immune to damage.)
+ */
+function playerPhase(g: Game) {
+  (g as unknown as { finishTurn(side: Side): void }).finishTurn('player');
+}
+
 /** Ends the player turn with the enemy unable to do anything. */
 function passTurn(g: Game) {
   g.side('enemy').hand = [];
@@ -103,8 +111,8 @@ describe('lane combat', () => {
   it('돌파: a melee kill moves the attacker into the cleared cell', () => {
     const g = freshGame(Array(10).fill('squire'));
     const b = place(g, 'berserker', 'player', 2, 3);
-    place(g, 'sk_minion', 'enemy', 2, 4).frozen = true;
-    passTurn(g);
+    place(g, 'sk_minion', 'enemy', 2, 4);
+    playerPhase(g);
     expect(b.row).toBe(4);
   });
 
@@ -326,7 +334,7 @@ describe('new cards', () => {
     const rng = new Rng(1);
     const heroes = ['captain', 'arcanist', 'warchief', 'hunter'];
     for (let i = 0; i < 800; i++) for (const b of rollRewards(rng, 1 + (i % 4), heroes[Math.floor(i / 4) % 4])) for (const id of b.cards) { expect(CARDS[id]).toBeDefined(); seen.add(id); }
-    const obtainable = Object.values(CARDS).filter((c) => !c.enemy && c.id !== 'barricade_token').map((c) => c.id);
+    const obtainable = Object.values(CARDS).filter((c) => !c.enemy && !c.id.endsWith('_token')).map((c) => c.id);
     expect(obtainable.filter((id) => !seen.has(id))).toEqual([]);
   });
 });
@@ -396,9 +404,9 @@ describe('keywords', () => {
   it('불사 brings a unit back once with 1 health', () => {
     const g = freshGame(Array(10).fill('squire'));
     const s = place(g, 'stalwart', 'player', 4, 2);
-    // The brute's counter kills it; frozen, the brute cannot finish it off on its own turn.
-    place(g, 'sk_brute', 'enemy', 4, 3).frozen = true;
-    passTurn(g);
+    // The brute's counter kills it; the brute does not get its own turn to finish it off.
+    place(g, 'sk_brute', 'enemy', 4, 3);
+    playerPhase(g);
     expect(g.unit(s.uid)?.health).toBe(1);
     expect(s.keywords.has('undying')).toBe(false);
   });
@@ -420,8 +428,7 @@ describe('keywords (2nd batch)', () => {
     const a = place(g, 'sk_warrior', 'enemy', 2, 3);
     const b = place(g, 'sk_warrior', 'enemy', 1, 3);
     const c = place(g, 'sk_warrior', 'enemy', 3, 4);
-    a.frozen = b.frozen = c.frozen = true;
-    passTurn(g);
+    playerPhase(g);
     expect(a.health).toBe(1);
     expect(b.health).toBe(1);
     expect(c.health).toBe(4); // different row
@@ -430,12 +437,10 @@ describe('keywords (2nd batch)', () => {
   it('가시 hurts melee attackers but not ranged ones', () => {
     const g = freshGame(Array(10).fill('squire'));
     const melee = place(g, 'berserker', 'player', 0, 2);
-    const thorn = place(g, 'sk_thorn', 'enemy', 0, 3);
-    thorn.frozen = true;
+    place(g, 'sk_thorn', 'enemy', 0, 3);
     const xbow = place(g, 'crossbowman', 'player', 4, 0);
-    const thorn2 = place(g, 'sk_thorn', 'enemy', 4, 2);
-    thorn2.frozen = true;
-    passTurn(g);
+    place(g, 'sk_thorn', 'enemy', 4, 2);
+    playerPhase(g);
     expect(melee.health).toBe(3 - 1 - 2); // counter 1 + thorns 2
     expect(xbow.health).toBe(2);
   });
@@ -447,8 +452,7 @@ describe('keywords (2nd batch)', () => {
     expect(g.cardTargets(0).some((t) => t.kind === 'unit' && t.uid === mage.uid)).toBe(false);
     expect(g.cardTargets(0).some((t) => t.kind === 'unit' && t.uid === wall.uid)).toBe(true);
     place(g, 'crossbowman', 'player', 1, 1);
-    mage.frozen = wall.frozen = true;
-    passTurn(g);
+    playerPhase(g);
     expect(mage.health).toBe(3);
     expect(wall.health).toBe(7 - 2);
   });
@@ -464,8 +468,8 @@ describe('keywords (2nd batch)', () => {
   it('분노 gains attack each time it survives damage', () => {
     const g = freshGame(Array(10).fill('squire'));
     const b = place(g, 'brawler', 'player', 2, 2);
-    place(g, 'sk_minion', 'enemy', 2, 3).frozen = true;
-    passTurn(g);
+    place(g, 'sk_minion', 'enemy', 2, 3);
+    playerPhase(g);
     expect(b.attack).toBe(2);
   });
 
@@ -809,7 +813,7 @@ describe('hero-exclusive cards', () => {
 
   it('every hero has four exclusive cards, and rewards always include one bundle of them', () => {
     for (const h of HERO_IDS) {
-      expect(Object.values(CARDS).filter((c) => c.hero === h)).toHaveLength(4);
+      expect(Object.values(CARDS).filter((c) => c.hero === h).length).toBeGreaterThanOrEqual(4);
       for (let cleared = 1; cleared <= 4; cleared++) {
         const offers = rollRewards(new Rng(cleared * 13), cleared, h);
         expect(offers).toHaveLength(3);
@@ -901,7 +905,8 @@ describe('hero-exclusive cards', () => {
     const hp = g.side('enemy').hero.health;
     const rain = g.side('player').hand.findIndex((c) => c.defId === 'h_rain');
     g.playCard(rain, { kind: 'none' });
-    expect(front.health).toBe(front.maxHealth - 3);
+    // Frozen units are immune: the arrows bounce off the frozen front unit.
+    expect(front.health).toBe(front.maxHealth);
     expect(g.side('enemy').hero.health).toBe(hp - 4); // four empty lanes
   });
 });

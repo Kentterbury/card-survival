@@ -1,6 +1,6 @@
 import { card, type CardDef } from './cards';
 import type { Game } from './engine';
-import { homeRow, LANES, other, type Side, type Target, type Unit } from './types';
+import { forward, homeRow, LANES, other, type Side, type Target, type Unit } from './types';
 
 /**
  * Greedy card AI used for the enemy hero (and by tests to play the player's side).
@@ -71,7 +71,7 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
       for (const t of targets) {
         if (t.kind !== 'unit') continue;
         const u = g.unit(t.uid)!;
-        if (u.keywords.has('ward')) continue;
+        if (u.keywords.has('ward') || u.frozen) continue;
         const kills = u.health <= ai.amount;
         const value = threat(u, side) + (kills ? 10 : -6);
         if (!pick || value > pick.score) pick = { target: t, score: value };
@@ -137,11 +137,80 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
     case 'heal':
       return myHero.maxHealth - myHero.health >= 6 ? { target: { kind: 'none' }, score: base } : null;
     case 'control': {
-      const units = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : []));
+      // Freezing also makes a unit immune, so only ever freeze foes (and not already-frozen ones).
+      const units = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : [])).filter((u) => u.side !== side && !u.frozen);
       if (units.length === 0) return null;
       const worst = units.sort((a, b) => threat(b, side) - threat(a, side))[0];
       return threat(worst, side) > 10 ? { target: { kind: 'unit', uid: worst.uid }, score: base + 6 } : null;
     }
+    case 'blizzard': {
+      // Worth it when it hurts them clearly more than us.
+      const mine = g.unitsOf(side);
+      const swing = foes.filter((u) => u.health <= 2).length * 2 + foes.length - mine.filter((u) => u.health <= 2).length * 2 - mine.length;
+      return swing >= 3 && myHero.health > 6 ? { target: { kind: 'none' }, score: base + swing * 3 } : null;
+    }
+    case 'armor':
+      return myHero.maxHealth - myHero.health >= 2 || foes.length > 0 ? { target: { kind: 'none' }, score: base + 3 } : null;
+    case 'wall': {
+      // Drop the wall right in front of the most dangerous advancing foes.
+      let best: { target: Target; score: number } | null = null;
+      for (const t of targets) {
+        if (t.kind !== 'cell') continue;
+        const blocked = foes.filter((f) => (f.lane === t.lane || f.lane === t.lane + 1) && f.row + forward(f.side) === t.row && !f.keywords.has('flying'));
+        const mineBehind = g.unitsOf(side).filter((m) => (m.lane === t.lane || m.lane === t.lane + 1) && (t.row - m.row) * forward(side) > 0).length;
+        const score = blocked.reduce((v, f) => v + threat(f, side), 0) - mineBehind * 6;
+        if (score > 0 && (!best || score > best.score)) best = { target: t, score };
+      }
+      return best && best.score > 10 ? { target: best.target, score: base + best.score / 2 } : null;
+    }
+    case 'illusion': {
+      const opts = targets.flatMap((t) => (t.kind === 'unitTo' ? [t] : []));
+      if (opts.length === 0) return null;
+      const best = opts.map((t) => g.unit(t.uid)!).sort((a, b) => b.attack + b.health - a.attack - a.health)[0];
+      const lane = pickLane(g, side, opts.filter((t) => t.uid === best.uid).map((t) => t.lane));
+      return { target: { kind: 'unitTo', uid: best.uid, lane, row: homeRow(side) }, score: base + 2 };
+    }
+    case 'empower': {
+      // Only right before a damage spell we can still pay for this turn.
+      const me = g.side(side);
+      const left = me.mana - g.costOf({ iid: -1, defId: def.id });
+      const follow = me.hand.some((c) => {
+        const d = card(c.defId);
+        return d.type === 'spell' && d.id !== def.id && (d.ai.kind === 'damage' || d.ai.kind === 'aoe' || d.ai.kind === 'lane') && g.costOf(c) <= left;
+      });
+      return follow && me.empower === 0 ? { target: { kind: 'none' }, score: 1000 } : null;
+    }
+    case 'telekinesis': {
+      // Slam a foe into another foe when the 충돌 kills something.
+      let best: { target: Target; score: number } | null = null;
+      for (const t of targets) {
+        if (t.kind !== 'unitTo') continue;
+        const u = g.unit(t.uid)!;
+        const there = g.unitAt(t.lane, t.row);
+        if (u.side === side || !there || there.side === side || there.frozen || u.frozen) continue;
+        const hit = Math.ceil(u.health / 2);
+        const kills = (hit >= u.health ? 1 : 0) + (hit >= there.health ? 1 : 0);
+        if (kills === 0) continue;
+        const score = kills * 12 + threat(there, side) - u.health;
+        if (!best || score > best.score) best = { target: t, score };
+      }
+      return best ? { target: best.target, score: base + best.score } : null;
+    }
+    case 'decay': {
+      // Sacrifice a weak or doomed ally whose neighbours are mostly foes.
+      let best: { target: Target; score: number } | null = null;
+      for (const t of targets) {
+        if (t.kind !== 'unit') continue;
+        const u = g.unit(t.uid)!;
+        const around = g.state.units.filter((x) => x.health > 0 && Math.abs(x.lane - u.lane) + Math.abs(x.row - u.row) === 1);
+        const gain = around.filter((x) => x.side !== side && !x.frozen).reduce((v, x) => v + Math.min(u.health, x.health) + (u.health >= x.health ? 8 : 0), 0);
+        const loss = around.filter((x) => x.side === side).reduce((v, x) => v + Math.min(u.health, x.health) + 6, 0) + u.attack * 2 + 4;
+        if (gain - loss > 6 && (!best || gain - loss > best.score)) best = { target: t, score: gain - loss };
+      }
+      return best ? { target: best.target, score: base + best.score } : null;
+    }
+    case 'skip':
+      return null;
     case 'ramp': {
       // Worth it only when it unlocks a card we could not afford otherwise.
       const me = g.side(side);

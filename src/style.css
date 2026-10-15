@@ -379,3 +379,15 @@ button { font-family: inherit; }
 /* Attribution for the CC BY spell icons on the title screen. */
 .panel p.credits { margin-top: 1.6vh; font-size: clamp(10px, 1.4vh, 13px); opacity: .55; }
 .panel p.credits a { color: inherit; }
+
+/* ── Ice & spellcraft ──────────────────────────── */
+/* Hero 보호막 (얼음 방패): a frosty shield badge above the health drop. */
+.armor-badge { position: absolute; right: -.6vh; bottom: 4.6vh; min-width: 4vh; height: 4.4vh; padding: 0 .4vh; display: none; place-items: center; font-weight: 900; font-size: 2.2vh; color: #fff; text-shadow: 0 1px 2px #000; background: radial-gradient(circle at 35% 30%, #e8fbff, #5ab8e8 60%, #1b4f78); border: 3px solid #0d2236; clip-path: polygon(50% 0, 100% 18%, 92% 70%, 50% 100%, 8% 70%, 0 18%); }
+.armor-badge.on { display: grid; animation: armorIn .3s ease-out; }
+#enemy-armor { right: -1.4vh; bottom: 3.8vh; }
+@keyframes armorIn { from { transform: scale(1.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+/* 주문 강화: the hero glows and every spell in hand is marked +N. */
+#hero-frame.empowered #hero-portrait { box-shadow: 0 0 0 3px #c99bff, 0 0 26px 8px #a46bffcc; animation: empowerPulse 1.1s ease-in-out infinite; }
+@keyframes empowerPulse { 50% { box-shadow: 0 0 0 3px #e6d2ff, 0 0 40px 14px #b07dffee; } }
+.card.spell.empowered .card-frame { box-shadow: inset 0 0 0 2px #2a1c0c, 0 0 16px 4px #b07dff, 0 6px 14px #000c; }
+.card.spell.empowered::after { content: attr(data-empower); position: absolute; right: -6%; top: 18%; padding: .2em .45em; border-radius: 8px; font-weight: 900; font-size: calc(var(--card-w) * .14); color: #fff; background: linear-gradient(#b98bff, #6a2fd0); border: 2px solid #f0e2ff; box-shadow: 0 0 10px #a46bff; z-index: 3; pointer-events: none; }

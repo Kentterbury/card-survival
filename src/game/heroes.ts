@@ -85,7 +85,7 @@ export const HEROES: HeroDef[] = [
     deck: ['squire', 'phalanx', 'phalanx', 'shieldbearer', 'crossbowman', 'crossbowman', 'veteran', 'mace_knight', 'firebolt', 'frostring'],
   },
   {
-    id: 'arcanist', name: '비전술사', title: '주문', model: 'Mage', health: 16, startMana: 5, power: 'bolt',
+    id: 'arcanist', name: '비전술사', title: '주문', model: 'Mage', health: 18, startMana: 5, power: 'bolt',
     blurb: '금화를 받고 마법을 파는 떠돌이 비전술사. 체력은 낮지만 주문이 강하다.',
     deck: ['apprentice', 'apprentice', 'shieldbearer', 'firebolt', 'firebolt', 'frostring', 'shockwave', 'thunderbolt', 'war_library', 'a_scholar'],
   },

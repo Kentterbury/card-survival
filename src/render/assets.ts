@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import type { ModelId } from '../game/types';
+import { isStructure, type CharModel, type ModelId } from '../game/types';
 import {
   DEFAULT_LOOKS, grip, KAYKIT_BOUNDS, LOOKS, SYNTY_ANIMS, SYNTY_CHAR_SCALE, SYNTY_PACKS, SYNTY_STATICS, SYNTY_TEXTURES,
   SYNTY_WEAPON_FILES, type Look,
@@ -100,7 +100,7 @@ export const ANIMS: Partial<Record<ModelId, AnimSet>> = {
  * hands) swings, so a dagger scout or a staff-wielding shaman never plays a bow draw.
  */
 export function animsFor(model: ModelId, key?: string): AnimSet | undefined {
-  if (model === 'barrier') return undefined;
+  if (isStructure(model)) return undefined;
   if (!useSynty) return ANIMS[model];
   const base = SYNTY_ANIMS[model];
   const look = lookFor(key, model);
@@ -228,7 +228,7 @@ function variantMaterial(base: THREE.MeshStandardMaterial, tex: string): Promise
 }
 
 /** The look of a card (`cardId`), a hero (`hero:<id>`) or a commander (`boss:<name>`). */
-export function lookFor(key: string | undefined, model: Exclude<ModelId, 'barrier'>): Look {
+export function lookFor(key: string | undefined, model: CharModel): Look {
   return (key && LOOKS[key]) || DEFAULT_LOOKS[model];
 }
 
@@ -240,7 +240,7 @@ export function artKey(key: string | undefined, model: ModelId): string {
   return useSynty && key && LOOKS[key] ? key : model;
 }
 
-async function instantiateSyntyCharacter(model: Exclude<ModelId, 'barrier'>, key?: string): Promise<CharacterInstance> {
+async function instantiateSyntyCharacter(model: CharModel, key?: string): Promise<CharacterInstance> {
   const look = lookFor(key, model);
   const gltf = await loadSynty(`characters/Pack_${look.pack}.glb`);
   const inner = SkeletonUtils.clone(gltf.scene);
@@ -278,7 +278,7 @@ async function instantiateSyntyCharacter(model: Exclude<ModelId, 'barrier'>, key
 
 /** `look` is a card id, `hero:<id>` or `boss:<name>`; only the Synty set tells them apart. */
 export async function instantiateCharacter(model: ModelId, look?: string): Promise<CharacterInstance> {
-  if (useSynty && model !== 'barrier') return instantiateSyntyCharacter(model, look);
+  if (useSynty && !isStructure(model)) return instantiateSyntyCharacter(model, look);
   const gltf = await loadGltf(`characters/${model}.glb`);
   const root = SkeletonUtils.clone(gltf.scene);
   const loadout = LOADOUT[model];

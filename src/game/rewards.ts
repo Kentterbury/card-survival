@@ -31,6 +31,9 @@ const BUNDLES: (RewardBundle & { tier: number })[] = [
   { id: 'warband', name: '전쟁 군단', theme: '강력한 하수인', tier: 2, cards: ['warlord', 'berserker', 'rally'] },
   { id: 'arcane', name: '대마법', theme: '전설급 주문', tier: 3, cards: ['archmage', 'meteor', 'regroup'] },
   { id: 'cataclysm', name: '대재앙', theme: '전장 정리', tier: 3, cards: ['pyroblast', 'flamewave', 'thunderbolt'] },
+  { id: 'glacier', name: '빙하', theme: '빙벽과 빙결', tier: 1, cards: ['ice_wall', 'deep_freeze', 'ice_shield'] },
+  { id: 'whiteout', name: '백색 폭풍', theme: '눈보라와 젖은 땅', tier: 2, cards: ['blizzard', 'ice_wall', 'ice_shield'] },
+  { id: 'rot', name: '부패의 제단', theme: '희생과 폭발', tier: 2, cards: ['decay', 'decay', 'brawler'] },
 ];
 
 /** Bundles of hero-exclusive cards; one is always among the offers for that hero. */
@@ -41,6 +44,8 @@ const HERO_BUNDLES: (RewardBundle & { tier: number; hero: string })[] = [
   { id: 'arcana', name: '비전 입문', theme: '비전술사 전용 · 비전 화살', hero: 'arcanist', tier: 1, cards: ['a_missiles', 'a_scholar', 'firebolt'] },
   { id: 'study', name: '비전 연구', theme: '비전술사 전용 · 드로우', hero: 'arcanist', tier: 2, cards: ['a_focus', 'a_scholar', 'frostring'] },
   { id: 'tempest', name: '비전 폭풍', theme: '비전술사 전용 · 전설', hero: 'arcanist', tier: 3, cards: ['a_storm', 'a_missiles', 'apprentice'] },
+  { id: 'spellcraft', name: '주문 연마', theme: '비전술사 전용 · 주문 강화', hero: 'arcanist', tier: 1, cards: ['a_empower', 'a_energy', 'firebolt'] },
+  { id: 'phantasm', name: '환영술', theme: '비전술사 전용 · 환영과 염력', hero: 'arcanist', tier: 2, cards: ['a_illusion', 'a_telekinesis', 'a_empower'] },
   { id: 'charge', name: '돌격대', theme: '전쟁 족장 전용 · 돌격', hero: 'warchief', tier: 1, cards: ['w_horn', 'w_rider', 'phalanx'] },
   { id: 'warhost', name: '전쟁 무리', theme: '전쟁 족장 전용 · 전체 강화', hero: 'warchief', tier: 2, cards: ['w_warcry', 'w_rider', 'brawler'] },
   { id: 'axelord', name: '족장의 친위대', theme: '전쟁 족장 전용 · 전설', hero: 'warchief', tier: 3, cards: ['w_axelord', 'w_horn', 'berserker'] },

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { ModelId, Side, Unit } from '../game/types';
+import { isStructure, type ModelId, type Side, type Unit } from '../game/types';
+import { makeIceWall } from './iceWall';
 import { animsFor, instantiateCharacter, instantiateStatic, useSynty, type AnimSet } from './assets';
 import { deathClipsFor } from './syntySet';
 import { ease, tween, wait } from './tween';
@@ -54,6 +55,8 @@ export class UnitView {
     if (this.modelId === 'barrier') {
       this.model = await instantiateStatic('barrier');
       this.model.scale.setScalar(0.58);
+    } else if (this.modelId === 'ice_wall') {
+      this.model = makeIceWall();
     } else {
       const inst = await instantiateCharacter(this.modelId, this.look);
       this.model = inst.root;
@@ -93,7 +96,7 @@ export class UnitView {
   renderBadge(extra = '') {
     if (this.side === 'hero') return;
     const hurt = this.health < this.maxHealth ? ' hurt' : '';
-    const showAtk = this.modelId !== 'barrier';
+    const showAtk = !isStructure(this.modelId);
     this.badge.innerHTML =
       (showAtk ? `<span class="atk">${this.attack}</span>` : '') +
       `<span class="hp${hurt}">${Math.max(0, this.health)}</span>${extra}`;
