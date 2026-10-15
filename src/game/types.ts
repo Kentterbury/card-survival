@@ -147,6 +147,6 @@ export type GameEvent =
   | { type: 'spell'; side: Side; defId: string; target: Target }
   | { type: 'heroPower'; side: Side; target: Target }
   | { type: 'enemyTurn' }
-  | { type: 'stageClear'; stage: number }
+  | { type: 'stageClear'; stage: number; gold: number }
   | { type: 'defeat' }
   | { type: 'victory' };

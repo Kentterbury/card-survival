@@ -137,7 +137,7 @@ button { font-family: inherit; }
 .bundle h3 { margin: 0; font-family: 'Gowun Batang', serif; color: var(--gold); font-size: clamp(16px, 2.6vh, 26px); }
 .bundle .theme { font-size: clamp(11px, 1.6vh, 15px); opacity: .8; margin-bottom: 1.2vh; }
 .bundle .mini-cards { display: flex; justify-content: center; gap: .6vw; }
-.bundle .card, .deck-grid .card { position: relative; left: 0; cursor: pointer; --card-w: min(9.5vw, 13vh, 110px); }
+.bundle .card, .deck-grid .card, .shop-item .card { position: relative; left: 0; cursor: pointer; --card-w: min(9.5vw, 13vh, 110px); }
 .deck-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 1vh; margin: 2vh 0; }
 .deck-grid .card { cursor: default; }
 
@@ -272,4 +272,36 @@ button { font-family: inherit; }
 @media (max-height: 520px) {
   .hero-face { width: 16vh; height: 16vh; }
   .hero-pick { padding: 1vh; }
+}
+
+/* ── Audio toggles (always visible, above modals) ── */
+#audio-ctrl { position: fixed; z-index: 120; left: calc(1.2vh + env(safe-area-inset-left)); top: 9.5vh; display: flex; gap: .8vh; }
+#audio-ctrl button { width: 4.6vh; height: 4.6vh; min-width: 30px; min-height: 30px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--gold-dim); background: #140e0acc; color: var(--gold); cursor: pointer; }
+#audio-ctrl svg { width: 62%; height: 62%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#audio-ctrl .slash { display: none; stroke: #ff6a5a; }
+#audio-ctrl button.off { color: #8a7a66; border-color: #4a3a2a; }
+#audio-ctrl button.off .slash { display: inline; }
+@media (max-height: 520px) { #audio-ctrl { top: 12vh; } }
+
+/* ── Merchant ── */
+.gold { color: #ffd34d; font-weight: 700; white-space: nowrap; }
+.gold::before { content: ''; display: inline-block; width: .9em; height: .9em; margin-right: .3em; vertical-align: -.1em; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b0, #ffc23a 55%, #a86a10); box-shadow: 0 0 0 1px #6a4208; }
+.shop-row { display: flex; justify-content: center; gap: 2.4vh; flex-wrap: wrap; padding: 0 1vh 1vh; }
+.shop-item .card { --card-w: min(11vw, 17vh, 140px); }
+.shop-item { display: flex; flex-direction: column; align-items: center; gap: 2.6vh; cursor: pointer; transition: transform .15s; }
+.shop-item:hover { transform: translateY(-4px); }
+.shop-item .price { padding: .3vh 1.2vh; border-radius: 99px; background: #1a1208; border: 1px solid var(--gold-dim); font-size: clamp(12px, 1.8vh, 16px); }
+.shop-item.sold { opacity: .35; pointer-events: none; }
+.shop-item.sold .price::after { content: ' · 판매됨'; color: var(--ink); }
+.shop-item.poor .price { border-color: #6a2a20; }
+.shop-item.poor .gold { color: #c08070; }
+.shop-services { display: flex; justify-content: center; gap: 2vh; margin: 1.4vh 0; flex-wrap: wrap; }
+.shop-services .bundle { min-width: 20vh; padding: 1.2vh 2vh; }
+@media (max-height: 520px) {
+  .shop-item .card { --card-w: min(11vw, 26vh); }
+  .shop-row { gap: 1.6vw; }
+  .shop-item { gap: 2vh; }
+  .shop-services { margin: .6vh 0; }
+  .shop-services .bundle { padding: .6vh 2vh; }
+  .shop-services h3 { margin: 0; }
 }

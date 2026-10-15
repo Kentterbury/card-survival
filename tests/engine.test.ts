@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { card, CARDS, STARTER_DECK, type MinionCard } from '../src/game/cards';
 import { Game, unitSpeed } from '../src/game/engine';
 import { heroDef } from '../src/game/heroes';
+import { CARD_PRICE, HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, stageGold } from '../src/game/shop';
 import { STAGES } from '../src/game/stages';
 import { LAST_ROW, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
@@ -656,6 +657,74 @@ describe('heroes, camp and saves', () => {
     expect(r.side('player').hero.health).toBe(17);
     expect(r.state.deckList).toEqual(g.state.deckList);
     expect(r.side('enemy').hero.name).toBe(STAGES[1].hero.name);
+    expect(r.state.gold).toBe(g.state.gold);
+  });
+});
+
+describe('gold and the merchant', () => {
+  const atCamp = () => {
+    const g = freshGame(Array(10).fill('pyroblast'));
+    g.side('player').mana = 10;
+    g.side('enemy').hero.health = 1;
+    g.playCard(0, { kind: 'hero', side: 'enemy' });
+    g.chooseReward(0);
+    return g;
+  };
+
+  it('clearing a stage pays gold, more for a quick win', () => {
+    const g = freshGame(Array(10).fill('pyroblast'));
+    g.side('player').mana = 10;
+    g.side('enemy').hero.health = 1;
+    const events = g.playCard(0, { kind: 'hero', side: 'enemy' });
+    const clear = events.find((e) => e.type === 'stageClear');
+    expect(clear && clear.type === 'stageClear' && clear.gold).toBe(stageGold(0, 1));
+    expect(g.state.gold).toBe(stageGold(0, 1));
+    expect(stageGold(0, 1)).toBeGreaterThan(stageGold(0, 15));
+  });
+
+  it('the merchant offers five different cards at rarity prices', () => {
+    const g = atCamp();
+    const offers = g.state.shop!.offers;
+    expect(offers).toHaveLength(5);
+    expect(new Set(offers.map((o) => o.defId)).size).toBe(5);
+    for (const o of offers) {
+      const c = card(o.defId);
+      expect(c.enemy).toBeFalsy();
+      expect(o.price).toBe(CARD_PRICE[c.rarity]);
+    }
+  });
+
+  it('buying a card spends gold and adds it to the deck, once', () => {
+    const g = atCamp();
+    g.state.gold = 100;
+    const size = g.state.deckList.length;
+    const o = g.state.shop!.offers[0];
+    expect(g.shopBuy(0)).toBe(true);
+    expect(g.state.gold).toBe(100 - o.price);
+    expect(g.state.deckList).toHaveLength(size + 1);
+    expect(g.state.deckList.at(-1)).toBe(o.defId);
+    expect(g.shopBuy(0)).toBe(false);
+    g.state.gold = 0;
+    expect(g.shopBuy(1)).toBe(false);
+  });
+
+  it('removal and healing can each be bought once per visit', () => {
+    const g = atCamp();
+    g.state.gold = 200;
+    const hero = g.side('player').hero;
+    hero.health = 10;
+    expect(g.shopHeal()).toBe(true);
+    expect(hero.health).toBe(10 + HEAL_AMOUNT);
+    expect(g.shopHeal()).toBe(false);
+    const size = g.state.deckList.length;
+    expect(g.shopRemove(0)).toBe(true);
+    expect(g.state.deckList).toHaveLength(size - 1);
+    expect(g.shopRemove(0)).toBe(false);
+    expect(g.state.gold).toBe(200 - HEAL_PRICE - REMOVE_PRICE);
+    // Leaving the camp closes the shop; the next camp restocks it.
+    g.campRest();
+    expect(g.state.shop).toBeNull();
+    expect(g.shopBuy(0)).toBe(false);
   });
 });
 

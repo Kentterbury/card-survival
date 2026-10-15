@@ -2,6 +2,7 @@ import { aiTakeTurn } from './ai';
 import { heroDef, POWERS, type HeroPower } from './heroes';
 import { card, CARDS, type EffectApi, type MinionCard } from './cards';
 import { rollRewards } from './rewards';
+import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, rollShop, stageGold, type ShopState } from './shop';
 import { Rng } from './rng';
 import { STAGES, type EnemyPower } from './stages';
 import {
@@ -23,6 +24,8 @@ export interface RunSave {
   stage: number;
   stagesCleared: number;
   health: number;
+  /** Missing in saves from before gold existed. */
+  gold?: number;
 }
 
 export interface GameState {
@@ -40,6 +43,10 @@ export interface GameState {
   choice: PendingChoice | null;
   /** The player's hero (see heroes.ts). */
   heroId: string;
+  /** Earned by clearing stages, spent at the merchant. */
+  gold: number;
+  /** The merchant's stock while at the camp. */
+  shop: ShopState | null;
 }
 
 export class Game {
@@ -67,6 +74,8 @@ export class Game {
       phase: 'player', stage: resume?.stage ?? 0, turn: 0, stagesCleared: resume?.stagesCleared ?? 0,
       deckList: [...(resume?.deck ?? deck ?? hero.deck)],
       heroId: hero.id,
+      gold: resume?.gold ?? 0,
+      shop: null,
       sides: {
         player: this.emptySide({ name: hero.name, model: hero.model, scale: 1.3, health: resume?.health ?? maxHealth, maxHealth }),
         enemy: this.emptySide({ name: '', model: 'Skeleton_Minion', scale: 1, health: 1, maxHealth: 1 }),
@@ -81,7 +90,7 @@ export class Game {
     const s = this.state;
     // At the camp the reward is already in the deck, so resume at the next stage.
     const stage = s.phase === 'camp' ? s.stage + 1 : s.stage;
-    return { hero: s.heroId, deck: [...s.deckList], stage, stagesCleared: s.stagesCleared, health: s.sides.player.hero.health };
+    return { hero: s.heroId, deck: [...s.deckList], stage, stagesCleared: s.stagesCleared, health: s.sides.player.hero.health, gold: s.gold };
   }
 
   /** The 지휘술 a side uses. */
@@ -97,7 +106,41 @@ export class Game {
     s.deckList.push(...bundle.cards);
     s.rewards = [];
     s.phase = 'camp';
+    s.shop = rollShop(this.rng);
     return [];
+  }
+
+  /** Merchant: buy an offered card into the deck. */
+  shopBuy(index: number): boolean {
+    const s = this.state;
+    const offer = s.shop?.offers[index];
+    if (s.phase !== 'camp' || !offer || offer.sold || s.gold < offer.price) return false;
+    s.gold -= offer.price;
+    offer.sold = true;
+    s.deckList.push(offer.defId);
+    return true;
+  }
+
+  /** Merchant: remove a card from the deck (once per visit). */
+  shopRemove(deckIndex: number): boolean {
+    const s = this.state;
+    if (s.phase !== 'camp' || !s.shop || s.shop.removed || s.gold < REMOVE_PRICE) return false;
+    if (!s.deckList[deckIndex] || s.deckList.length <= 5) return false;
+    s.gold -= REMOVE_PRICE;
+    s.shop.removed = true;
+    s.deckList.splice(deckIndex, 1);
+    return true;
+  }
+
+  /** Merchant: buy a healing draught (once per visit). */
+  shopHeal(): boolean {
+    const s = this.state;
+    const hero = s.sides.player.hero;
+    if (s.phase !== 'camp' || !s.shop || s.shop.healed || s.gold < HEAL_PRICE || hero.health >= hero.maxHealth) return false;
+    s.gold -= HEAL_PRICE;
+    s.shop.healed = true;
+    hero.health = Math.min(hero.maxHealth, hero.health + HEAL_AMOUNT);
+    return true;
   }
 
   /** Camp option: rest and recover health, then move on. */
@@ -106,8 +149,7 @@ export class Game {
     if (s.phase !== 'camp') return [];
     const hero = s.sides.player.hero;
     hero.health = Math.min(hero.maxHealth, hero.health + CAMP_HEAL);
-    s.stage++;
-    return this.collect(() => this.beginStage());
+    return this.leaveCamp();
   }
 
   /** Camp option: remove one card from the deck, then move on. */
@@ -115,7 +157,12 @@ export class Game {
     const s = this.state;
     if (s.phase !== 'camp' || !s.deckList[deckIndex] || s.deckList.length <= 5) return [];
     s.deckList.splice(deckIndex, 1);
-    s.stage++;
+    return this.leaveCamp();
+  }
+
+  private leaveCamp(): GameEvent[] {
+    this.state.shop = null;
+    this.state.stage++;
     return this.collect(() => this.beginStage());
   }
 
@@ -548,7 +595,9 @@ export class Game {
     if (this.over) return true;
     if (s.sides.enemy.hero.health <= 0) {
       s.stagesCleared++;
-      this.emit({ type: 'stageClear', stage: s.stage });
+      const gold = stageGold(s.stage, s.turn);
+      s.gold += gold;
+      this.emit({ type: 'stageClear', stage: s.stage, gold });
       if (s.stage >= STAGES.length - 1) {
         s.phase = 'victory';
         this.emit({ type: 'victory' });

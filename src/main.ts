@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import './style.css';
-import { card, KEYWORD_INFO, type MinionCard } from './game/cards';
+import { card, KEYWORD_INFO, type MinionCard, type SpellIcon } from './game/cards';
 import { CAMP_HEAL, Game, HERO_MAX_HEALTH, sameTarget, type RunSave } from './game/engine';
 import { heroDef, HEROES, POWERS } from './game/heroes';
+import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE } from './game/shop';
 import { STAGES } from './game/stages';
 import {
   HERO_POWER_COST, LAST_ROW, MAX_MANA, RANGED_RANGE, ROWS,
@@ -16,8 +17,15 @@ import { updateTweens, wait } from './render/tween';
 import { UnitView } from './render/unitView';
 import { createCardElement, keywordNotes, portrait, setPortraits } from './ui/cardView';
 import { spellIconSvg } from './ui/icons';
+import { sound, type SfxName } from './audio/sound';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/** The sound each spell icon makes when cast. */
+const SPELL_SOUND: Record<SpellIcon, SfxName> = {
+  bolt: 'zap', storm: 'zap', fire: 'fire', meteor: 'fire', frost: 'frost', wave: 'whoosh', heart: 'heal', potion: 'heal',
+  shield: 'buff', sword: 'buff', scroll: 'magic', skull: 'curse', curse: 'curse', arrows: 'shoot',
+};
 
 /** Pick-proxy uid of the enemy hero's 3D model. */
 const ENEMY_HERO_UID = -2;
@@ -61,6 +69,7 @@ class App {
     });
     this.board.clearHighlights();
     this.bindInput();
+    this.bindAudio();
     window.addEventListener('resize', () => {
       this.board.resize();
       this.renderHand();
@@ -228,9 +237,13 @@ class App {
       }
       case 'turnStart':
         this.renderHud();
-        if (e.side === 'player') await this.banner('나의 차례', '', 0.7);
+        if (e.side === 'player') {
+          sound.play('myTurn');
+          await this.banner('나의 차례', '', 0.7);
+        }
         return;
       case 'enemyTurn':
+        sound.play('enemyTurn');
         await this.banner('상대의 차례', '', 0.6, 'enemy');
         return;
       case 'reshuffle':
@@ -270,11 +283,13 @@ class App {
       case 'choice':
         return;
       case 'cardPlayed':
+        sound.play('card');
         this.addHistory(e.side, e.card.defId);
         await this.showPlayedCard(e.side, e.card.defId);
         return;
       case 'summon': {
         const v = await this.createView(e);
+        sound.play('summon');
         const base = v.group.position.clone();
         if (e.side === 'enemy') {
           await v.spawnAnim();
@@ -302,8 +317,10 @@ class App {
         if (e.ranged) {
           await a.attackAnim();
           const kind = a.modelId === 'Rogue' ? 'arrow' : a.side === 'enemy' ? 'curse' : 'storm';
+          sound.play(kind === 'arrow' ? 'shoot' : kind === 'curse' ? 'curse' : 'magic');
           await this.fx.projectile(a.group.position.clone().setY(1.3 * a.scale), targetPos, kind);
         } else {
+          sound.play('swing');
           await a.lunge(targetPos.clone().setY(0));
         }
         return;
@@ -314,6 +331,7 @@ class App {
           this.heroHp[side] = Math.max(0, this.heroHp[side] - e.amount);
           this.renderHeroHp();
           this.heroFrameHit(side);
+          sound.play('heroHit');
           this.board.addShake(side === 'player' ? 0.5 : 0.3);
           if (side === 'enemy') this.enemyHero?.hitAnim();
           const at = side === 'player' ? HERO_POS.clone().setY(2.6) : ENEMY_HERO_POS.clone().setY(4);
@@ -326,6 +344,7 @@ class App {
         v.health -= e.amount;
         v.renderBadge();
         v.hitAnim();
+        sound.play('hit');
         this.fx.floatText(v.headPosition(), `-${e.amount}`, 'dmg');
         await wait(0.12);
         return;
@@ -334,11 +353,13 @@ class App {
         const v = this.views.get(e.uid);
         if (!v) return;
         v.setWard(false);
+        sound.play('wardBreak');
         this.fx.floatText(v.headPosition(), '보호막!', 'buff');
         await wait(0.15);
         return;
       }
       case 'heal': {
+        sound.play('heal');
         if (typeof e.target === 'number') {
           const v = this.views.get(e.target);
           if (!v) return;
@@ -365,12 +386,14 @@ class App {
         v.maxHealth += e.health;
         v.renderBadge();
         v.flash(0xffd34d);
+        sound.play('buff');
         this.fx.floatText(v.headPosition(), `+${e.attack}/+${e.health}`, 'buff');
         await wait(0.15);
         return;
       }
       case 'explosion': {
         const at = cellPos(e.lane, e.row).setY(0.8);
+        sound.play('explosion');
         this.fx.burst(at, 0xff7a1a, 40, 6);
         this.fx.burst(at, 0xffd34d, 20, 4);
         this.board.addShake(0.45);
@@ -383,6 +406,7 @@ class App {
         v.health = 1;
         v.renderBadge();
         v.flash(0xb8ff9a);
+        sound.play('revive');
         this.fx.burst(v.group.position.clone().setY(1), 0xb8ff9a, 24, 3);
         this.fx.floatText(v.headPosition(), '불사!', 'buff');
         await wait(0.3);
@@ -397,6 +421,7 @@ class App {
         return;
       }
       case 'freeze':
+        sound.play('frost');
         this.views.get(e.uid)?.setFrozen(true);
         await wait(0.08);
         return;
@@ -404,6 +429,7 @@ class App {
         const v = this.views.get(e.uid);
         if (!v) return;
         this.views.delete(e.uid);
+        sound.play('death');
         await v.die();
         v.dispose();
         return;
@@ -416,6 +442,7 @@ class App {
           await this.castingGlow();
           void this.enemyHero?.playOnce('Spellcast_Raise', 1);
         }
+        sound.play(e.side === 'player' ? 'magic' : 'curse');
         if (e.target.kind === 'hero' || (e.target.kind === 'unit' && this.game.powerOf(e.side).target !== 'ally')) {
           await this.fx.projectile(this.casterPos(e.side), this.targetPos(e.target), e.side === 'player' ? 'hero' : 'curse', 22);
         } else if (e.target.kind === 'unit') {
@@ -428,15 +455,18 @@ class App {
         }
         return;
       case 'stageClear':
+        sound.play('stageClear');
         for (const v of this.views.values()) if (v.side === 'player') void v.playOnce('Cheer', 1);
         if (this.enemyHero) await this.enemyHero.die();
-        await this.banner('승리!', `${STAGES[e.stage].hero.name} 처치`, 1.8);
+        await this.banner('승리!', `${STAGES[e.stage].hero.name} 처치 · 금화 +${e.gold}`, 1.8);
         return;
       case 'defeat':
+        sound.play('defeat');
         void this.enemyHero?.playOnce('Cheer', 1);
         await this.banner('패배', '', 1.2, 'enemy');
         return;
       case 'victory':
+        sound.play('victory');
         await this.banner('최종 승리!', '해골 군주를 쓰러뜨렸습니다', 1.8);
         return;
     }
@@ -474,6 +504,7 @@ class App {
   private async spellFx(side: Side, defId: string, target: Target) {
     const def = card(defId);
     if (def.type !== 'spell') return;
+    sound.play(SPELL_SOUND[def.icon]);
     const from = this.casterPos(side);
     switch (target.kind) {
       case 'unit':
@@ -531,7 +562,7 @@ class App {
     const st = STAGES[s.stage];
     const me = s.sides.player;
     $('stage-title').textContent = `스테이지 ${s.stage + 1}/${STAGES.length} · ${st.name}`;
-    $('stage-sub').textContent = `${s.turn}턴`;
+    $('stage-sub').innerHTML = `${s.turn}턴 · <span class="gold">${s.gold}</span>`;
     this.renderHeroHp();
     this.renderEnemyInfo();
     this.renderMana();
@@ -717,6 +748,24 @@ class App {
     return true;
   }
 
+  /** Audio starts on the first gesture (browser rule); the corner buttons toggle music and effects. */
+  private bindAudio() {
+    const unlock = () => sound.unlock();
+    window.addEventListener('pointerdown', unlock, { capture: true });
+    window.addEventListener('keydown', unlock, { capture: true });
+    const music = $<HTMLButtonElement>('music-btn');
+    const sfx = $<HTMLButtonElement>('sfx-btn');
+    const render = () => {
+      music.classList.toggle('off', !sound.musicOn);
+      sfx.classList.toggle('off', !sound.sfxOn);
+      music.title = sound.musicOn ? '배경음 끄기' : '배경음 켜기';
+      sfx.title = sound.sfxOn ? '효과음 끄기' : '효과음 켜기';
+    };
+    music.addEventListener('click', () => { sound.unlock(); sound.setMusic(!sound.musicOn); render(); });
+    sfx.addEventListener('click', () => { sound.setSfx(!sound.sfxOn); sound.play('click'); render(); });
+    render();
+  }
+
   private async endTurn() {
     if (this.busy || this.game.state?.phase !== 'player' || !$('modal').classList.contains('hidden')) return;
     this.cancelAim();
@@ -733,6 +782,7 @@ class App {
     }
     const index = Number(el.dataset.index);
     if (!this.game.canPlay(index)) {
+      sound.play('error');
       el.classList.remove('shake');
       void el.offsetWidth;
       el.classList.add('shake');
@@ -740,6 +790,7 @@ class App {
     }
     el.classList.remove('hover');
     $('inspect').classList.remove('show');
+    sound.play('draw');
     this.startAim({ kind: 'card', handIndex: index, el, sticky: false, x0: e.clientX, y0: e.clientY, moved: false });
   }
 
@@ -1092,7 +1143,7 @@ class App {
     if (save) {
       const h = heroDef(save.hero);
       m.querySelector('#start-btn')!.insertAdjacentHTML('beforebegin',
-        `<button class="btn" id="resume-btn">이어하기 · ${h.name} · 스테이지 ${save.stage + 1} · 생명력 ${save.health}</button><br>`);
+        `<button class="btn" id="resume-btn">이어하기 · ${h.name} · 스테이지 ${save.stage + 1} · 생명력 ${save.health} · 금화 ${save.gold ?? 0}</button><br>`);
       m.querySelector('#start-btn')!.textContent = '새로 시작';
       m.querySelector('#start-btn')!.classList.add('secondary');
       m.querySelector('#resume-btn')!.addEventListener('click', () => void this.startRun(save.hero, save));
@@ -1127,11 +1178,13 @@ class App {
     const hero = s.sides.player.hero;
     const m = this.openModal(`
       <h2>야영지</h2>
-      <p>다음 전투 전에 하나를 고르세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장</p>
+      <p>다음 전투 전에 하나를 고르세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장 · <span class="gold">${s.gold}</span></p>
       <div class="bundles">
         <div class="bundle" id="camp-rest"><h3>휴식</h3><div class="theme">생명력 ${CAMP_HEAL} 회복</div></div>
         <div class="bundle" id="camp-trim"><h3>정비</h3><div class="theme">덱에서 카드 1장 제거</div></div>
-      </div>`);
+      </div>
+      <button class="btn secondary" id="camp-shop">상인 둘러보기 (선택과 별개)</button>`);
+    m.querySelector('#camp-shop')!.addEventListener('click', () => this.showShop());
     m.querySelector('#camp-rest')!.addEventListener('click', () => {
       this.closeModal();
       void this.play(this.game.campRest());
@@ -1141,21 +1194,73 @@ class App {
     else trim.addEventListener('click', () => this.showTrim());
   }
 
-  private showTrim() {
+  /** The merchant: spend gold on cards, a card removal or a healing draught, then return to the camp. */
+  private showShop() {
     const s = this.game.state;
-    const m = this.openModal(`<h2>정비: 뺄 카드를 고르세요</h2><div class="deck-grid"></div><button class="btn secondary" id="trim-back">돌아가기</button>`);
+    const shop = s.shop;
+    if (!shop) return this.showCamp();
+    const hero = s.sides.player.hero;
+    const deckFull = s.deckList.length <= 5;
+    const m = this.openModal(`
+      <h2>떠돌이 상인</h2>
+      <p>가진 금화 <span class="gold">${s.gold}</span> · 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장</p>
+      <div class="shop-row"></div>
+      <div class="shop-services">
+        <div class="bundle ${shop.removed || deckFull || s.gold < REMOVE_PRICE ? 'disabled' : ''}" id="shop-remove">
+          <h3>카드 제거</h3><div class="theme">${shop.removed ? '이번 방문에 이미 사용' : '덱에서 1장 제거'} · <span class="gold">${REMOVE_PRICE}</span></div></div>
+        <div class="bundle ${shop.healed || hero.health >= hero.maxHealth || s.gold < HEAL_PRICE ? 'disabled' : ''}" id="shop-heal">
+          <h3>회복 물약</h3><div class="theme">${shop.healed ? '이번 방문에 이미 사용' : `생명력 ${HEAL_AMOUNT} 회복`} · <span class="gold">${HEAL_PRICE}</span></div></div>
+      </div>
+      <button class="btn secondary" id="shop-back">야영지로 돌아가기</button>`);
+    const row = m.querySelector('.shop-row')!;
+    shop.offers.forEach((o, i) => {
+      const item = document.createElement('div');
+      item.className = 'shop-item';
+      item.classList.toggle('sold', o.sold);
+      item.classList.toggle('poor', !o.sold && s.gold < o.price);
+      item.appendChild(createCardElement(o.defId));
+      item.insertAdjacentHTML('beforeend', `<div class="price"><span class="gold">${o.price}</span></div>`);
+      item.addEventListener('click', () => {
+        if (!this.game.shopBuy(i)) { sound.play('error'); return; }
+        sound.play('coin');
+        this.writeSave();
+        this.showShop();
+      });
+      row.appendChild(item);
+    });
+    m.querySelector('#shop-heal')!.addEventListener('click', () => {
+      if (!this.game.shopHeal()) return;
+      sound.play('heal');
+      this.writeSave();
+      this.showShop();
+    });
+    m.querySelector('#shop-remove')!.addEventListener('click', () => this.showTrim(true));
+    m.querySelector('#shop-back')!.addEventListener('click', () => this.showCamp());
+  }
+
+  /** Pick a card to remove: free at the camp (ends the camp), or bought from the merchant. */
+  private showTrim(paid = false) {
+    const s = this.game.state;
+    const title = paid ? `카드 제거 (<span class="gold">${REMOVE_PRICE}</span>): 뺄 카드를 고르세요` : '정비: 뺄 카드를 고르세요';
+    const m = this.openModal(`<h2>${title}</h2><div class="deck-grid"></div><button class="btn secondary" id="trim-back">돌아가기</button>`);
     const grid = m.querySelector('.deck-grid')!;
     const order = s.deckList.map((id, i) => ({ id, i })).sort((a, b) => card(a.id).cost - card(b.id).cost || a.id.localeCompare(b.id));
     for (const { id, i } of order) {
       const el = createCardElement(id);
       el.style.cursor = 'pointer';
       el.addEventListener('click', () => {
+        if (paid) {
+          if (this.game.shopRemove(i)) sound.play('coin');
+          this.writeSave();
+          this.showShop();
+          return;
+        }
         this.closeModal();
         void this.play(this.game.campRemove(i));
       });
       grid.appendChild(el);
     }
-    m.querySelector('#trim-back')!.addEventListener('click', () => this.showCamp());
+    m.querySelector('#trim-back')!.addEventListener('click', () => (paid ? this.showShop() : this.showCamp()));
   }
 
   /** 탐색: pick one of three cards. */
@@ -1189,7 +1294,7 @@ class App {
       </div>`).join('');
     const m = this.openModal(`
       <h2>스테이지 ${s.stage + 1} 클리어!</h2>
-      <p>카드 꾸러미 하나를 골라 덱에 추가하세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장</p>
+      <p>카드 꾸러미 하나를 골라 덱에 추가하세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장 · <span class="gold">${s.gold}</span></p>
       <div class="bundles">${bundles}</div>
       <button class="btn secondary" id="view-deck">현재 덱 보기</button>`);
     m.querySelectorAll<HTMLElement>('.mini-cards').forEach((el) => {
