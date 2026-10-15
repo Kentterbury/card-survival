@@ -17,7 +17,7 @@ import { renderPortraits } from './render/portraits';
 import { updateTweens, wait } from './render/tween';
 import { UnitView } from './render/unitView';
 import { createCardElement, keywordNotes, portrait, setPortraits } from './ui/cardView';
-import { spellIconSvg } from './ui/icons';
+import { spellArtSvg, spellIconSvg } from './ui/icons';
 import { sound, type SfxName } from './audio/sound';
 import { CardBook } from './ui/cardBook';
 
@@ -1149,7 +1149,7 @@ class App {
     const el = document.createElement('div');
     el.className = `hist ${side} ${def.type}`;
     if (def.type === 'minion') el.style.backgroundImage = `url(${portrait(def.model, def.id)})`;
-    else el.innerHTML = spellIconSvg(def.icon);
+    else el.innerHTML = spellArtSvg(def.id, def.icon);
     el.insertAdjacentHTML('beforeend', `<span class="who">${side === 'player' ? '나' : '상대'}</span>`);
     const showCard = () => {
       const inspect = $('inspect');
@@ -1206,7 +1206,8 @@ class App {
         <div><b>조작</b> 카드를 <b>탭(클릭)한 뒤 대상을 탭</b>하거나 끌어다 놓으세요. 피해 주문은 <b>상대 영웅 초상화</b>도 노릴 수 있습니다.</div>
       </div>
       <button class="btn" id="start-btn">출정</button>
-      <button class="btn secondary" id="book-open">카드북</button>`);
+      <button class="btn secondary" id="book-open">카드북</button>
+      <p class="credits">주문 그림: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (Lorc, Delapouite 외, CC BY 3.0)</p>`);
     m.querySelector('#book-open')!.addEventListener('click', () => this.cardBook.open());
     const save = this.readSave();
     if (save) {

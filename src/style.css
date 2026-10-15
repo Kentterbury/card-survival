@@ -375,3 +375,7 @@ button { font-family: inherit; }
 @media (max-height: 520px) {
   .book-change, .book-change .card { --card-w: min(11vw, 26vh); width: min(11vw, 26vh); }
 }
+
+/* Attribution for the CC BY spell icons on the title screen. */
+.panel p.credits { margin-top: 1.6vh; font-size: clamp(10px, 1.4vh, 13px); opacity: .55; }
+.panel p.credits a { color: inherit; }

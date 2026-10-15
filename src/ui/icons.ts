@@ -1,4 +1,5 @@
 import type { SpellIcon } from '../game/cards';
+import { SPELL_ART } from './spellArt';
 
 /** Hand-drawn style SVG glyphs for spell art. */
 const PATHS: Record<SpellIcon, string> = {
@@ -32,6 +33,18 @@ export function spellIconSvg(icon: SpellIcon): string {
   const id = `g-${icon}`;
   const body = PATHS[icon].replaceAll('url(#g)', `url(#${id})`);
   return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>${body}</svg>`;
+}
+
+/**
+ * A spell card's own picture (a game-icons.net glyph, see spellArt.ts) in its element's colours.
+ * Falls back to the element glyph for a spell without one.
+ */
+export function spellArtSvg(cardId: string, icon: SpellIcon): string {
+  const body = SPELL_ART[cardId];
+  if (!body) return spellIconSvg(icon);
+  const [a, b] = GRADIENTS[icon];
+  const id = `ga-${cardId}`;
+  return `<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><g fill="url(#${id})">${body.replaceAll('currentColor', `url(#${id})`)}</g></svg>`;
 }
 
 export const SPELL_BACKDROP: Record<SpellIcon, string> = {

@@ -63,6 +63,7 @@ src/
   main.ts      게임 ↔ 3D ↔ UI 연결, 입력, 이벤트 연출 재생
 tests/         vitest
 tools/optimize-assets.mjs   에셋 최적화 스크립트
+tools/build-spell-art.mjs   주문 카드 그림(game-icons.net) 생성
 tools/optimize-synty.mjs    Synty 변환본 압축 + manifest 생성
 ```
 
@@ -70,7 +71,7 @@ tools/optimize-synty.mjs    Synty 변환본 압축 + manifest 생성
 
 ## 에셋
 
-3D 모델과 애니메이션은 모두 [KayKit](https://kaylousberg.com)의 **CC0(퍼블릭 도메인)** 팩입니다. 공개 저장소에 올려도 문제가 없습니다. 출처는 [public/assets/LICENSES.md](public/assets/LICENSES.md)에 정리했습니다.
+3D 모델과 애니메이션은 모두 [KayKit](https://kaylousberg.com)의 **CC0(퍼블릭 도메인)** 팩입니다. 주문 카드 그림은 [game-icons.net](https://game-icons.net) 아이콘(CC BY 3.0, 출처 표시 필요)을 주문마다 하나씩 골라 씁니다(`tools/build-spell-art.mjs`). 타이틀 화면에 출처를 적어 두었습니다. 공개 저장소에 올려도 문제가 없습니다. 출처는 [public/assets/LICENSES.md](public/assets/LICENSES.md)에 정리했습니다.
 
 - Adventurers(아군 하수인), Skeletons(몬스터), Dungeon Remastered(배경)
 - 모든 캐릭터가 같은 리그를 쓰기 때문에, 애니메이션은 공용 라이브러리 파일 두 개로 분리했습니다. 원본 37MB를 3MB로 줄였습니다.

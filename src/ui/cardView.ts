@@ -2,7 +2,7 @@ import { card, KEYWORD_INFO, type CardDef } from '../game/cards';
 import { heroDef } from '../game/heroes';
 import type { Keyword, ModelId } from '../game/types';
 import { artKey } from '../render/assets';
-import { SPELL_BACKDROP, spellIconSvg } from './icons';
+import { SPELL_BACKDROP, spellArtSvg } from './icons';
 
 let portraits = new Map<string, string>();
 
@@ -27,7 +27,7 @@ export function createCardElement(defId: string, opts: { attack?: number; health
 function cardInner(def: CardDef, opts: { attack?: number; health?: number }): string {
   const art = def.type === 'minion'
     ? `<div class="card-art" style="background-image:url(${portrait(def.model, def.id)})"></div>`
-    : `<div class="card-art spell-art" style="background:${SPELL_BACKDROP[def.icon]}">${spellIconSvg(def.icon)}</div>`;
+    : `<div class="card-art spell-art" style="background:${SPELL_BACKDROP[def.icon]}">${spellArtSvg(def.id, def.icon)}</div>`;
   const stats = def.type === 'minion'
     ? `<div class="card-atk">${opts.attack ?? def.attack}</div><div class="card-hp">${opts.health ?? def.health}</div>`
     : '';
