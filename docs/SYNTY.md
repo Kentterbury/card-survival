@@ -60,7 +60,9 @@ rm -rf public/synty && cp -r ../cardproject/WebExport/card-survival/synty public
     - Fantasy Kingdom: 병사, 기수, 사형집행인, 사제, 수녀, 수도사, 마법사, 은자, 요정 등 22
     - Dungeon: 영웅 기사(남·여), 해골 4종, 고통받는 영혼, 유령 2, 고블린
     - Fantasy Characters: 마법사, 소서러, 마녀, 도적, 드루이드, 집시, 음유시인, 왕 등
-  - 같은 UV를 쓰는 색상 아틀라스 27종은 `textures/`에 512px로 저장합니다. Knights 4색, Dungeon 4색, Kingdom 4종, Fantasy 15종입니다.
+  - 같은 UV를 쓰는 색상 아틀라스 27종은 `textures/`에 저장합니다. Knights 4색, Dungeon 4색, Kingdom 4종, Fantasy 15종입니다.
+    - Fantasy와 Dungeon 아틀라스는 색 칸이 작아서 1024px로 둡니다. 나머지는 512px입니다(`TEX_SIZE`).
+  - Fantasy Characters 팩은 원본 노멀이 뒤죽박죽이라 빛을 받으면 삼각형이 군데군데 어두워집니다. 그래서 내보낼 때 노멀을 바깥쪽으로 정리하고 평면 셰이딩으로 다시 계산합니다(`FIX_NORMALS=1`).
   - 무기 33종은 `weapons/`에 있습니다(검, 대검, 도끼, 철퇴, 창, 지팡이, 홀, 활, 석궁, 깃발, 방패).
   - 게임은 카드마다 「룩」을 하나씩 고릅니다: 팩, 캐릭터 메시, 색상 텍스처, 오른손·왼손 무기, 크기. 정의는 `syntySet.ts`의 `LOOKS`에 있습니다.
     - 카드 id, `hero:<영웅 id>`, `boss:<지휘관 이름>`을 키로 씁니다.
@@ -76,7 +78,7 @@ rm -rf public/synty && cp -r ../cardproject/WebExport/card-survival/synty public
   - 변환을 적용하고 메시를 하나로 합칩니다.
   - 게임에서는 원래 KayKit 조각의 경계 상자에 맞춰 크기를 조정합니다. 그래서 보드 배치 코드는 그대로입니다.
 - **무기**: 손 뼈(`Hand_R` / `Hand_L`)에 붙입니다. 각도는 `SYNTY_CHARACTERS`에서 조정합니다.
-- **압축** (`tools/optimize-synty.mjs`): GLB에 dedup, resample, prune, meshopt를 적용하고 텍스처는 그대로 복사합니다. 32MB가 12MB로 줄어듭니다.
+- **압축** (`tools/optimize-synty.mjs`): GLB에 dedup, resample, prune, meshopt를 적용하고 텍스처는 그대로 복사합니다. 35MB가 15MB로 줄어듭니다.
 
 ### 매핑 바꾸기
 

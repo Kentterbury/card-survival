@@ -11,13 +11,19 @@ export async function renderPortraits(subjects: { key: string; model: ModelId }[
   renderer.setSize(size, size, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight(0xfff4e0, 0x403040, 1.6));
-  const key = new THREE.DirectionalLight(0xffffff, 2.2);
-  key.position.set(2, 3, 4);
+  // Soft studio light: a bright ambient base, a gentle key from the camera side and a fill
+  // from the other side, so the low-poly facets don't break the face into dark patches.
+  scene.add(new THREE.HemisphereLight(0xfff6ea, 0x8a7a70, 2.4));
+  const key = new THREE.DirectionalLight(0xfff2e0, 1.1);
+  key.position.set(1.5, 2.5, 4);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0x88aaff, 1.5);
-  rim.position.set(-3, 2, -2);
+  const fill = new THREE.DirectionalLight(0xdde6ff, 0.6);
+  fill.position.set(-3, 1, 3);
+  scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffd9a0, 0.5);
+  rim.position.set(-2, 3, -3);
   scene.add(rim);
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
   const out = new Map<string, string>();
