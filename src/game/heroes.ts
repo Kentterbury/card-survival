@@ -66,23 +66,23 @@ export interface HeroDef {
 export const HEROES: HeroDef[] = [
   {
     id: 'captain', name: '수비대장', title: '방어', model: 'Knight', health: 36, startMana: 2, power: 'guard',
-    blurb: '단단한 전열을 세우고 버티며 반격한다.',
+    blurb: '성문 수비를 도맡아 온 방패 용병단장. 전열을 세우고 버티며 반격한다.',
     deck: ['squire', 'phalanx', 'phalanx', 'shieldbearer', 'crossbowman', 'crossbowman', 'veteran', 'mace_knight', 'firebolt', 'frostring'],
   },
   {
     id: 'arcanist', name: '비전술사', title: '주문', model: 'Mage', health: 22, startMana: 5, power: 'bolt',
-    blurb: '체력은 낮지만 주문과 비전 화살로 멀리서 적을 무너뜨린다.',
+    blurb: '금화를 받고 마법을 파는 떠돌이 비전술사. 체력은 낮지만 주문이 강하다.',
     deck: ['apprentice', 'apprentice', 'shieldbearer', 'firebolt', 'firebolt', 'frostring', 'shockwave', 'thunderbolt', 'war_library', 'stormcaller'],
   },
   {
     id: 'warchief', name: '전쟁 족장', title: '돌격', model: 'Barbarian', health: 32, startMana: 4, power: 'charge',
-    blurb: '하수인을 쏟아내고 밀어붙이는 공격형 영웅.',
+    blurb: '북방에서 건너온 도끼 용병단의 족장. 하수인을 쏟아내 밀어붙인다.',
     deck: ['squire', 'crossbowman', 'phalanx', 'phalanx', 'brawler', 'berserker', 'war_drums', 'firebolt', 'firebolt', 'shockwave'],
   },
   {
-    id: 'hunter', name: '숲의 사냥꾼', title: '원거리', model: 'Rogue_Hooded', health: 20, startMana: 3, power: 'aim',
-    blurb: '방패병 뒤에서 궁수들이 줄째로 쏘아 떨어뜨린다.',
-    deck: ['crossbowman', 'crossbowman', 'longbow', 'glider', 'shieldbearer', 'squire', 'firebolt', 'volley', 'frostring', 'regroup'],
+    id: 'hunter', name: '척후대장', title: '정찰', model: 'Rogue_Hooded', health: 20, startMana: 3, power: 'aim',
+    blurb: '왕국군의 눈이 되어 주는 척후 용병. 정찰병과 궁수로 먼저 보고 먼저 쏜다.',
+    deck: ['crossbowman', 'crossbowman', 'longbow', 'glider', 'glider', 'shieldbearer', 'firebolt', 'volley', 'frostring', 'regroup'],
   },
 ];
 

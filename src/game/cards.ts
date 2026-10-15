@@ -466,7 +466,7 @@ const CARD_LIST: CardDef[] = [
     onSummon: (api, self) => { for (const u of api.allies()) if (u.uid !== self.uid) api.advance(u.uid, 1); },
   },
 
-  // ── 숲의 사냥꾼 전용: 원거리와 덫 ──────────────────────────
+  // ── 척후대장 전용: 정찰, 매복, 원거리 ──────────────────────
   {
     id: 'h_aimed', name: '정밀 사격', type: 'spell', cost: 3, rarity: 'common', hero: 'hunter', target: 'foeUnit', icon: 'arrows', ai: { kind: 'damage', amount: 3 },
     text: '적 하수인 하나에게 피해를 3 줍니다. 그 하수인이 죽으면 카드를 1장 뽑습니다.',
@@ -478,12 +478,12 @@ const CARD_LIST: CardDef[] = [
     },
   },
   {
-    id: 'h_trapper', name: '덫 사냥꾼', type: 'minion', cost: 5, rarity: 'common', hero: 'hunter', attack: 2, health: 3, model: 'Rogue_Hooded', keywords: ['ranged'],
+    id: 'h_trapper', name: '매복 척후병', type: 'minion', cost: 5, rarity: 'common', hero: 'hunter', attack: 2, health: 3, model: 'Rogue_Hooded', keywords: ['ranged'],
     text: '<b>사격</b>. <b>등장 시:</b> 이 줄의 맨 앞 적을 빙결시킵니다.',
     onSummon: (api, self) => { const f = api.frontFoe(self.lane); if (f) api.freeze(f.uid); },
   },
   {
-    id: 'h_sniper', name: '숲의 저격수', type: 'minion', cost: 9, rarity: 'rare', hero: 'hunter', attack: 3, health: 5, model: 'Rogue', keywords: ['ranged', 'pierce'],
+    id: 'h_sniper', name: '척후 저격수', type: 'minion', cost: 9, rarity: 'rare', hero: 'hunter', attack: 3, health: 5, model: 'Rogue', keywords: ['ranged', 'pierce'],
     text: '<b>사격</b>. <b>관통</b>. <b>등장 시:</b> 무작위 적에게 피해를 3 줍니다.',
     onSummon: (api) => randomFoeOrHero(api, 3),
   },

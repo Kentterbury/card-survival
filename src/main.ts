@@ -469,7 +469,7 @@ class App {
         sound.play('stageClear');
         for (const v of this.views.values()) if (v.side === 'player') void v.playOnce('Cheer', 1);
         if (this.enemyHero) await this.enemyHero.die();
-        await this.banner('승리!', `${STAGES[e.stage].hero.name} 처치 · 금화 +${e.gold}`, 1.8);
+        await this.banner('승리!', `${STAGES[e.stage].hero.name} 처치 · 보수 금화 +${e.gold}`, 1.8);
         return;
       case 'defeat':
         sound.play('defeat');
@@ -478,7 +478,7 @@ class App {
         return;
       case 'victory':
         sound.play('victory');
-        await this.banner('최종 승리!', '해골 군주를 쓰러뜨렸습니다', 1.8);
+        await this.banner('계약 완수!', '해골 군주를 쓰러뜨렸습니다', 1.8);
         return;
     }
   }
@@ -1183,7 +1183,7 @@ class App {
   private showTitle() {
     const m = this.openModal(`
       <h1>카드 서바이벌</h1>
-      <p>해골 군단의 지휘관들과 1:1로 맞붙습니다. 하수인을 보내 상대 진영으로 밀고 들어가고, 주문으로 상대 영웅을 무너뜨리세요.</p>
+      <p>해골 군단이 왕국을 덮쳤습니다. 왕국은 금화를 걸고 용병을 모집했고, 당신은 그 계약을 받아들인 용병대장입니다. 다섯 해골 지휘관과 1:1로 맞붙어 쓰러뜨리고 보수를 받으세요.</p>
       <div class="rules">
         <div><b>승리</b> 상대 영웅의 생명력을 0으로 만들면 이깁니다. 내 영웅이 쓰러지면 패배합니다.</div>
         <div><b>마나</b> 첫 턴 마나는 영웅마다 다르고(상대는 ${FIRST_TURN_MANA}), 이후 매 턴 최대 마나가 ${MANA_PER_TURN}씩 늘어납니다(최대 ${MAX_MANA}). 쓰지 않은 마나는 <b>${MAX_RESERVE}까지 다음 턴으로 이월</b>됩니다.</div>
@@ -1207,8 +1207,8 @@ class App {
 
   private showHeroSelect() {
     const m = this.openModal(`
-      <h2>영웅 선택</h2>
-      <p>영웅마다 생명력, 시작 마나, 지휘술, 시작 덱이 다릅니다.</p>
+      <h2>용병 계약</h2>
+      <p>왕국과 계약할 용병대장을 고르세요. 생명력, 시작 마나, 지휘술, 시작 덱이 다릅니다.</p>
       <div class="heroes"></div>`);
     const row = m.querySelector('.heroes')!;
     for (const h of HEROES) {
@@ -1231,13 +1231,13 @@ class App {
     const s = this.game.state;
     const hero = s.sides.player.hero;
     const m = this.openModal(`
-      <h2>야영지</h2>
+      <h2>용병 야영지</h2>
       <p>다음 전투 전에 하나를 고르세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장 · <span class="gold">${s.gold}</span></p>
       <div class="bundles">
         <div class="bundle" id="camp-rest"><h3>휴식</h3><div class="theme">생명력 ${CAMP_HEAL} 회복</div></div>
         <div class="bundle" id="camp-trim"><h3>정비</h3><div class="theme">덱에서 카드 1장 제거</div></div>
       </div>
-      <button class="btn secondary" id="camp-shop">상인 둘러보기 (선택과 별개)</button>`);
+      <button class="btn secondary" id="camp-shop">왕국 보급관 찾아가기 (선택과 별개)</button>`);
     m.querySelector('#camp-shop')!.addEventListener('click', () => this.showShop());
     m.querySelector('#camp-rest')!.addEventListener('click', () => {
       this.closeModal();
@@ -1256,8 +1256,8 @@ class App {
     const hero = s.sides.player.hero;
     const deckFull = s.deckList.length <= 5;
     const m = this.openModal(`
-      <h2>떠돌이 상인</h2>
-      <p>가진 금화 <span class="gold">${s.gold}</span> · 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장</p>
+      <h2>왕국 보급관</h2>
+      <p>보수로 받은 금화로 병력과 물자를 사세요. 가진 금화 <span class="gold">${s.gold}</span> · 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장</p>
       <div class="shop-row"></div>
       <div class="shop-services">
         <div class="bundle ${shop.removed || deckFull || s.gold < REMOVE_PRICE ? 'disabled' : ''}" id="shop-remove">
@@ -1347,8 +1347,8 @@ class App {
         <div class="mini-cards" data-cards="${b.cards.join(',')}"></div>
       </div>`).join('');
     const m = this.openModal(`
-      <h2>스테이지 ${s.stage + 1} 클리어!</h2>
-      <p>카드 꾸러미 하나를 골라 덱에 추가하세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장 · <span class="gold">${s.gold}</span></p>
+      <h2>스테이지 ${s.stage + 1} 완수!</h2>
+      <p>왕국이 지원 물자를 보냈습니다. 꾸러미 하나를 골라 덱에 추가하세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장 · <span class="gold">${s.gold}</span></p>
       <div class="bundles">${bundles}</div>
       <button class="btn secondary" id="view-deck">현재 덱 보기</button>`);
     m.querySelectorAll<HTMLElement>('.mini-cards').forEach((el) => {
@@ -1377,10 +1377,10 @@ class App {
     const s = this.game.state;
     const st = STAGES[s.stage];
     const m = this.openModal(`
-      <h1>${won ? '최종 승리!' : '패배'}</h1>
-      <p>${won ? '해골 군주가 무너지고 성채에 새벽이 찾아왔습니다.' : `스테이지 ${s.stage + 1}에서 ${st.hero.name}에게 쓰러졌습니다.`}</p>
+      <h1>${won ? '계약 완수!' : '패배'}</h1>
+      <p>${won ? '해골 군주가 무너지고 왕국에 새벽이 찾아왔습니다. 왕국은 약속한 보수를 지급했고, 당신의 용병단은 전설이 되었습니다.' : `스테이지 ${s.stage + 1}에서 ${st.hero.name}에게 쓰러졌습니다. 계약은 여기서 끝났습니다.`}</p>
       <p>클리어한 스테이지 ${s.stagesCleared}/${STAGES.length} · 최종 덱 ${s.deckList.length}장</p>
-      <button class="btn" id="again">다시 도전</button>`);
+      <button class="btn" id="again">새 계약 맺기</button>`);
     this.clearSave();
     m.querySelector('#again')!.addEventListener('click', () => this.showHeroSelect());
   }

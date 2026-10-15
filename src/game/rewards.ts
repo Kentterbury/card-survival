@@ -12,7 +12,7 @@ const BUNDLES: (RewardBundle & { tier: number })[] = [
   { id: 'drums', name: '진격의 북', theme: '밀어붙이기', tier: 1, cards: ['war_drums', 'bomber', 'apprentice'] },
   { id: 'icewall', name: '빙벽', theme: '묶어두기', tier: 1, cards: ['ice_prison', 'ice_prison', 'warden'] },
   { id: 'supply', name: '보급', theme: '마나와 드로우', tier: 1, cards: ['mana_potion', 'mana_potion', 'regroup'] },
-  { id: 'hunter', name: '사냥꾼', theme: '정밀 타격', tier: 2, cards: ['volley', 'execute', 'execute'] },
+  { id: 'hunter', name: '명사수', theme: '정밀 타격', tier: 2, cards: ['volley', 'execute', 'execute'] },
   { id: 'sanctum', name: '성소', theme: '보호와 치유', tier: 2, cards: ['priest', 'blessing', 'medic'] },
   { id: 'siege', name: '공성전', theme: '영웅 압박', tier: 3, cards: ['siege_mage', 'volley', 'bomber'] },
   { id: 'vanguard', name: '돌격대', theme: '밀어내며 전진', tier: 1, cards: ['mace_knight', 'phalanx', 'phalanx'] },
@@ -44,9 +44,9 @@ const HERO_BUNDLES: (RewardBundle & { tier: number; hero: string })[] = [
   { id: 'charge', name: '돌격대', theme: '전쟁 족장 전용 · 돌격', hero: 'warchief', tier: 1, cards: ['w_horn', 'w_rider', 'phalanx'] },
   { id: 'warhost', name: '전쟁 무리', theme: '전쟁 족장 전용 · 전체 강화', hero: 'warchief', tier: 2, cards: ['w_warcry', 'w_rider', 'brawler'] },
   { id: 'axelord', name: '족장의 친위대', theme: '전쟁 족장 전용 · 전설', hero: 'warchief', tier: 3, cards: ['w_axelord', 'w_horn', 'berserker'] },
-  { id: 'traps', name: '덫과 화살', theme: '숲의 사냥꾼 전용 · 빙결', hero: 'hunter', tier: 1, cards: ['h_trapper', 'h_aimed', 'crossbowman'] },
-  { id: 'sniper', name: '저격', theme: '숲의 사냥꾼 전용 · 정밀 사격', hero: 'hunter', tier: 2, cards: ['h_sniper', 'h_aimed', 'longbow'] },
-  { id: 'arrowstorm', name: '화살 폭풍', theme: '숲의 사냥꾼 전용 · 전설', hero: 'hunter', tier: 3, cards: ['h_rain', 'h_trapper', 'glider'] },
+  { id: 'traps', name: '매복조', theme: '척후대장 전용 · 매복과 빙결', hero: 'hunter', tier: 1, cards: ['h_trapper', 'h_aimed', 'crossbowman'] },
+  { id: 'sniper', name: '저격조', theme: '척후대장 전용 · 정밀 사격', hero: 'hunter', tier: 2, cards: ['h_sniper', 'h_aimed', 'longbow'] },
+  { id: 'arrowstorm', name: '척후대 총공세', theme: '척후대장 전용 · 전설', hero: 'hunter', tier: 3, cards: ['h_rain', 'h_trapper', 'glider'] },
 ];
 
 /** Every bundle, for data checks. */
