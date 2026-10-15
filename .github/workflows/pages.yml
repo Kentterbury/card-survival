@@ -20,7 +20,7 @@ jobs:
     env:
       # Read-only token for the private Synty asset repo (docs/SYNTY.md). Without it the
       # game ships with the bundled KayKit set only.
-      SYNTY_TOKEN: ${{ secrets.SYNTY_ASSETS_TOKEN }}
+      SYNTY_TOKEN: ${{ secrets.ASSET_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Fetch Synty assets (private)

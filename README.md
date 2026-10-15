@@ -86,7 +86,7 @@ node tools/optimize-assets.mjs <KayKit 저장소들이 있는 폴더>
 `public/synty/manifest.json`이 있으면 KayKit 대신 Synty POLYGON 모델(던전, 판타지 왕국, 기사, 판타지 캐릭터)을 자동으로 씁니다. 애니메이션은 DoubleL 팩을 리타깃해서 씁니다.
 
 - 유료 에셋이라 이 공개 저장소에는 넣지 않습니다.
-- 변환본은 비공개 저장소 `Kentterbury/cardproject`에 있고, Pages 배포 때 `SYNTY_ASSETS_TOKEN` 시크릿으로 받아 옵니다.
+- 변환본은 비공개 저장소 `Kentterbury/cardproject`에 있고, Pages 배포 때 `ASSET_TOKEN` 시크릿으로 받아 옵니다.
 - 토큰이 없으면 KayKit으로 배포됩니다.
 
 설정 방법과 변환 파이프라인은 [docs/SYNTY.md](docs/SYNTY.md)에 있습니다.

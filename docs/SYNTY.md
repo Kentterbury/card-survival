@@ -27,7 +27,7 @@
    - Repository access: **Only select repositories** → `Kentterbury/cardproject`
    - Permissions → Repository permissions → **Contents: Read-only**
 2. `Kentterbury/card-survival` → Settings → Secrets and variables → Actions → **New repository secret**
-   - Name: `SYNTY_ASSETS_TOKEN`, Value: 위 토큰
+   - Name: `ASSET_TOKEN`, Value: 위 토큰
 3. (선택) 에셋을 `cardproject`의 다른 브랜치(예: `main`)에서 받으려면 같은 화면의 **Variables** 탭에 `SYNTY_ASSETS_REF`를 추가합니다.
    - 기본값은 `claude/charming-darwin-ijym46`입니다.
 4. Actions → Deploy to GitHub Pages → **Run workflow**로 다시 배포합니다.
