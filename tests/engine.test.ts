@@ -58,13 +58,13 @@ describe('turn structure', () => {
     expect(minions).toBeLessThan(STARTER_DECK.length / 2);
   });
 
-  it('max mana grows by 2 a turn up to 20, and up to 2 unspent mana carries over', () => {
+  it('max mana grows by 1 a turn up to 20, and up to 2 unspent mana carries over', () => {
     const g = freshGame(Array(10).fill('squire'));
     passTurn(g);
     const start = heroDef('captain').startMana;
     expect(g.side('player').maxMana).toBe(start + MANA_PER_TURN);
     expect(g.side('player').mana).toBe(start + MANA_PER_TURN + MAX_RESERVE);
-    for (let i = 0; i < 12; i++) passTurn(g);
+    for (let i = 0; i < 20; i++) passTurn(g);
     expect(g.side('player').maxMana).toBe(MAX_MANA);
   });
 

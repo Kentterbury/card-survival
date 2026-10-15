@@ -13,7 +13,7 @@ export interface HeroPower {
 
 export const POWERS: Record<string, HeroPower> = {
   guard: {
-    id: 'guard', name: '방패 명령', cost: 3, target: 'ally',
+    id: 'guard', name: '방패 명령', cost: 2, target: 'ally',
     text: '아군 하수인 하나에게 <b>보호막</b>을 부여합니다.',
     cast: (api, t) => { if (t.kind === 'unit') api.grantKeyword(t.uid, 'ward'); },
   },
@@ -23,7 +23,7 @@ export const POWERS: Record<string, HeroPower> = {
     cast: (api, t) => api.damage(t, 1),
   },
   charge: {
-    id: 'charge', name: '돌격 명령', cost: 7, target: 'ally',
+    id: 'charge', name: '돌격 명령', cost: 8, target: 'ally',
     text: '아군 하수인 하나에게 +1/+1을 주고 한 칸 전진시킵니다.',
     cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 1, 1); api.advance(t.uid, 1); } },
   },
@@ -72,7 +72,7 @@ export const HEROES: HeroDef[] = [
   {
     id: 'arcanist', name: '비전술사', title: '주문', model: 'Mage', health: 22, startMana: 5, power: 'bolt',
     blurb: '금화를 받고 마법을 파는 떠돌이 비전술사. 체력은 낮지만 주문이 강하다.',
-    deck: ['apprentice', 'apprentice', 'shieldbearer', 'firebolt', 'firebolt', 'frostring', 'shockwave', 'thunderbolt', 'war_library', 'stormcaller'],
+    deck: ['apprentice', 'apprentice', 'shieldbearer', 'firebolt', 'firebolt', 'frostring', 'shockwave', 'thunderbolt', 'war_library', 'a_scholar'],
   },
   {
     id: 'warchief', name: '전쟁 족장', title: '돌격', model: 'Barbarian', health: 32, startMana: 4, power: 'charge',
