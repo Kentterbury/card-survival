@@ -1,6 +1,6 @@
 import type { ModelId } from './types';
 
-/** `summon`: 2 mana, summon a 해골 졸개. `bolt`: 2 mana, 1 damage to any foe (hero included). */
+/** The enemy commander's 지휘술 (see POWERS in heroes.ts): `summon` 망자 소환, `curse` 저주의 손길. */
 export type EnemyPower = 'summon' | 'curse';
 
 export interface StageDef {
