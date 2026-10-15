@@ -54,26 +54,59 @@ rm -rf public/synty && cp -r ../cardproject/WebExport/card-survival/synty public
 
 ### 단계별 처리
 
-- **캐릭터** (`export_char.py`)
-  - 여러 캐릭터가 들어 있는 팩 FBX에서 필요한 메시만 남깁니다.
-  - 리그는 Synty 공용 49본 리그(센티미터 단위)를 그대로 씁니다. 게임에서 `SYNTY_CHAR_SCALE`로 줄입니다.
-  - 텍스처 아틀라스는 512px로 줄입니다.
+- **캐릭터** (`export_char.py ... ALL`)
+  - 팩마다 GLB 하나로 내보냅니다(`characters/Pack_<팩>.glb`). 모든 캐릭터가 같은 49본 리그(센티미터 단위)를 씁니다.
+    - Knights: 기사 3, 병사 2
+    - Fantasy Kingdom: 병사, 기수, 사형집행인, 사제, 수녀, 수도사, 마법사, 은자, 요정 등 22
+    - Dungeon: 영웅 기사(남·여), 해골 4종, 고통받는 영혼, 유령 2, 고블린
+    - Fantasy Characters: 마법사, 소서러, 마녀, 도적, 드루이드, 집시, 음유시인, 왕 등
+  - 같은 UV를 쓰는 색상 아틀라스 27종은 `textures/`에 512px로 저장합니다. Knights 4색, Dungeon 4색, Kingdom 4종, Fantasy 15종입니다.
+  - 무기 33종은 `weapons/`에 있습니다(검, 대검, 도끼, 철퇴, 창, 지팡이, 홀, 활, 석궁, 깃발, 방패).
+  - 게임은 카드마다 「룩」을 하나씩 고릅니다: 팩, 캐릭터 메시, 색상 텍스처, 오른손·왼손 무기, 크기. 정의는 `syntySet.ts`의 `LOOKS`에 있습니다.
+    - 카드 id, `hero:<영웅 id>`, `boss:<지휘관 이름>`을 키로 씁니다.
+    - 그래서 카드·영웅·지휘관이 모두 다르게 보이고, 카드 초상화도 카드마다 따로 그립니다.
 - **애니메이션** (`retarget.py`)
   - DoubleL RPG 애니메이션(Unity 휴머노이드 리그, A-포즈)을 Synty 리그로 월드 공간 리타깃합니다.
   - 뼈마다 기준 방향 차이를 보정합니다.
   - 제자리 동작으로 만든 뒤 `characters/anims.glb` 하나에 클립으로 모읍니다.
-  - 사망·소환 클립은 없어서, 게임 코드가 대신 연출합니다.
-    - 사망: 뒤로 넘어짐
-    - 해골 소환: 바닥에서 솟아오름
+  - 소환 클립은 없어서, 해골은 코드로 바닥에서 솟아오릅니다.
+  - 사망 클립은 Mixamo에서 받아 넣습니다(아래). 클립이 없는 동안에는 지금 자세 그대로 뒤로 넘어집니다.
 - **배경·소품** (`export_static.py`)
   - Polygon Dungeon과 Fantasy Kingdom에서 가져옵니다.
   - 변환을 적용하고 메시를 하나로 합칩니다.
   - 게임에서는 원래 KayKit 조각의 경계 상자에 맞춰 크기를 조정합니다. 그래서 보드 배치 코드는 그대로입니다.
 - **무기**: 손 뼈(`Hand_R` / `Hand_L`)에 붙입니다. 각도는 `SYNTY_CHARACTERS`에서 조정합니다.
-- **압축** (`tools/optimize-synty.mjs`): dedup, resample, prune, meshopt를 적용합니다. 9.0MB가 4.4MB로 줄어듭니다.
+- **압축** (`tools/optimize-synty.mjs`): GLB에 dedup, resample, prune, meshopt를 적용하고 텍스처는 그대로 복사합니다. 32MB가 12MB로 줄어듭니다.
 
 ### 매핑 바꾸기
 
-- 캐릭터나 클립을 바꾸려면 `build_card_survival.sh`를 고친 뒤 위 1~3단계를 다시 실행합니다.
+- 카드의 생김새(캐릭터·색·무기·크기)는 `syntySet.ts`의 `LOOKS`만 고치면 됩니다. 이미 내보낸 팩·텍스처·무기 안에서 고를 때는 다시 변환할 필요가 없습니다.
+- 새 무기나 클립을 추가하려면 `build_card_survival.sh`를 고친 뒤 위 1~3단계를 다시 실행합니다.
 - 배경 조각을 바꾸려면 `syntySet.ts`의 `SYNTY_STATICS`도 함께 고칩니다.
 - 결과물(`WebExport/card-survival/synty/`)은 `cardproject`에 커밋하고 푸시합니다. 그다음 card-survival 배포를 다시 실행하면 반영됩니다.
+
+## Mixamo 사망 동작 넣기
+
+보유한 팩에는 사망 애니메이션이 없어서 Mixamo(무료, Adobe 로그인 필요) 동작을 씁니다. 리타깃 스크립트가 Mixamo 리그(`mixamorig:*`)를 자동으로 인식합니다.
+
+1. https://www.mixamo.com 에서 아래 동작을 검색합니다. 캐릭터는 기본 Y Bot 그대로 둡니다.
+2. **Download** 설정:
+   - Format: **FBX Binary (.fbx)**
+   - Skin: **Without Skin**
+   - Frames per second: **30**
+   - Keyframe Reduction: **none**
+3. 파일 이름을 아래 표의 이름으로 바꿔 `cardproject`의 `Assets/Mixamo/`에 넣습니다.
+4. `build_card_survival.sh`부터 다시 실행합니다. 없는 파일은 건너뛰고, 그 카드들은 코드 연출로 넘어집니다.
+
+| 파일 이름 | Mixamo 검색어 | 쓰는 카드 |
+| --- | --- | --- |
+| `Death_Back.fbx` | Falling Back Death | 기본(아래 목록에 없는 모든 유닛) |
+| `Death_Shield.fbx` | Sword And Shield Death | 수비대장, 방패병, 성채 기사, 방벽 수호자 등 방패 든 유닛, 해골 방패수, 해골 하사 |
+| `Death_Heavy.fbx` | Two Handed Sword Death | 전쟁 족장, 대검 용병, 전쟁 군주, 근위 기사단장, 뼈 거인, 죽음의 기사 |
+| `Death_Forward.fbx` | Falling Forward Death | 그림자 단검수, 돌격 기병, 광전사, 해골 추적자·암살자 |
+| `Death_Shot.fbx` | Death From Front Headshot | 척후대장, 석궁병, 장궁수, 매복 척후병, 척후 저격수 |
+| `Death_Kneel.fbx` | Dying | 비전술사, 견습 마법사, 의무병, 신관, 수도사, 학자 |
+| `Death_Caster.fbx` | Dying Backwards | 대마법사, 공성 마법사, 해골 주술사들, 서고의 주술사, 해골 군주 |
+| `Death_Undead.fbx` | Zombie Dying | 해골 졸개, 불사 해골, 되살아나는 해골, 해골 전사·대장 등 |
+
+매핑은 `syntySet.ts`의 `DEATHS`에서 바꿀 수 있습니다.

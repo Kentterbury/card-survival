@@ -1,16 +1,18 @@
 import { card, KEYWORD_INFO, type CardDef } from '../game/cards';
 import { heroDef } from '../game/heroes';
 import type { Keyword, ModelId } from '../game/types';
+import { artKey } from '../render/assets';
 import { SPELL_BACKDROP, spellIconSvg } from './icons';
 
-let portraits = new Map<ModelId, string>();
+let portraits = new Map<string, string>();
 
-export function setPortraits(p: Map<ModelId, string>) {
+export function setPortraits(p: Map<string, string>) {
   portraits = p;
 }
 
-export function portrait(model: ModelId): string {
-  return portraits.get(model) ?? '';
+/** `look` is a card id, `hero:<id>` or `boss:<name>`; falls back to the model's picture. */
+export function portrait(model: ModelId, look?: string): string {
+  return portraits.get(artKey(look, model)) ?? portraits.get(model) ?? '';
 }
 
 export function createCardElement(defId: string, opts: { attack?: number; health?: number } = {}): HTMLDivElement {
@@ -24,7 +26,7 @@ export function createCardElement(defId: string, opts: { attack?: number; health
 
 function cardInner(def: CardDef, opts: { attack?: number; health?: number }): string {
   const art = def.type === 'minion'
-    ? `<div class="card-art" style="background-image:url(${portrait(def.model)})"></div>`
+    ? `<div class="card-art" style="background-image:url(${portrait(def.model, def.id)})"></div>`
     : `<div class="card-art spell-art" style="background:${SPELL_BACKDROP[def.icon]}">${spellIconSvg(def.icon)}</div>`;
   const stats = def.type === 'minion'
     ? `<div class="card-atk">${opts.attack ?? def.attack}</div><div class="card-hp">${opts.health ?? def.health}</div>`

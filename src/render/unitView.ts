@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { ModelId, Side, Unit } from '../game/types';
-import { animsFor, instantiateCharacter, instantiateStatic, type AnimSet } from './assets';
+import { animsFor, instantiateCharacter, instantiateStatic, useSynty, type AnimSet } from './assets';
+import { deathClipFor } from './syntySet';
 import { ease, tween, wait } from './tween';
 
 export type Facing = 'enemy' | 'player';
@@ -34,6 +35,8 @@ export class UnitView {
     readonly modelId: ModelId,
     readonly scale: number,
     badgeLayer: HTMLElement,
+    /** Card id, `hero:<id>` or `boss:<name>`: picks the character look in the Synty set. */
+    readonly look?: string,
   ) {
     this.proxy = new THREE.Mesh(
       new THREE.BoxGeometry(1.7, 2.9 * scale, 1.5),
@@ -52,11 +55,14 @@ export class UnitView {
       this.model = await instantiateStatic('barrier');
       this.model.scale.setScalar(0.58);
     } else {
-      const inst = await instantiateCharacter(this.modelId);
+      const inst = await instantiateCharacter(this.modelId, this.look);
       this.model = inst.root;
       this.mixer = inst.mixer;
       this.clips = inst.clips;
       this.anims = animsFor(this.modelId);
+      // Synty: a per-concept death clip when the library has it (else die() topples the unit).
+      const death = useSynty ? deathClipFor(this.look) : '';
+      if (this.anims && death && this.clips.some((c) => c.name === death)) this.anims = { ...this.anims, death };
       this.model.scale.setScalar(UNIT_SCALE * this.scale);
       // Wide-brimmed mage hats read as a big disc from the top-down camera.
       const hat = this.model.getObjectByName('Mage_Hat');
@@ -236,9 +242,9 @@ export class UnitView {
     if (this.anims?.death) {
       await this.playOnce(this.anims.death, 0.9, false);
     } else if (this.anims) {
-      // No authored death clip (the Synty set): freeze the pose and topple backwards from the feet.
-      this.mixer?.stopAllAction();
-      this.current = null;
+      // No authored death clip (the Synty set): freeze the current pose (stopping the actions
+      // would snap the rig to its T-pose) and topple backwards from the feet.
+      if (this.mixer) this.mixer.timeScale = 0;
       this.model.rotation.order = 'YXZ';
       await tween(0.45, (k) => { this.model.rotation.x = -(k ** 3) * Math.PI * 0.5; });
     }

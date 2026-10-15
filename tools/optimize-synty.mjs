@@ -7,7 +7,7 @@ import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { dedup, meshopt, prune, resample } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
-import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
 const [src, dst] = process.argv.slice(2).map((p) => p && resolve(p));
@@ -23,7 +23,7 @@ function* walk(dir) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) yield* walk(p);
-    else if (name.endsWith('.glb')) yield p;
+    else if (name.endsWith('.glb') || name.endsWith('.png')) yield p;
   }
 }
 
@@ -31,11 +31,16 @@ const files = [];
 let before = 0;
 let after = 0;
 for (const file of walk(src)) {
-  const doc = await io.read(file);
-  await doc.transform(dedup(), resample(), prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   const out = join(dst, relative(src, file));
   mkdirSync(dirname(out), { recursive: true });
-  await io.write(out, doc);
+  if (file.endsWith('.png')) {
+    // Colour-variant textures for the character packs: copied as is.
+    copyFileSync(file, out);
+  } else {
+    const doc = await io.read(file);
+    await doc.transform(dedup(), resample(), prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+    await io.write(out, doc);
+  }
   files.push(relative(dst, out).split('\\').join('/'));
   before += statSync(file).size;
   after += statSync(out).size;

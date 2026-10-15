@@ -4,7 +4,8 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { ModelId } from '../game/types';
 import {
-  KAYKIT_BOUNDS, SYNTY_ANIMS, SYNTY_CHAR_SCALE, SYNTY_CHARACTERS, SYNTY_STATICS, SYNTY_WEAPON_FILES,
+  DEFAULT_LOOKS, grip, KAYKIT_BOUNDS, LOOKS, SYNTY_ANIMS, SYNTY_CHAR_SCALE, SYNTY_PACKS, SYNTY_STATICS, SYNTY_TEXTURES,
+  SYNTY_WEAPON_FILES, type Look,
 } from './syntySet';
 
 const BASE = `${import.meta.env.BASE_URL}assets/`;
@@ -130,10 +131,11 @@ function prepareShadows(obj: THREE.Object3D) {
 async function preloadSynty(onProgress?: (done: number, total: number) => void) {
   const statics = [...new Set(Object.values(SYNTY_STATICS).map((s) => s.file))];
   const jobs: Promise<unknown>[] = [
-    ...CHARACTER_MODELS.map((m) => loadSynty(`characters/${m}.glb`)),
+    ...SYNTY_PACKS.map((p) => loadSynty(`characters/Pack_${p}.glb`)),
     loadSynty('characters/anims.glb'),
     ...statics.map((f) => loadSynty(`dungeon/${f}.glb`)),
     ...SYNTY_WEAPON_FILES.map((w) => loadSynty(`weapons/${w}.glb`)),
+    ...SYNTY_TEXTURES.map((t) => loadTexture(t)),
   ];
   let done = 0;
   jobs.forEach((j) => j.then(() => onProgress?.(++done, jobs.length)));
@@ -184,18 +186,77 @@ export interface CharacterInstance {
   clips: THREE.AnimationClip[];
 }
 
-async function instantiateSyntyCharacter(model: Exclude<ModelId, 'barrier'>): Promise<CharacterInstance> {
-  const gltf = await loadSynty(`characters/${model}.glb`);
+const textures = new Map<string, Promise<THREE.Texture>>();
+
+/** A colour variant of a pack atlas, set up the way glTF textures are (no flip, sRGB, crisp). */
+function loadTexture(name: string): Promise<THREE.Texture> {
+  let t = textures.get(name);
+  if (!t) {
+    t = new THREE.TextureLoader().loadAsync(`${SYNTY_BASE}textures/${name}.png`).then((tex) => {
+      tex.flipY = false;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.magFilter = THREE.NearestFilter;
+      return tex;
+    });
+    textures.set(name, t);
+  }
+  return t;
+}
+
+/** One material per texture variant, shared by every unit wearing it. */
+const variantMats = new Map<string, Promise<THREE.Material>>();
+function variantMaterial(base: THREE.MeshStandardMaterial, tex: string): Promise<THREE.Material> {
+  let m = variantMats.get(tex);
+  if (!m) {
+    m = loadTexture(tex).then((map) => {
+      const mat = base.clone();
+      mat.map = map;
+      return mat;
+    });
+    variantMats.set(tex, m);
+  }
+  return m;
+}
+
+/** The look of a card (`cardId`), a hero (`hero:<id>`) or a commander (`boss:<name>`). */
+export function lookFor(key: string | undefined, model: Exclude<ModelId, 'barrier'>): Look {
+  return (key && LOOKS[key]) || DEFAULT_LOOKS[model];
+}
+
+/**
+ * The key portraits are stored under: the look key in the Synty set (every card its own
+ * picture), the ModelId with KayKit (one picture per model).
+ */
+export function artKey(key: string | undefined, model: ModelId): string {
+  return useSynty && key && LOOKS[key] ? key : model;
+}
+
+async function instantiateSyntyCharacter(model: Exclude<ModelId, 'barrier'>, key?: string): Promise<CharacterInstance> {
+  const look = lookFor(key, model);
+  const gltf = await loadSynty(`characters/Pack_${look.pack}.glb`);
   const inner = SkeletonUtils.clone(gltf.scene);
-  inner.scale.setScalar(SYNTY_CHAR_SCALE);
-  for (const w of SYNTY_CHARACTERS[model].weapons ?? []) {
-    const bone = inner.getObjectByName(w.bone);
+  inner.scale.setScalar(SYNTY_CHAR_SCALE * (look.scale ?? 1));
+  // The pack holds every character on one rig; keep just this look's body.
+  const drop: THREE.Object3D[] = [];
+  const mats: THREE.Mesh[] = [];
+  inner.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh) return;
+    if (o.name === look.mesh) mats.push(o as THREE.Mesh);
+    else drop.push(o);
+  });
+  for (const o of drop) o.removeFromParent();
+  if (look.tex) {
+    for (const m of mats) m.material = await variantMaterial(m.material as THREE.MeshStandardMaterial, look.tex);
+  }
+  for (const [file, hand] of [[look.r, 'r'], [look.l, 'l']] as const) {
+    if (!file) continue;
+    const bone = inner.getObjectByName(hand === 'r' ? 'Hand_R' : 'Hand_L');
     if (!bone) continue;
-    const weapon = (await loadSynty(`weapons/${w.file}.glb`)).scene.clone(true);
-    weapon.position.set(...w.pos);
-    weapon.rotation.set(...(w.rot.map((d) => THREE.MathUtils.degToRad(d)) as [number, number, number]));
+    const weapon = (await loadSynty(`weapons/${file}.glb`)).scene.clone(true);
+    weapon.rotation.set(...(grip(file, hand).map((d) => THREE.MathUtils.degToRad(d)) as [number, number, number]));
     // Weapons are in metres; the rig is in centimetres.
     weapon.scale.setScalar(100);
+    weapon.userData.heldWeapon = true;
     bone.add(weapon);
   }
   // Callers scale and turn the returned root, so keep the unit conversion one level down.
@@ -206,8 +267,9 @@ async function instantiateSyntyCharacter(model: Exclude<ModelId, 'barrier'>): Pr
   return { root, mixer, clips: animLibs!.adventurer };
 }
 
-export async function instantiateCharacter(model: ModelId): Promise<CharacterInstance> {
-  if (useSynty && model !== 'barrier') return instantiateSyntyCharacter(model);
+/** `look` is a card id, `hero:<id>` or `boss:<name>`; only the Synty set tells them apart. */
+export async function instantiateCharacter(model: ModelId, look?: string): Promise<CharacterInstance> {
+  if (useSynty && model !== 'barrier') return instantiateSyntyCharacter(model, look);
   const gltf = await loadGltf(`characters/${model}.glb`);
   const root = SkeletonUtils.clone(gltf.scene);
   const loadout = LOADOUT[model];

@@ -106,12 +106,14 @@ export class Board {
     for (let z = 2; z >= -18; z -= 8) {
       jobs.push(add('pillar', -8.7, z));
       jobs.push(add('pillar', 8.7, z));
-      jobs.push(add('torch_mounted', -9.0, z - 4, Math.PI / 2, 2.2));
-      jobs.push(add('torch_mounted', 9.0, z - 4, -Math.PI / 2, 2.2));
-      // Real lights only on every other torch to keep the shader light count low.
-      if (z !== -6) {
-        this.addTorchLight(-8.2, z - 4);
-        this.addTorchLight(8.2, z - 4);
+    }
+    // Side-wall torches; real lights only on the defenders' end to keep the shader light count low.
+    for (const [z, lit] of [[-2, true], [-10, false]] as const) {
+      jobs.push(add('torch_mounted', -9.0, z, Math.PI / 2, 2.2));
+      jobs.push(add('torch_mounted', 9.0, z, -Math.PI / 2, 2.2));
+      if (lit) {
+        this.addTorchLight(-8.2, z);
+        this.addTorchLight(8.2, z);
       }
     }
     jobs.push(add('banner_patternA_red', -9.0, -6, Math.PI / 2));
@@ -121,7 +123,12 @@ export class Board {
     jobs.push(add('wall_gated', -2, -17.5));
     jobs.push(add('wall_gated', 2, -17.5));
     jobs.push(add('wall', 6, -17.5));
-    jobs.push(add('rubble_large', -6.5, -16, 0.3));
+    jobs.push(add('rubble_large', -7.6, -16, 0.3));
+    // Torches flanking the gate, lighting the enemy commander's end like the defenders' end.
+    jobs.push(add('torch_mounted', -4.6, -16.95, 0, 2.2));
+    jobs.push(add('torch_mounted', 4.6, -16.95, 0, 2.2));
+    this.addTorchLight(-4.6, -16.2);
+    this.addTorchLight(4.6, -16.2);
     this.addTorchLight(0, -16.2, 0x7cff9a, 9);
     // The defenders' side.
     jobs.push(add('barrier_column', -6.5, 1.6));

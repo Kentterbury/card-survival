@@ -12,26 +12,136 @@ export const SYNTY_CHAR_SCALE = 0.014;
 
 type CharModel = Exclude<ModelId, 'barrier'>;
 
-/** A static weapon held by a hand bone (offsets are in the rig's centimetre space; tuned by eye). */
-export interface HeldWeapon {
-  file: string;
-  bone: 'Hand_R' | 'Hand_L';
-  pos: [number, number, number];
-  /** Euler XYZ in degrees. */
-  rot: [number, number, number];
+export type Pack = 'Knights' | 'Kingdom' | 'Dungeon' | 'Fantasy';
+
+/**
+ * One character look: a mesh from a pack GLB (characters/Pack_<pack>.glb), an optional
+ * colour variant of the pack atlas (textures/<tex>.png), weapons from weapons/ in each hand,
+ * and a size multiplier. Animations still come from the card's ModelId (SYNTY_ANIMS).
+ */
+export interface Look {
+  pack: Pack;
+  mesh: string;
+  tex?: string;
+  /** Right-hand and left-hand weapon files (weapons/<file>.glb). */
+  r?: string;
+  l?: string;
+  scale?: number;
 }
 
-export const SYNTY_CHARACTERS: Record<CharModel, { weapons?: HeldWeapon[] }> = {
-  Knight: {},
-  Barbarian: { weapons: [{ file: 'SM_Wep_Axe_03', bone: 'Hand_R', pos: [0, 0, 0], rot: [90, 0, 45] }] },
-  Mage: { weapons: [{ file: 'SM_Wep_Staff_01', bone: 'Hand_R', pos: [0, 0, 0], rot: [90, 0, 45] }] },
-  Rogue: { weapons: [{ file: 'SM_Prop_Crossbow_01', bone: 'Hand_R', pos: [0, 0, 0], rot: [0, -90, 0] }] },
-  Rogue_Hooded: { weapons: [{ file: 'SM_Prop_Bow_01', bone: 'Hand_L', pos: [0, 0, 0], rot: [0, 90, 0] }] },
-  Skeleton_Minion: {},
-  Skeleton_Warrior: {},
-  Skeleton_Rogue: {},
-  Skeleton_Mage: { weapons: [{ file: 'SM_Wep_Staff_01', bone: 'Hand_R', pos: [0, 0, 0], rot: [90, 0, 45] }] },
+const look = (pack: Pack, mesh: string, tex?: string, r?: string, l?: string, scale?: number): Look =>
+  ({ pack, mesh, tex, r, l, scale });
+const KN = (mesh: string, tex: string, r?: string, l?: string, scale?: number) => look('Knights', `Character_${mesh}`, `Knights_${tex}`, r, l, scale);
+const KG = (mesh: string, r?: string, l?: string, scale?: number) => look('Kingdom', `SM_Chr_${mesh}_01`, undefined, r, l, scale);
+const DG = (mesh: string, tex: number, r?: string, l?: string, scale?: number) => look('Dungeon', `Character_${mesh}`, `Dungeon_${tex}`, r, l, scale);
+const FC = (mesh: string, tex: string, r?: string, l?: string, scale?: number) => look('Fantasy', `Character_${mesh}`, `Fantasy_${tex}`, r, l, scale);
+
+/**
+ * Looks by card id, `hero:<heroId>` and `boss:<commander name>`, so every unit and hero
+ * reads differently. Anything missing falls back to DEFAULT_LOOKS by ModelId.
+ */
+export const LOOKS: Record<string, Look> = {
+  // ── Heroes
+  'hero:captain': DG('Hero_Knight_Male', 1, 'SM_Wep_Broadsword_01', 'SM_Wep_Shield_02'),
+  'hero:arcanist': FC('Male_Wizard', '1A', 'SM_Wep_Staff_01'),
+  'hero:warchief': FC('Male_King', '3A', 'SM_Wep_Ornate_GreatAxe_01'),
+  'hero:hunter': FC('Female_Druid', '1A', undefined, 'SM_Prop_Bow_01'),
+  // ── 수비대장's knights and soldiers: one mesh/colour/weapon set each
+  squire: KN('Soldier_01', 'Blue', 'SM_Wep_Sword_01'),
+  shieldbearer: KN('Soldier_01', 'Yellow', undefined, 'SM_Wep_Shield_01'),
+  veteran: KN('Soldier_02', 'Blue', 'SM_Wep_Spear_08'),
+  fortress: KN('Knight_02', 'Black', 'SM_Wep_Hammer_02', 'SM_Wep_Shield_03'),
+  warden: DG('Hero_Knight_Female', 2, undefined, 'SM_Wep_Shield_Heater_01'),
+  mace_knight: KN('Knight_03', 'Orange', 'SM_Wep_Mace_01'),
+  phalanx: KG('Soldier_Male', 'SM_Wep_Spear_02', 'SM_Wep_Shield_04'),
+  stalwart: KN('Knight_01', 'Yellow', 'SM_Wep_Broadsword_01'),
+  thornguard: KN('Knight_01', 'Black', 'SM_Wep_Sword_05', 'SM_Wep_Shield_Spike_01'),
+  cover_knight: KN('Knight_02', 'Blue', undefined, 'SM_Wep_Shield_02'),
+  vanguard_captain: KG('Soldier_Female', 'SM_Wep_Sword_05', 'SM_Wep_Shield_04'),
+  c_standard: KN('Soldier_02', 'Yellow', 'SM_Wep_Banner_01'),
+  c_commander: KN('Knight_03', 'Yellow', 'SM_Wep_Zweihander_01'),
+  // ── Mages and priests
+  apprentice: KG('Mage', 'SM_Wep_Staff_03'),
+  medic: KG('Nun'),
+  stormcaller: FC('Male_Sorcerer', '2A', 'SM_Wep_Staff_06'),
+  archmage: KG('Hermit', 'SM_Wep_Staff_Gem_01'),
+  siege_mage: FC('Female_Witch', '1A', 'SM_Wep_Staff_01'),
+  priest: KG('Priest', 'SM_Wep_Sceptre_04'),
+  monk: KG('Monk', 'SM_Wep_Staff_03'),
+  a_scholar: KG('FortuneTeller', 'SM_Wep_Sceptre_04'),
+  // ── Axe mercenaries
+  berserker: KG('Headsman', 'SM_Wep_Axe_03'),
+  warlord: KN('Knight_01', 'Orange', 'SM_Wep_Ornate_GreatAxe_01'),
+  bomber: KG('Peasant_Male'),
+  blood_blade: KN('Soldier_01', 'Orange', 'SM_Wep_Cutlass_01'),
+  greatsword: KN('Soldier_02', 'Orange', 'SM_Wep_Greatsword_Straight_01'),
+  brawler: KG('Blacksmith_Male', 'SM_Wep_Hammer_02'),
+  w_rider: KG('Rider', 'SM_Wep_Spear_02'),
+  w_axelord: KN('Knight_02', 'Orange', 'SM_Wep_Axe_06'),
+  // ── Scouts and archers
+  crossbowman: FC('Male_Rouge_01', '1A', 'SM_Prop_Crossbow_01'),
+  shadowblade: FC('Male_Rouge_01', '5A', 'SM_Wep_Dagger_05'),
+  longbow: FC('Male_Peasant_01', '2A', undefined, 'SM_Prop_Bow_01'),
+  glider: KG('Fairy', 'SM_Wep_Dagger_05'),
+  h_trapper: FC('Female_Gypsy', '1A', undefined, 'SM_Prop_Bow_01'),
+  h_sniper: FC('Male_Baird', '3A', 'SM_Prop_Crossbow_01'),
+  // ── The undead: four bone colours, five skeleton bodies, ghosts and the hooded soul
+  sk_minion: DG('Skeleton_Slave_01', 1, 'SM_Wep_Bone_01'),
+  sk_rogue: DG('Skeleton_Soldier_02', 1, 'SM_Wep_BrokenSword_01'),
+  sk_warrior: DG('Skeleton_Soldier_01', 1, 'SM_Wep_Sword_01', 'SM_Wep_Shield_Round_01'),
+  sk_mage: DG('Tormented_Soul', 1, 'SM_Wep_Staff_01'),
+  sk_guard: DG('Skeleton_Knight', 2, 'SM_Wep_Cutlass_01', 'SM_Wep_Shield_Gravestone_01'),
+  sk_brute: DG('Skeleton_Knight', 4, 'SM_Wep_Hammer_Large_Metal_01'),
+  sk_wraith: DG('Ghost_01', 1, 'SM_Wep_Dagger_05'),
+  sk_undying: DG('Skeleton_Slave_01', 3, 'SM_Wep_BrokenSword_01'),
+  sk_pikeman: DG('Skeleton_Soldier_01', 2, 'SM_Wep_Ornate_Spear_01'),
+  sk_phalanx: DG('Skeleton_Soldier_01', 3, 'SM_Wep_Spear_02', 'SM_Wep_Shield_Bone_01'),
+  sk_leech: DG('Tormented_Soul', 2, 'SM_Wep_Sceptre_04'),
+  sk_captain: DG('Skeleton_Knight', 3, 'SM_Wep_Broadsword_01'),
+  sk_berserker: DG('Skeleton_Soldier_02', 4, 'SM_Wep_Axe_03'),
+  sk_shieldwall: DG('Skeleton_Soldier_01', 4, undefined, 'SM_Wep_Shield_Skull_01'),
+  sk_thorn: DG('Skeleton_Slave_01', 2, undefined, 'SM_Wep_Shield_Spike_01'),
+  sk_regen: DG('Skeleton_Slave_01', 4, 'SM_Wep_Bone_01'),
+  sk_reaper: DG('Skeleton_Soldier_02', 3, 'SM_Wep_Halberd_06'),
+  sk_drummer: DG('Skeleton_Slave_01', 1, 'SM_Wep_Mace_01'),
+  sk_assassin: DG('Skeleton_Soldier_02', 2, 'SM_Wep_Dagger_05'),
+  sk_acolyte: DG('Ghost_02', 1, 'SM_Wep_Staff_03'),
+  sk_deathknight: DG('Skeleton_Knight', 1, 'SM_Wep_Greatsword_Straight_01'),
+  // ── Commanders
+  'boss:해골 하사': DG('Skeleton_Knight', 1, 'SM_Wep_Sword_05', 'SM_Wep_Shield_Skull_01'),
+  'boss:추적자 대장': DG('Skeleton_Soldier_02', 1, 'SM_Wep_Cutlass_01'),
+  'boss:서고의 주술사': DG('Tormented_Soul', 4, 'SM_Wep_Staff_Gem_01'),
+  'boss:납골당 수호자': DG('Skeleton_Knight', 4, 'SM_Wep_Hammer_Large_Metal_01', 'SM_Wep_Shield_Gravestone_01'),
+  'boss:해골 군주': DG('Skeleton_Knight', 3, 'SM_Wep_Staff_Gem_01', 'SM_Wep_Shield_Skull_01'),
 };
+
+/** Looks for anything without its own entry (by ModelId). */
+export const DEFAULT_LOOKS: Record<CharModel, Look> = {
+  Knight: KN('Knight_01', 'Blue', 'SM_Wep_Sword_01', 'SM_Wep_Shield_01'),
+  Barbarian: KN('Knight_01', 'Orange', 'SM_Wep_Axe_03'),
+  Mage: FC('Male_Wizard', '1A', 'SM_Wep_Staff_01'),
+  Rogue: FC('Male_Rouge_01', '1A', 'SM_Prop_Crossbow_01'),
+  Rogue_Hooded: FC('Female_Druid', '1A', undefined, 'SM_Prop_Bow_01'),
+  Skeleton_Minion: DG('Skeleton_Slave_01', 1, 'SM_Wep_Bone_01'),
+  Skeleton_Warrior: DG('Skeleton_Knight', 1, 'SM_Wep_Sword_01'),
+  Skeleton_Rogue: DG('Skeleton_Soldier_02', 1, 'SM_Wep_Dagger_05'),
+  Skeleton_Mage: DG('Tormented_Soul', 1, 'SM_Wep_Staff_01'),
+};
+
+/** Grip of each held item in the hand bone's space (Euler XYZ, degrees), tuned by eye. */
+export function grip(file: string, hand: 'r' | 'l'): [number, number, number] {
+  if (file.includes('Crossbow')) return [0, -90, 0];
+  if (file.includes('Bow')) return [0, 90, 0];
+  // Polygon Dungeon shields are modelled tilted; the Knights ones upright.
+  if (hand === 'l') return /Shield_(Skull|Heater|Round|Gravestone|Bone|Spike)/.test(file) ? [0, 90, 45] : [0, 90, 0];
+  return [90, 0, 45];
+}
+
+/** Every file a look can reference, so the loader can fetch them up front. */
+export const SYNTY_PACKS: Pack[] = ['Knights', 'Kingdom', 'Dungeon', 'Fantasy'];
+const allLooks = [...Object.values(LOOKS), ...Object.values(DEFAULT_LOOKS)];
+export const SYNTY_WEAPON_FILES = [...new Set(allLooks.flatMap((l) => [l.r, l.l]).filter((f): f is string => !!f))];
+export const SYNTY_TEXTURES = [...new Set(allLooks.map((l) => l.tex).filter((t): t is string => !!t))];
 
 /** Clip names in characters/anims.glb (DoubleL animations retargeted onto the Synty rig). */
 export const SYNTY_ANIMS: Record<CharModel, AnimSet> = {
@@ -113,4 +223,31 @@ export const SYNTY_STATICS: Record<string, StaticSpec> = {
   barrier_column: { file: 'SM_Env_Fence_Goblin_01', fit: 'width' },
 };
 
-export const SYNTY_WEAPON_FILES = [...new Set(Object.values(SYNTY_CHARACTERS).flatMap((c) => c.weapons?.map((w) => w.file) ?? []))];
+
+/**
+ * Death clips (Mixamo downloads retargeted into anims.glb, see docs/SYNTY.md). Units whose clip
+ * is not in the library fall back to the coded topple in UnitView.die().
+ */
+const DEATHS: Record<string, string[]> = {
+  // Mixamo "Sword And Shield Death": shield bearers go down behind their shield.
+  Death_Shield: ['hero:captain', 'shieldbearer', 'fortress', 'warden', 'thornguard', 'cover_knight', 'phalanx', 'vanguard_captain',
+    'sk_guard', 'sk_shieldwall', 'sk_phalanx', 'sk_thorn', 'boss:해골 하사', 'boss:납골당 수호자'],
+  // "Two Handed Sword Death": heavy two-handers.
+  Death_Heavy: ['hero:warchief', 'greatsword', 'warlord', 'w_axelord', 'c_commander', 'stalwart', 'sk_brute', 'sk_deathknight', 'sk_reaper'],
+  // "Falling Forward Death": fast skirmishers pitch forward.
+  Death_Forward: ['shadowblade', 'w_rider', 'glider', 'berserker', 'sk_rogue', 'sk_assassin', 'sk_berserker', 'boss:추적자 대장'],
+  // "Death From Front Headshot": archers snap back.
+  Death_Shot: ['hero:hunter', 'crossbowman', 'longbow', 'h_trapper', 'h_sniper'],
+  // "Dying": casters and priests sink to their knees.
+  Death_Kneel: ['hero:arcanist', 'apprentice', 'medic', 'stormcaller', 'priest', 'monk', 'a_scholar', 'bomber'],
+  // "Dying Backwards": dark casters stagger back.
+  Death_Caster: ['archmage', 'siege_mage', 'sk_mage', 'sk_leech', 'sk_acolyte', 'boss:서고의 주술사', 'boss:해골 군주'],
+  // "Zombie Dying": the rank-and-file dead collapse.
+  Death_Undead: ['sk_minion', 'sk_undying', 'sk_regen', 'sk_drummer', 'sk_wraith', 'sk_warrior', 'sk_captain', 'sk_pikeman'],
+};
+const DEATH_OF = new Map(Object.entries(DEATHS).flatMap(([clip, keys]) => keys.map((k) => [k, clip] as const)));
+
+/** The death clip a look wants; "Falling Back Death" (Death_Back) for everyone else. */
+export function deathClipFor(key: string | undefined): string {
+  return (key && DEATH_OF.get(key)) || 'Death_Back';
+}

@@ -1,15 +1,16 @@
 import * as THREE from 'three';
 import './style.css';
-import { card, KEYWORD_INFO, type MinionCard, type SpellIcon } from './game/cards';
+import { card, CARDS, KEYWORD_INFO, type MinionCard, type SpellIcon } from './game/cards';
 import { CAMP_HEAL, Game, HERO_MAX_HEALTH, sameTarget, type RunSave } from './game/engine';
 import { heroDef, HEROES, POWERS } from './game/heroes';
 import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE } from './game/shop';
 import { STAGES } from './game/stages';
+import type { ModelId } from './game/types';
 import {
   LAST_ROW, MANA_PER_TURN, MAX_MANA, other, RANGED_RANGE, ROWS,
   type GameEvent, type HitTarget, type Side, type Target, type Unit,
 } from './game/types';
-import { CHARACTER_MODELS, preloadAll } from './render/assets';
+import { CHARACTER_MODELS, preloadAll, useSynty } from './render/assets';
 import { Board, cellPos, ENEMY_HERO_POS, HERO_POS } from './render/board';
 import { Fx } from './render/fx';
 import { renderPortraits } from './render/portraits';
@@ -63,7 +64,14 @@ class App {
       $('loading-fill').style.width = `${(done / total) * 100}%`;
     });
     $('loading-text').textContent = '초상화 그리는 중…';
-    setPortraits(await renderPortraits([...CHARACTER_MODELS, 'barrier']));
+    const subjects = [...CHARACTER_MODELS, 'barrier' as ModelId].map((m) => ({ key: m as string, model: m }));
+    if (useSynty) {
+      // The Synty set gives every card, hero and commander its own look, so each gets a picture.
+      for (const c of Object.values(CARDS)) if (c.type === 'minion' && c.model !== 'barrier') subjects.push({ key: c.id, model: c.model });
+      for (const h of HEROES) subjects.push({ key: `hero:${h.id}`, model: h.model });
+      for (const st of STAGES) subjects.push({ key: `boss:${st.hero.name}`, model: st.hero.model });
+    }
+    setPortraits(await renderPortraits(subjects));
     await this.board.buildEnvironment();
     this.bindTooltip($('hero-power'), () => {
       const p = this.game.state ? this.game.powerOf('player') : POWERS.guard;
@@ -116,7 +124,7 @@ class App {
     void enterMobileFullscreen();
     this.game = new Game(Date.now() & 0x7fffffff);
     const hero = heroDef(resume?.hero ?? heroId);
-    $('hero-portrait').style.backgroundImage = `url(${portrait(hero.model)})`;
+    $('hero-portrait').style.backgroundImage = `url(${portrait(hero.model, `hero:${hero.id}`)})`;
     const icon = { guard: 'shield', bolt: 'bolt', charge: 'sword', aim: 'arrows' } as const;
     $('hero-power').querySelector<HTMLElement>('.hp-icon')!.innerHTML = spellIconSvg(icon[hero.power as keyof typeof icon] ?? 'bolt');
     $('hero-power').querySelector<HTMLElement>('.hp-cost')!.textContent = String(POWERS[hero.power].cost);
@@ -194,7 +202,7 @@ class App {
 
   private async createView(u: Pick<Unit, 'uid' | 'side' | 'defId' | 'lane' | 'row'>) {
     const def = card(u.defId) as MinionCard;
-    const v = new UnitView(u.uid, u.side, def.model, def.scale ?? 1, $('badges'));
+    const v = new UnitView(u.uid, u.side, def.model, def.scale ?? 1, $('badges'), def.id);
     this.views.set(u.uid, v);
     await v.load(u.side === 'player' ? 'enemy' : 'player');
     v.group.position.copy(cellPos(u.lane, u.row));
@@ -208,12 +216,12 @@ class App {
   private async setupEnemyHero() {
     this.enemyHero?.dispose();
     const h = this.game.stageDef.hero;
-    const v = new UnitView(ENEMY_HERO_UID, 'hero', h.model, h.scale, $('badges'));
+    const v = new UnitView(ENEMY_HERO_UID, 'hero', h.model, h.scale, $('badges'), `boss:${h.name}`);
     await v.load('player');
     v.group.position.copy(ENEMY_HERO_POS);
     this.board.scene.add(v.group);
     this.enemyHero = v;
-    $('enemy-portrait').style.backgroundImage = `url(${portrait(h.model)})`;
+    $('enemy-portrait').style.backgroundImage = `url(${portrait(h.model, `boss:${h.name}`)})`;
   }
 
   private heroFrameHit(side: Side) {
@@ -1140,7 +1148,7 @@ class App {
     const def = card(defId);
     const el = document.createElement('div');
     el.className = `hist ${side} ${def.type}`;
-    if (def.type === 'minion') el.style.backgroundImage = `url(${portrait(def.model)})`;
+    if (def.type === 'minion') el.style.backgroundImage = `url(${portrait(def.model, def.id)})`;
     else el.innerHTML = spellIconSvg(def.icon);
     el.insertAdjacentHTML('beforeend', `<span class="who">${side === 'player' ? '나' : '상대'}</span>`);
     const showCard = () => {
@@ -1224,7 +1232,7 @@ class App {
       const el = document.createElement('div');
       el.className = 'hero-pick';
       el.innerHTML = `
-        <div class="hero-face" style="background-image:url(${portrait(h.model)})"></div>
+        <div class="hero-face" style="background-image:url(${portrait(h.model, `hero:${h.id}`)})"></div>
         <h3>${h.name}</h3><div class="theme"><span class="nw">${h.title}</span> · <span class="nw">생명력 ${h.health}</span> · <span class="nw">시작 마나 ${h.startMana}</span></div>
         <div class="hero-power-desc"><b>지휘술 · ${p.name} (${p.cost}마나)</b><br>${p.text}</div>
         <div class="hero-blurb">${h.blurb}<br>시작 덱: 하수인 ${minions} · 주문 ${h.deck.length - minions}</div>`;
