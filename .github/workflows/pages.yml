@@ -17,8 +17,28 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Read-only token for the private repo holding the Synty exports. Without
+      # it the site deploys with the KayKit models only.
+      SYNTY_TOKEN: ${{ secrets.SYNTY_ASSETS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch Synty models
+        if: env.SYNTY_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: Kentterbury/cardproject
+          ref: ${{ vars.SYNTY_ASSETS_REF || 'main' }}
+          token: ${{ secrets.SYNTY_ASSETS_TOKEN }}
+          path: .synty
+          filter: blob:none
+          sparse-checkout: web-export/card-survival
+      - name: Install Synty models
+        if: env.SYNTY_TOKEN != ''
+        run: |
+          mkdir -p public/assets/synty
+          cp -r .synty/web-export/card-survival/. public/assets/synty/
+          rm -rf .synty
       - uses: actions/setup-node@v4
         with:
           node-version: 22

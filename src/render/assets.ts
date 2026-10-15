@@ -6,6 +6,37 @@ import type { ModelId } from '../game/types';
 
 const BASE = `${import.meta.env.BASE_URL}assets/`;
 
+/**
+ * Optional Synty POLYGON replacements. They are licensed and cannot live in
+ * this public repo, so the deploy workflow copies them into assets/synty/ from
+ * a private repo. Anything listed in their manifest replaces the KayKit model
+ * of the same name; without the folder the game runs on KayKit alone.
+ */
+interface SyntyManifest {
+  characters: string[];
+  dungeon: string[];
+}
+let synty: SyntyManifest = { characters: [], dungeon: [] };
+
+async function loadSyntyManifest() {
+  try {
+    const res = await fetch(`${BASE}synty/manifest.json`);
+    // Vite's dev server answers unknown paths with index.html.
+    if (res.ok && res.headers.get('content-type')?.includes('json')) synty = await res.json();
+  } catch {
+    // No Synty build available; keep KayKit.
+  }
+}
+
+const isSynty = (model: string) => synty.characters.includes(model);
+const characterPath = (model: string) => (isSynty(model) ? `synty/characters/${model}.glb` : `characters/${model}.glb`);
+const dungeonPath = (name: string) => (synty.dungeon.includes(name) ? `synty/dungeon/${name}.glb` : `dungeon/${name}.glb`);
+
+/** Portrait camera framing: Synty's realistic heads are smaller and sit higher than KayKit's. */
+export function portraitFraming(model: ModelId): { focus: number; distance: number } {
+  return isSynty(model) ? { focus: 1.72, distance: 2.4 } : { focus: 1.45, distance: 3.4 };
+}
+
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
 
@@ -73,11 +104,12 @@ export const ANIMS: Partial<Record<ModelId, AnimSet>> = {
 let animLibs: { adventurer: THREE.AnimationClip[]; skeleton: THREE.AnimationClip[] } | null = null;
 
 export async function preloadAll(onProgress?: (done: number, total: number) => void) {
+  await loadSyntyManifest();
   const jobs: Promise<unknown>[] = [
-    ...CHARACTER_MODELS.map((m) => loadGltf(`characters/${m}.glb`)),
+    ...CHARACTER_MODELS.map((m) => loadGltf(characterPath(m))),
     loadGltf('characters/anims_adventurer.glb'),
     loadGltf('characters/anims_skeleton.glb'),
-    ...DUNGEON_PIECES.map((p) => loadGltf(`dungeon/${p}.glb`)),
+    ...DUNGEON_PIECES.map((p) => loadGltf(dungeonPath(p))),
     ...WEAPONS.map((w) => loadGltf(`weapons/${w}.glb`)),
   ];
   let done = 0;
@@ -97,7 +129,7 @@ function prepareShadows(obj: THREE.Object3D) {
 }
 
 export async function instantiateStatic(name: string): Promise<THREE.Object3D> {
-  const gltf = await loadGltf(`dungeon/${name}.glb`);
+  const gltf = await loadGltf(dungeonPath(name));
   const obj = gltf.scene.clone(true);
   prepareShadows(obj);
   return obj;
@@ -110,8 +142,13 @@ export interface CharacterInstance {
 }
 
 export async function instantiateCharacter(model: ModelId): Promise<CharacterInstance> {
-  const gltf = await loadGltf(`characters/${model}.glb`);
+  const gltf = await loadGltf(characterPath(model));
   const root = SkeletonUtils.clone(gltf.scene);
+  if (isSynty(model)) {
+    // Synty exports carry their own weapons and retargeted KayKit clips.
+    prepareShadows(root);
+    return { root, mixer: new THREE.AnimationMixer(root), clips: gltf.animations };
+  }
   const loadout = LOADOUT[model];
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;

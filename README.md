@@ -80,4 +80,10 @@ tools/optimize-assets.mjs   에셋 최적화 스크립트
 node tools/optimize-assets.mjs <KayKit 저장소들이 있는 폴더>
 ```
 
-> Synty 등 유료 에셋은 원본 파일이 그대로 공개되면 안 되므로, 이 공개 저장소에는 넣지 않았습니다.
+### Synty 모델 (선택)
+
+유료 에셋인 Synty POLYGON 모델은 원본이 공개되면 안 되므로 이 저장소에 넣지 않습니다. private 저장소 [`Kentterbury/cardproject`](https://github.com/Kentterbury/cardproject)의 `web-export/`가 Unity 프로젝트 안의 Synty FBX를 GLB로 변환하고, KayKit 애니메이션을 Synty 뼈대에 리타겟해서 `web-export/card-survival/`에 저장합니다.
+
+- 배포: Pages 워크플로가 `SYNTY_ASSETS_TOKEN` 시크릿으로 그 폴더를 받아 `public/assets/synty/`에 넣습니다. 시크릿이 없으면 KayKit 모델로 배포합니다. 가져올 브랜치는 저장소 변수 `SYNTY_ASSETS_REF`로 바꿀 수 있습니다(기본값 `main`).
+- 로컬: `cardproject/web-export/card-survival/` 내용을 `public/assets/synty/`에 복사하면 됩니다. 이 폴더는 `.gitignore`에 들어 있습니다.
+- `assets/synty/manifest.json`에 적힌 모델만 같은 이름의 KayKit 모델을 대체합니다.

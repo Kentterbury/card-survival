@@ -3,3 +3,6 @@ dist/
 .DS_Store
 *.log
 .vite/
+
+# Licensed Synty models, copied in by the deploy workflow. Never commit.
+public/assets/synty/

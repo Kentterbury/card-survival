@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ModelId } from '../game/types';
-import { ANIMS, instantiateCharacter, instantiateStatic } from './assets';
+import { ANIMS, instantiateCharacter, instantiateStatic, portraitFraming } from './assets';
 
 /**
  * Renders a bust shot of each model once at startup so cards and the hero
@@ -37,8 +37,9 @@ export async function renderPortraits(models: ModelId[], size = 256): Promise<Ma
         inst.mixer.update(0.4);
       }
       obj.rotation.y = 0.35;
-      camera.position.set(0.3, 1.9, 3.4);
-      camera.lookAt(0, 1.45, 0);
+      const { focus, distance } = portraitFraming(id);
+      camera.position.set(0.3, focus + 0.45 * (distance / 3.4), distance);
+      camera.lookAt(0, focus, 0);
     }
     scene.add(obj);
     renderer.render(scene, camera);
