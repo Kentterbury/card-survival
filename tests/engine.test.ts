@@ -912,6 +912,14 @@ describe('data and simulation', () => {
     void import('../src/game/heroes').then(({ HEROES }) => { for (const h of HEROES) for (const id of h.deck) expect(CARDS[id]).toBeDefined(); });
   });
 
+  it('every card in the change log exists', async () => {
+    const { CARD_CHANGES } = await import('../src/game/changelog');
+    for (const e of CARD_CHANGES) {
+      for (const id of e.added ?? []) expect(CARDS[id]).toBeDefined();
+      for (const c of e.changed ?? []) expect(CARDS[c.id]).toBeDefined();
+    }
+  });
+
   it('the bot can play whole runs without getting stuck', () => {
     let wins = 0;
     let cleared = 0;

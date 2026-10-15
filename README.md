@@ -41,6 +41,7 @@ GitHub Pages에 배포되면 `https://kentterbury.github.io/card-survival/` 에�
 | 상대 영웅 공격 | 피해 주문을 들고 오른쪽 위 초상화나 성문 앞 3D 영웅을 탭 |
 | 취소 | 우클릭 / ESC |
 | 턴 종료 | 오른쪽 버튼 / Space |
+| 카드북 | 타이틀의 「카드북」 또는 왼쪽 위 책 아이콘. 전체 카드, 영웅별 필터, 검색, **최근 변경**(NEW/수정 표시) |
 
 ## 구조
 
@@ -54,6 +55,7 @@ src/
     stages.ts    스테이지별 상대 영웅·덱·지휘술
     rewards.ts   보상 꾸러미
     shop.ts      금화 보상과 상인 물품
+    changelog.ts 카드 변경 기록 (카드북 「최근 변경」 탭)
   audio/       WebAudio 효과음·배경음 합성
   render/      Three.js (보드, 유닛, 이펙트, 초상화 렌더링)
   ui/          카드 DOM, 아이콘

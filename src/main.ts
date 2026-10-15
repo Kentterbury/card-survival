@@ -18,6 +18,7 @@ import { UnitView } from './render/unitView';
 import { createCardElement, keywordNotes, portrait, setPortraits } from './ui/cardView';
 import { spellIconSvg } from './ui/icons';
 import { sound, type SfxName } from './audio/sound';
+import { CardBook } from './ui/cardBook';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -38,6 +39,7 @@ type PickResult = { unit?: Unit; enemyHero?: boolean; lane?: number; row?: numbe
 
 class App {
   game = new Game();
+  cardBook = new CardBook();
   board = new Board($<HTMLCanvasElement>('scene'));
   fx = new Fx(this.board.scene, this.board.camera, $('float-layer'));
   views = new Map<number, UnitView>();
@@ -732,7 +734,7 @@ class App {
     });
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.cancelAim();
-      if (e.key === ' ' || e.key === 'Enter') void this.endTurn();
+      if ((e.key === ' ' || e.key === 'Enter') && !this.cardBook.isOpen) void this.endTurn();
     });
     $('end-turn').addEventListener('click', () => void this.endTurn());
     $('hero-power').addEventListener('pointerdown', (e) => {
@@ -810,6 +812,7 @@ class App {
       sfx.title = sound.sfxOn ? '효과음 끄기' : '효과음 켜기';
     };
     music.addEventListener('click', () => { sound.unlock(); sound.setMusic(!sound.musicOn); render(); });
+    $('book-btn').addEventListener('click', () => { sound.play('click'); this.cardBook.open(); });
     sfx.addEventListener('click', () => { sound.setSfx(!sound.sfxOn); sound.play('click'); render(); });
     render();
   }
@@ -1192,7 +1195,9 @@ class App {
         <div><b>영웅 공격</b> 앞에 아무도 없이 끝까지 가면 <b>상대 영웅을 직접 공격</b>합니다. 상대도 마찬가지입니다.</div>
         <div><b>조작</b> 카드를 <b>탭(클릭)한 뒤 대상을 탭</b>하거나 끌어다 놓으세요. 피해 주문은 <b>상대 영웅 초상화</b>도 노릴 수 있습니다.</div>
       </div>
-      <button class="btn" id="start-btn">출정</button>`);
+      <button class="btn" id="start-btn">출정</button>
+      <button class="btn secondary" id="book-open">카드북</button>`);
+    m.querySelector('#book-open')!.addEventListener('click', () => this.cardBook.open());
     const save = this.readSave();
     if (save) {
       const h = heroDef(save.hero);
