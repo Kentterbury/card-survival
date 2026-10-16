@@ -38,16 +38,16 @@ export const VENOM_TURNS = 2;
 export type ModelId =
   | 'Knight' | 'Barbarian' | 'Mage' | 'Rogue' | 'Rogue_Hooded'
   | 'Skeleton_Minion' | 'Skeleton_Warrior' | 'Skeleton_Rogue' | 'Skeleton_Mage'
-  | 'barrier' | 'ice_wall'
-  | 'wolf' | 'slime';
+  | 'barrier' | 'ice_wall' | 'siege'
+  | 'wolf' | 'slime' | 'bird';
 
-/** Structures: walls with no character model (바리케이드, 빙벽). */
-export type StructureModel = 'barrier' | 'ice_wall';
-/** Forest beasts: built in code (src/render/creatures.ts), not from the character packs. */
-export type CreatureModel = 'wolf' | 'slime';
+/** Structures: no character body (바리케이드, 빙벽, 공성 전차). */
+export type StructureModel = 'barrier' | 'ice_wall' | 'siege';
+/** Beasts: animated Quaternius models (src/render/creatures.ts), not the character packs. */
+export type CreatureModel = 'wolf' | 'slime' | 'bird';
 export type CharModel = Exclude<ModelId, StructureModel | CreatureModel>;
-export const isStructure = (m: ModelId): m is StructureModel => m === 'barrier' || m === 'ice_wall';
-export const isCreature = (m: ModelId): m is CreatureModel => m === 'wolf' || m === 'slime';
+export const isStructure = (m: ModelId): m is StructureModel => m === 'barrier' || m === 'ice_wall' || m === 'siege';
+export const isCreature = (m: ModelId): m is CreatureModel => m === 'wolf' || m === 'slime' || m === 'bird';
 
 export type Target =
   | { kind: 'none' }
@@ -75,7 +75,13 @@ export type TargetKind = 'none' | 'foe' | 'foeUnit' | 'ally' | 'lane' | 'slot'
   /** 염력: any unit, then the cell behind it or beside it. */
   | 'move'
   /** 곰 덫: any empty cell without a trap. */
-  | 'trapCell';
+  | 'trapCell'
+  /** 사냥꾼의 덫: an empty cell without a trap in the three rows nearest the own side. */
+  | 'ownTrapCell'
+  /** 방어 진지, 연막탄: a 2×2 area (its lower-left cell). */
+  | 'area2'
+  /** 돌진: an ally with a foe somewhere ahead in its lane. */
+  | 'chargeAlly';
 
 export interface Unit {
   uid: number;
@@ -105,6 +111,10 @@ export interface Unit {
   lifetime?: number;
   /** 속박: own unit phases left in which it cannot move (it still attacks and shoots). */
   rootedTurns?: number;
+  /** 징표: takes +1 from every hit, for this many of its own turns. */
+  marked?: number;
+  /** 공성 전차: loaded, fires at the end of its next turn. */
+  loaded?: boolean;
   /** Summoned this turn: does not act at the end of it unless `swift`. */
   fresh: boolean;
 }
@@ -209,6 +219,16 @@ export type GameEvent =
   | { type: 'trapSprung'; uid: number; lane: number; row: number }
   /** A 분열 unit burst; its pieces follow as summons. */
   | { type: 'split'; lane: number; row: number }
+  /** A 2×2 zone (방어 진지 / 연막) was set up (`on`) or ran out. */
+  | { type: 'zone'; kind: ZoneKind; lane: number; row: number; on: boolean }
+  /** 징표 set (`turns` > 0) or faded (0). */
+  | { type: 'mark'; uid: number; turns: number }
+  /** A hit was softened to nothing by a 방어 진지. */
+  | { type: 'guarded'; uid: number }
+  /** 공성 전차 lobs a stone at a cell (the blast follows as damage). */
+  | { type: 'bombard'; uid: number; lane: number; row: number }
+  /** 공성 전차 is loaded (`on`) or has fired. */
+  | { type: 'loaded'; uid: number; on: boolean }
   | { type: 'revive'; uid: number }
   | { type: 'buff'; uid: number; attack: number; health: number }
   | { type: 'freeze'; uid: number }
@@ -219,3 +239,8 @@ export type GameEvent =
   | { type: 'stageClear'; stage: number; gold: number }
   | { type: 'defeat' }
   | { type: 'victory' };
+
+/** 방어 진지: allies inside take 2 less from each hit. 연막: units inside cannot be targeted or shot by their foes. */
+export type ZoneKind = 'fort' | 'smoke';
+/** Damage a 방어 진지 takes off each hit on an ally inside. */
+export const FORT_REDUCTION = 2;

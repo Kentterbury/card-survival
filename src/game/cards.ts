@@ -1,5 +1,5 @@
 import type { Rng } from './rng';
-import { forward, homeRow, LAST_ROW, type Keyword, type ModelId, type Side, type Target, type TargetKind, type Unit } from './types';
+import { forward, homeRow, LAST_ROW, type Keyword, type ModelId, type Side, type Target, type TargetKind, type Unit, type ZoneKind } from './types';
 
 /** What card effects may do. Everything is relative to the side that plays the card. */
 export interface EffectApi {
@@ -45,6 +45,19 @@ export interface EffectApi {
   placeTrap(lane: number, row: number): boolean;
   /** Lower a unit's attack (never below 0). */
   weaken(uid: number, amount: number): void;
+  /** 돌진: an ally runs to the nearest foe in its lane and slams it for its health, taking half back. */
+  charge(uid: number): void;
+  /** Shove a unit into a random free neighbouring cell. */
+  nudge(uid: number): void;
+  /** 징표: the unit takes +1 from every hit for `turns` of its own turns. */
+  mark(uid: number, turns: number): void;
+  /** A 2×2 zone with its lower-left cell at (lane, row), for `turns` rounds. */
+  zone(kind: ZoneKind, lane: number, row: number, turns: number): void;
+  /** Move an allied unit back toward our own side. */
+  retreat(uid: number, rows: number): void;
+  /** 공성 전차: lob a stone at a random foe minion (cross of five cells, 3 each; else the foe hero). */
+  bombard(self: Unit): void;
+  setLoaded(self: Unit, on: boolean): void;
   /** Kill an ally outright; returns the health it had. */
   sacrifice(uid: number): number;
   /** Units in the four cells next to a cell (north, south, east, west). */
@@ -147,6 +160,9 @@ export type SpellAi =
   | { kind: 'trap' }
   | { kind: 'root' }
   | { kind: 'weaken' }
+  | { kind: 'charge' }
+  | { kind: 'zone'; zone: ZoneKind }
+  | { kind: 'whirl' }
   /** Cards the AI leaves alone. */
   | { kind: 'skip' };
 
@@ -705,7 +721,7 @@ const CARD_LIST: CardDef[] = [
   },
   {
     id: 'ice_shield', name: '얼음 방패', type: 'spell', cost: 1, rarity: 'common', target: 'none', icon: 'shield', ai: { kind: 'armor' },
-    text: '내 영웅에게 <b>보호막</b> +2. 영웅이 받는 피해를 먼저 막아 줍니다.',
+    text: '내 영웅에게 <b>가호</b> +2. 영웅이 받는 피해를 먼저 막아 줍니다.',
     cast: (api) => api.armorHero(2),
   },
   // ── 비전술사: 주문 마법사 ───────────────────────────────────
@@ -767,7 +783,7 @@ const CARD_LIST: CardDef[] = [
   },
   {
     id: 'e_bone_shield', name: '뼈 방패', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'none', icon: 'shield', ai: { kind: 'armor' },
-    text: '영웅에게 <b>보호막</b> +2.',
+    text: '영웅에게 <b>가호</b> +2.',
     cast: (api) => api.armorHero(2),
   },
   {
@@ -917,6 +933,148 @@ const CARD_LIST: CardDef[] = [
       api.damage(t, 2);
       if (u.health <= 0 && !u.keywords.has('undying')) api.summonAt('sk_minion', u.lane, u.row);
     },
+  },
+  // ══ 영웅 전용 추가 ══════════════════════════════════════════
+  // 수비대장: 버티고, 지키고, 받아친다
+  {
+    id: 'c_wall_archer', name: '성벽 궁수', type: 'minion', cost: 4, rarity: 'common', hero: 'captain', attack: 1, health: 4, model: 'Rogue', keywords: ['ranged', 'anchored'],
+    text: '<b>사격</b>. <b>고정</b>',
+  },
+  {
+    id: 'c_bulwark', name: '철벽 수호자', type: 'minion', cost: 8, rarity: 'rare', hero: 'captain', attack: 3, health: 8, model: 'Knight', keywords: ['cover', 'thorns'], scale: 1.15,
+    text: '<b>엄호</b>. <b>가시</b>',
+  },
+  {
+    id: 'c_siege', name: '공성 전차', type: 'minion', cost: 11, rarity: 'epic', hero: 'captain', attack: 0, health: 7, model: 'siege', keywords: ['anchored'],
+    text: '<b>고정</b>. 두 턴에 한 번, 내 턴이 끝날 때 무작위 적 하수인을 중심으로 십자 다섯 칸의 <b>모두</b>(아군 포함)에게 피해 3. 적 하수인이 없으면 적 영웅에게 3.',
+    onEndTurn: (api, self) => {
+      if (!self.loaded) api.setLoaded(self, true);
+      else {
+        api.setLoaded(self, false);
+        api.bombard(self);
+      }
+    },
+  },
+  {
+    id: 'c_raise_shields', name: '방패 올려', type: 'spell', cost: 4, rarity: 'common', hero: 'captain', target: 'ally', icon: 'shield', ai: { kind: 'buff', grants: 'ward' },
+    text: '아군 하수인 하나에게 <b>보호막</b>과 +0/+2를 부여합니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 0, 2); api.grantKeyword(t.uid, 'ward'); } },
+  },
+  {
+    id: 'c_charge', name: '돌진', type: 'spell', cost: 5, rarity: 'common', hero: 'captain', target: 'chargeAlly', icon: 'sword', ai: { kind: 'charge' },
+    text: '아군 하수인 하나가 자기 줄의 가장 가까운 적까지 돌진해 <b>자기 체력만큼</b> 피해를 줍니다. 돌진한 하수인은 그 절반(올림)을 입습니다.',
+    cast: (api, t) => { if (t.kind === 'unit') api.charge(t.uid); },
+  },
+  {
+    id: 'c_counter', name: '반격 태세', type: 'spell', cost: 4, rarity: 'rare', hero: 'captain', target: 'none', icon: 'shield', ai: { kind: 'buffAll' },
+    text: '아군 하수인 모두에게 <b>가시</b>를 부여합니다.',
+    cast: (api) => { for (const m of api.allies()) api.grantKeyword(m.uid, 'thorns'); },
+  },
+  {
+    id: 'c_last_stand', name: '최후의 보루', type: 'spell', cost: 7, rarity: 'rare', hero: 'captain', target: 'none', icon: 'shield', ai: { kind: 'armor' },
+    text: '내 영웅에게 <b>가호</b> +4. <b>보호막</b>이 있는 아군 하수인 하나마다 +1.',
+    cast: (api) => api.armorHero(4 + api.allies().filter((m) => m.keywords.has('ward')).length),
+  },
+  {
+    id: 'c_bastion', name: '방어 진지', type: 'spell', cost: 4, rarity: 'rare', hero: 'captain', target: 'area2', icon: 'shield', ai: { kind: 'zone', zone: 'fort' },
+    text: '원하는 2×2 칸에 3턴 동안 <b>방어 진지</b>를 세웁니다. 그 안의 아군 하수인은 받는 피해가 2 줄어듭니다.',
+    cast: (api, t) => { if (t.kind === 'cell') api.zone('fort', t.lane, t.row, 3); },
+  },
+  // 전쟁 족장: 북소리와 광란
+  {
+    id: 'w_drummer', name: '전쟁 북잡이', type: 'minion', cost: 4, rarity: 'common', hero: 'warchief', attack: 1, health: 3, model: 'Barbarian', scale: 0.9,
+    text: '<b>등장 시:</b> 다른 아군 하수인 모두에게 공격력 +1을 부여합니다.',
+    onSummon: (api, self) => { for (const m of api.allies()) if (m.uid !== self.uid) api.buff(m.uid, 1, 0); },
+  },
+  {
+    id: 'w_ravager', name: '광란의 도끼전사', type: 'minion', cost: 7, rarity: 'rare', hero: 'warchief', attack: 3, health: 5, model: 'Barbarian', keywords: ['swift', 'enrage'], scale: 1.1,
+    text: '<b>기습</b>. <b>분노</b>',
+  },
+  {
+    id: 'w_bloodcry', name: '피의 함성', type: 'spell', cost: 2, rarity: 'common', hero: 'warchief', target: 'ally', icon: 'sword', ai: { kind: 'buff' },
+    text: '아군 하수인 하나에게 공격력 +3을 주고, 그 하수인에게 피해를 1 줍니다(<b>분노</b>도 깨웁니다).',
+    cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 3, 0); api.damage(t, 1); } },
+  },
+  {
+    id: 'w_whirl', name: '도끼 회전', type: 'spell', cost: 4, rarity: 'common', hero: 'warchief', target: 'ally', icon: 'sword', ai: { kind: 'whirl' },
+    text: '아군 하수인 하나가 양옆 줄 같은 행의 적들에게 자기 공격력만큼 피해를 줍니다.',
+    cast: (api, t) => {
+      if (t.kind !== 'unit') return;
+      const u = api.allies().find((a) => a.uid === t.uid);
+      if (!u) return;
+      for (const f of api.foes().filter((x) => x.row === u.row && Math.abs(x.lane - u.lane) === 1)) api.damage({ kind: 'unit', uid: f.uid }, u.attack);
+    },
+  },
+  {
+    id: 'w_victory', name: '승리의 함성', type: 'spell', cost: 5, rarity: 'rare', hero: 'warchief', target: 'none', icon: 'heart', ai: { kind: 'heal' },
+    text: '아군 하수인 하나마다 내 영웅의 생명력을 1 회복합니다.',
+    cast: (api) => api.healHero(api.allies().length),
+  },
+  {
+    id: 'w_allout', name: '총돌격', type: 'spell', cost: 7, rarity: 'epic', hero: 'warchief', target: 'none', icon: 'sword', ai: { kind: 'buffAll' },
+    text: '아군 하수인 모두에게 <b>질주</b>를 주고 한 칸 전진시킵니다.',
+    cast: (api) => { for (const m of api.allies()) { api.grantKeyword(m.uid, 'dash'); api.advance(m.uid, 1); } },
+  },
+  // 척후대장: 덫, 교란, 연막
+  {
+    id: 'h_snarer', name: '덫 사냥꾼', type: 'minion', cost: 3, rarity: 'common', hero: 'hunter', attack: 1, health: 3, model: 'Rogue_Hooded', scale: 0.9,
+    text: '<b>등장 시:</b> 두 칸 앞에 <b>덫</b>을 놓습니다.',
+    onSummon: (api, self) => { api.placeTrap(self.lane, self.row + 2 * forward(self.side)); },
+  },
+  {
+    id: 'h_falconer', name: '매 조련사', type: 'minion', cost: 6, rarity: 'rare', hero: 'hunter', attack: 2, health: 3, model: 'Rogue', keywords: ['ranged'],
+    text: '<b>사격</b>. <b>등장 시:</b> 옆 칸에 정찰 매(1/1 <b>비행</b>)를 소환합니다.',
+    onSummon: (api, self) => {
+      for (const lane of api.rng.shuffle([self.lane - 1, self.lane + 1])) {
+        if (api.freeHomeLanes().includes(lane)) { api.summon('h_hawk_token', lane); return; }
+      }
+    },
+  },
+  { id: 'h_hawk_token', name: '정찰 매', type: 'minion', cost: 1, rarity: 'basic', hero: 'hunter', attack: 1, health: 1, model: 'bird', keywords: ['flying'], scale: 0.8, text: '<b>비행</b>' },
+  {
+    id: 'h_trap', name: '사냥꾼의 덫', type: 'spell', cost: 1, rarity: 'common', hero: 'hunter', target: 'ownTrapCell', icon: 'sword', ai: { kind: 'trap' },
+    text: '내 진영 앞쪽 세 줄 안의 빈 칸 하나에 <b>덫</b>을 놓습니다.',
+    cast: (api, t) => { if (t.kind === 'cell') api.placeTrap(t.lane, t.row); },
+  },
+  {
+    id: 'h_snare', name: '올가미', type: 'spell', cost: 2, rarity: 'common', hero: 'hunter', target: 'foeUnit', icon: 'arrows', ai: { kind: 'root' },
+    text: '적 하수인 하나에게 피해를 1 주고 2턴 동안 <b>속박</b>합니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.damage(t, 1); api.root(t.uid, 2); } },
+  },
+  {
+    id: 'h_disrupt', name: '교란 사격', type: 'spell', cost: 2, rarity: 'common', hero: 'hunter', target: 'foeUnit', icon: 'arrows', ai: { kind: 'damage', amount: 1 },
+    text: '적 하수인 하나에게 피해를 1 주고, 무작위 옆 칸(상하좌우)으로 밀쳐냅니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.damage(t, 1); api.nudge(t.uid); } },
+  },
+  {
+    id: 'h_retreat', name: '전술적 후퇴', type: 'spell', cost: 4, rarity: 'common', hero: 'hunter', target: 'none', icon: 'scroll', ai: { kind: 'skip' },
+    text: '아군 하수인 모두를 한 칸씩 뒤로(내 진영 쪽) 물리고 카드를 1장 뽑습니다.',
+    cast: (api) => {
+      const home = homeRow(api.side);
+      // Nearest our side first, so the ones behind make room for the ones in front.
+      for (const m of [...api.allies()].sort((a, b) => Math.abs(a.row - home) - Math.abs(b.row - home))) api.retreat(m.uid, 1);
+      api.draw(1);
+    },
+  },
+  {
+    id: 'h_weakspot', name: '약점 포착', type: 'spell', cost: 5, rarity: 'rare', hero: 'hunter', target: 'none', icon: 'arrows', ai: { kind: 'aoe' },
+    text: '무작위 적 하수인 하나와 그 주변 1칸의 모든 적에게 <b>징표</b>를 새깁니다(2턴 동안 받는 피해 +1).',
+    cast: (api) => {
+      const foes = api.foes();
+      if (!foes.length) return;
+      const c = api.rng.pick(foes);
+      for (const f of foes) if (Math.abs(f.lane - c.lane) <= 1 && Math.abs(f.row - c.row) <= 1) api.mark(f.uid, 2);
+    },
+  },
+  {
+    id: 'h_smoke', name: '연막탄 투척', type: 'spell', cost: 6, rarity: 'rare', hero: 'hunter', target: 'area2', icon: 'wave', ai: { kind: 'zone', zone: 'smoke' },
+    text: '원하는 2×2 칸에 2턴 동안 <b>연막</b>을 피웁니다. 연막 속 하수인은 적의 대상 지정 주문과 원거리 공격의 표적이 되지 않습니다(무작위 공격은 맞음).',
+    cast: (api, t) => { if (t.kind === 'cell') api.zone('smoke', t.lane, t.row, 2); },
+  },
+  {
+    id: 'h_volley_trap', name: '일제 매복', type: 'spell', cost: 6, rarity: 'epic', hero: 'hunter', target: 'none', icon: 'arrows', ai: { kind: 'aoe' },
+    text: '가장 앞선 적 셋이 밟을 칸에 <b>덫</b>을 하나씩 놓습니다.',
+    cast: (api) => { for (let i = 0; i < 3; i++) trapAhead(api); },
   },
 ];
 

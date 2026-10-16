@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { LANES, LAST_ROW, ROWS } from '../game/types';
+import { LANES, LAST_ROW, ROWS, type ZoneKind } from '../game/types';
 import { instantiateStatic } from './assets';
 import { groundTexture, naturePiece, type NatureKind } from './forest';
 
@@ -393,6 +393,64 @@ export class Board {
     for (const c of cells) this.setWet(c.lane, c.row, true);
   }
 
+  private readonly zones = new Map<string, THREE.Group>();
+  private smokeTex: THREE.CanvasTexture | null = null;
+
+  /** 방어 진지 (a ring of stakes on a lit square) or 연막 (drifting smoke) over a 2×2 area. */
+  setZone(kind: ZoneKind, lane: number, row: number, on: boolean) {
+    const key = `${kind},${lane},${row}`;
+    const had = this.zones.get(key);
+    if (!on) {
+      had?.removeFromParent();
+      this.zones.delete(key);
+      return;
+    }
+    if (had) return;
+    const g = new THREE.Group();
+    const center = cellPos(lane + 0.5, row + 0.5);
+    g.position.copy(center);
+    const w = LANE_W * 2 * 0.96;
+    const d = ROW_D * 2 * 0.94;
+    if (kind === 'fort') {
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.16, depthWrite: false }));
+      floor.position.y = 0.05;
+      g.add(floor);
+      const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.9, flatShading: true });
+      // Sharpened stakes along the edge.
+      const n = 9;
+      for (let i = 0; i <= n; i++) {
+        for (const [x, z] of [[-w / 2 + (w * i) / n, -d / 2], [-w / 2 + (w * i) / n, d / 2], [-w / 2, -d / 2 + (d * i) / n], [w / 2, -d / 2 + (d * i) / n]]) {
+          const stake = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.7, 5), wood);
+          stake.position.set(x, 0.35, z);
+          stake.castShadow = true;
+          g.add(stake);
+        }
+      }
+    } else {
+      this.smokeTex ??= smokeTexture();
+      for (let i = 0; i < 14; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.smokeTex, color: 0xb8bcc4, transparent: true, opacity: 0.55, depthWrite: false }));
+        sp.position.set((Math.random() - 0.5) * w * 0.8, 0.6 + Math.random() * 1.6, (Math.random() - 0.5) * d * 0.8);
+        sp.scale.setScalar(2.2 + Math.random() * 1.4);
+        sp.userData.drift = Math.random() * 6;
+        sp.renderOrder = 4;
+        g.add(sp);
+      }
+      g.userData.smoke = true;
+    }
+    this.scene.add(g);
+    this.zones.set(key, g);
+  }
+
+  syncZones(zones: { kind: ZoneKind; lane: number; row: number }[]) {
+    const want = new Set(zones.map((z) => `${z.kind},${z.lane},${z.row}`));
+    for (const key of [...this.zones.keys()]) if (!want.has(key)) {
+      const [k, l, r] = key.split(',');
+      this.setZone(k as ZoneKind, Number(l), Number(r), false);
+    }
+    for (const z of zones) this.setZone(z.kind, z.lane, z.row, true);
+  }
+
   private readonly traps = new Map<string, THREE.Object3D>();
 
   /** 덫: a bear trap on the cell. */
@@ -479,6 +537,14 @@ export class Board {
       const k = 0.9 + 0.12 * Math.sin(time * 11 + f.phase) * Math.sin(time * 4.3 + f.phase * 3);
       f.sprite.scale.set(1.1 * k * f.size, 1.35 * k * f.size, 1);
     }
+    for (const z of this.zones.values()) {
+      if (!z.userData.smoke) continue;
+      for (const sp of z.children) {
+        sp.userData.drift += dt;
+        sp.position.y = 0.8 + Math.sin(sp.userData.drift * 0.7) * 0.5 + 0.6;
+        (sp as THREE.Sprite).material.rotation += dt * 0.15;
+      }
+    }
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt * 2.5);
       const s = this.shake * 0.35;
@@ -535,4 +601,18 @@ function makeBearTrap(): THREE.Group {
   g.add(bar);
   g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
   return g;
+}
+
+/** A soft puff for 연막. */
+function smokeTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,.9)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
 }

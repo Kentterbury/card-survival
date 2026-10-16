@@ -13,7 +13,8 @@ import { join, resolve } from 'node:path';
 /** Models the game uses (folder/name) and the animation clips it keeps of each. */
 const ANIMAL = ['Attack', 'Death', 'Gallop', 'Idle', 'Idle_HitReact1', 'Walk'];
 const BLOB = ['Bite_Front', 'Death', 'HitRecieve', 'Idle', 'Jump', 'Walk'];
-export const CREATURES = { 'Animal/Wolf': ANIMAL, 'Monsters/GreenBlob': BLOB, 'Monsters/GreenSpikyBlob': BLOB, 'Monsters/PinkBlob': BLOB };
+const FLYER = ['Death', 'Fast_Flying', 'Flying_Idle', 'Headbutt', 'HitReact'];
+export const CREATURES = { 'Animal/Wolf': ANIMAL, 'Monsters/GreenBlob': BLOB, 'Monsters/GreenSpikyBlob': BLOB, 'Monsters/PinkBlob': BLOB, 'Monsters/Pigeon': FLYER };
 
 const src = process.argv[2] && resolve(process.argv[2]);
 if (!src) {

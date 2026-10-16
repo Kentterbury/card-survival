@@ -8,7 +8,7 @@ import { loadGltf, type AnimSet, type CharacterInstance } from './assets';
  * tools/optimize-creatures.mjs). The same files serve the KayKit and the Synty set. Each card
  * picks a body, a size and colours.
  */
-type CreatureFile = 'Wolf' | 'GreenBlob' | 'GreenSpikyBlob' | 'PinkBlob';
+type CreatureFile = 'Wolf' | 'GreenBlob' | 'GreenSpikyBlob' | 'PinkBlob' | 'Pigeon';
 
 export interface CreatureLook {
   file: CreatureFile;
@@ -38,17 +38,20 @@ export const CREATURE_LOOKS: Record<string, CreatureLook> = {
   slime_venom: BLOB('PinkBlob', 0xb07aff),
   slime_acid: BLOB('GreenSpikyBlob', 0xfff27a),
   'boss:슬라임 왕': BLOB('GreenBlob', 0x9ff0e0, true),
+  // 척후대장's scouting hawk: the pigeon in hawk colours.
+  h_hawk_token: { file: 'Pigeon', tint: 0xc89a6a },
 };
 
-const FILES: CreatureFile[] = ['Wolf', 'GreenBlob', 'GreenSpikyBlob', 'PinkBlob'];
+const FILES: CreatureFile[] = ['Wolf', 'GreenBlob', 'GreenSpikyBlob', 'PinkBlob', 'Pigeon'];
 
 /** Height of each body before the unit's own scale (KayKit characters are about 2.4). */
-const HEIGHT: Record<CreatureFile, number> = { Wolf: 1.75, GreenBlob: 1.35, GreenSpikyBlob: 1.5, PinkBlob: 1.35 };
+const HEIGHT: Record<CreatureFile, number> = { Wolf: 1.75, GreenBlob: 1.35, GreenSpikyBlob: 1.5, PinkBlob: 1.35, Pigeon: 1.1 };
 
 /** Clip roles. Wolves run (Gallop) when they move; blobs hop in with a Jump. */
 const ANIMS: Record<CreatureModel, AnimSet> = {
   wolf: { idle: 'Idle', walk: 'Gallop', attack: 'Attack', hit: 'Idle_HitReact1', death: 'Death', cheer: 'Idle' },
   slime: { idle: 'Idle', walk: 'Walk', attack: 'Bite_Front', hit: 'HitRecieve', death: 'Death', spawn: 'Jump', cheer: 'Jump' },
+  bird: { idle: 'Flying_Idle', walk: 'Fast_Flying', attack: 'Headbutt', hit: 'HitReact', death: 'Death', cheer: 'Flying_Idle' },
 };
 
 export const creatureAnims = (model: CreatureModel): AnimSet => ANIMS[model];
@@ -61,7 +64,7 @@ export function preloadCreatures(): Promise<unknown>[] {
 }
 
 export function creatureLook(model: CreatureModel, key?: string): CreatureLook {
-  return (key && CREATURE_LOOKS[key]) || (model === 'wolf' ? CREATURE_LOOKS.wolf : CREATURE_LOOKS.slime);
+  return (key && CREATURE_LOOKS[key]) || (model === 'wolf' ? CREATURE_LOOKS.wolf : model === 'bird' ? CREATURE_LOOKS.h_hawk_token : CREATURE_LOOKS.slime);
 }
 
 /** A posed, animated creature (same shape as a character instance). */
@@ -81,7 +84,7 @@ export async function instantiateCreature(model: CreatureModel, key?: string): P
       if (look.belly !== undefined && mat.name === 'Main_Light') mat.color.setHex(look.belly);
       if (look.tint !== undefined) mat.color.setHex(look.tint);
       // Slimes glow faintly from inside, so the jelly reads in the night forest.
-      if (look.file !== 'Wolf' && mat.map) {
+      if (look.file.includes('Blob') && mat.map) {
         mat.emissiveMap = mat.map;
         mat.emissive.setHex(look.tint ?? 0xffffff);
         mat.emissiveIntensity = 0.45;

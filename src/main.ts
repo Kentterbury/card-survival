@@ -36,7 +36,7 @@ const st0 = (i: number) => STAGES[i];
 const TARGET_WORDS: Record<TargetKind, string> = {
   foe: '적 하수인이나 적 영웅', foeUnit: '적 하수인', ally: '아군 하수인', lane: '줄', slot: '내 진영 빈 칸', none: '',
   wallCell: '나란한 빈 칸 두 개', anyUnit: '하수인(아군도 가능)', allySlot: '아군 하수인', move: '하수인이나 구조물',
-  trapCell: '빈 칸',
+  trapCell: '빈 칸', ownTrapCell: '내 진영 앞쪽 세 줄의 빈 칸', area2: '2×2 영역', chargeAlly: '자기 줄에 적이 있는 아군 하수인',
 };
 
 /** Two-step cards: the prompt for picking the unit, then the cell. */
@@ -88,7 +88,7 @@ class App {
       $('loading-fill').style.width = `${(done / total) * 100}%`;
     });
     $('loading-text').textContent = '초상화 그리는 중…';
-    const subjects = [...CHARACTER_MODELS, 'barrier' as ModelId, 'ice_wall' as ModelId].map((m) => ({ key: m as string, model: m }));
+    const subjects = [...CHARACTER_MODELS, 'barrier' as ModelId, 'ice_wall' as ModelId, 'siege' as ModelId].map((m) => ({ key: m as string, model: m }));
     // Forest beasts are drawn in code: every look gets its own picture in either set.
     for (const c of Object.values(CARDS)) if (c.type === 'minion' && isCreature(c.model)) subjects.push({ key: c.id, model: c.model });
     for (const st of STAGES) if (isCreature(st.hero.model)) subjects.push({ key: `boss:${st.hero.name}`, model: st.hero.model });
@@ -268,6 +268,7 @@ class App {
         $('history').innerHTML = '';
         const chapter = STAGES[e.stage].chapter;
         this.board.syncTraps([]);
+        this.board.syncZones([]);
         await this.board.setEnvironment(CHAPTERS[chapter].env);
         await this.setupEnemyHero();
         this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };
@@ -494,11 +495,11 @@ class App {
         const at = e.side === 'player' ? HERO_POS.clone().setY(2.6) : ENEMY_HERO_POS.clone().setY(4);
         if (e.total > before) {
           sound.play('buff');
-          this.fx.floatText(at, `보호막 +${e.total - before}`, 'buff');
+          this.fx.floatText(at, `가호 +${e.total - before}`, 'buff');
           this.fx.burst(at.clone().setY(1.2), 0x9fe8ff, 20, 2);
         } else {
           sound.play('wardBreak');
-          this.fx.floatText(at, `보호막 -${before - e.total}`, 'info');
+          this.fx.floatText(at, `가호 -${before - e.total}`, 'info');
         }
         await wait(0.2);
         return;
@@ -604,6 +605,51 @@ class App {
         this.fx.burst(at, 0x7dff6a, 30, 3);
         this.fx.floatText(at.clone().setY(2), '분열!', 'info');
         await wait(0.2);
+        return;
+      }
+      case 'zone':
+        this.board.setZone(e.kind, e.lane, e.row, e.on);
+        if (e.on) {
+          sound.play(e.kind === 'smoke' ? 'whoosh' : 'buff');
+          this.fx.floatText(cellPos(e.lane + 0.5, e.row + 0.5).setY(2), e.kind === 'smoke' ? '연막!' : '방어 진지', 'buff');
+          await wait(0.25);
+        }
+        return;
+      case 'mark': {
+        const v = this.views.get(e.uid);
+        if (!v || e.turns <= 0) return;
+        sound.play('curse');
+        v.flash(0xff5a5a);
+        this.fx.floatText(v.headPosition(), `징표 ${e.turns}`, 'dmg');
+        await wait(0.1);
+        return;
+      }
+      case 'guarded': {
+        const v = this.views.get(e.uid);
+        if (!v) return;
+        sound.play('wardBreak');
+        this.fx.floatText(v.headPosition(), '진지 방어', 'buff');
+        await wait(0.12);
+        return;
+      }
+      case 'loaded': {
+        const v = this.views.get(e.uid);
+        if (!v) return;
+        if (e.on) {
+          sound.play('buff');
+          this.fx.floatText(v.headPosition(), '장전', 'info');
+          await wait(0.2);
+        }
+        return;
+      }
+      case 'bombard': {
+        const v = this.views.get(e.uid);
+        if (!v) return;
+        sound.play('explosion');
+        void v.attackAnim();
+        const to = e.row > LAST_ROW || e.row < 0 ? this.hitPos(e.row < 0 ? 'player' : 'enemy', e.lane) : cellPos(e.lane, e.row).setY(0.6);
+        await this.fx.projectile(v.group.position.clone().setY(2.2), to, 'meteor', 14, 0.6);
+        this.board.addShake(0.5);
         return;
       }
       case 'freeze':
@@ -762,6 +808,7 @@ class App {
     this.heroArmor = { player: s.sides.player.hero.armor ?? 0, enemy: s.sides.enemy.hero.armor ?? 0 };
     this.board.syncWet(s.wet);
     this.board.syncTraps(s.traps);
+    this.board.syncZones(s.zones);
     this.renderHud();
     this.renderEmpower();
   }
@@ -869,7 +916,10 @@ class App {
       const mark = next && u.side === 'enemy' ? '<span class="threat" title="다음 턴에 공격">!</span>' : '';
       v.renderBadge(mark + (u.frozen ? `<span class="frozen-tag">❄${(u.frozenTurns ?? 1) > 1 ? u.frozenTurns : ''}</span>` : '')
         + (u.poison ? `<span class="poison-tag" title="중독: 턴마다 피해 1">☠${u.poison}</span>` : '')
-        + (u.rootedTurns ? `<span class="root-tag" title="속박: 이동 못 함">🌿${u.rootedTurns}</span>` : ''));
+        + (u.rootedTurns ? `<span class="root-tag" title="속박: 이동 못 함">🌿${u.rootedTurns}</span>` : '')
+        + (u.marked ? `<span class="mark-tag" title="징표: 받는 피해 +1">🎯${u.marked}</span>` : '')
+        + (u.loaded ? '<span class="mark-tag" title="장전: 이번 턴이 끝나면 발사">💥</span>' : '')
+        + (this.game.inSmoke(u) ? '<span class="smoke-tag" title="연막: 적의 주문과 사격이 노리지 못함">🌫</span>' : ''));
     }
   }
 
@@ -1148,7 +1198,7 @@ class App {
       const def = card(defId);
       const steps = def.type === 'spell' ? TWO_STEP[def.target] : undefined;
       if (steps) this.showHint(`<b>${def.name}</b>: ${steps[0]}`);
-      else if (def.type === 'spell' && (def.target === 'wallCell' || def.target === 'anyUnit')) this.showHint(`<b>${def.name}</b>: ${TARGET_WORDS[def.target]}을 고르세요`);
+      else if (def.type === 'spell' && ['wallCell', 'anyUnit', 'area2', 'ownTrapCell', 'chargeAlly'].includes(def.target)) this.showHint(`<b>${def.name}</b>: ${TARGET_WORDS[def.target]}을 고르세요`);
     }
     this.updateAimVisuals();
   }
@@ -1224,7 +1274,11 @@ class App {
         return cell.lane > 0 ? at(cell.lane - 1) : at(cell.lane);
       }
       case 'anyUnit': return p.unit ? { kind: 'unit', uid: p.unit.uid } : null;
-      case 'trapCell': return cell ? { kind: 'cell', lane: cell.lane, row: cell.row } : null;
+      case 'trapCell':
+      case 'ownTrapCell': return cell ? { kind: 'cell', lane: cell.lane, row: cell.row } : null;
+      // The 2×2 area grows up and to the right from the cell; at the edges it shifts back inside.
+      case 'area2': return cell ? { kind: 'cell', lane: Math.min(cell.lane, 3), row: Math.min(cell.row, LAST_ROW - 1) } : null;
+      case 'chargeAlly': return p.unit?.side === 'player' ? { kind: 'unit', uid: p.unit.uid } : null;
       case 'allySlot':
       case 'move': {
         if (aim.kind !== 'card') return null;
@@ -1268,10 +1322,17 @@ class App {
       case 'slot':
         this.board.setCell(t.lane, 0, style);
         return;
-      case 'cell':
+      case 'cell': {
+        const kind = this.aim?.kind === 'card' ? this.cardTargetKind(this.aim.handIndex) : '';
+        if (kind === 'area2') {
+          // Every cell can be a corner, so only the hovered 2×2 lights up.
+          if (style === 'hover') for (const [dl, dr] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.board.setCell(t.lane + dl, t.row + dr, style);
+          return;
+        }
         this.board.setCell(t.lane, t.row, style);
-        if (style === 'hover') this.board.setCell(t.lane + 1, t.row, style);
+        if (style === 'hover' && kind === 'wallCell') this.board.setCell(t.lane + 1, t.row, style);
         return;
+      }
       case 'unitTo':
         this.board.setCell(t.lane, t.row, style);
         return;
@@ -1388,6 +1449,10 @@ class App {
       this.game.state.wet.some((w) => w.lane === unit.lane && w.row === unit.row) ? '젖은 칸: 받는 피해 +1' : '',
       unit.poison ? `중독: 자기 턴 시작마다 피해 1 (${unit.poison}턴)` : '',
       unit.rootedTurns ? `속박: 움직이지 못하지만 공격은 함 (${unit.rootedTurns}턴)` : '',
+      unit.marked ? `징표: 받는 피해 +1 (${unit.marked}턴)` : '',
+      this.game.inSmoke(unit) ? '연막 속: 적의 대상 지정 주문과 사격이 노리지 못함' : '',
+      this.game.zoneAt('fort', unit.lane, unit.row, unit.side) ? '방어 진지: 받는 피해 −2' : '',
+      unit.loaded ? '장전됨: 이번 내 턴이 끝나면 발사' : '',
       unit.fresh && !unit.keywords.has('swift') ? '이번 턴에 소환됨' : '',
     ].filter(Boolean).join('<br>');
     inspect.insertAdjacentHTML('beforeend', `<div class="notes"><div class="kw-note">${status}</div>${keywordNotes(unit.defId)}</div>`);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { isCreature, isStructure, type ModelId, type Side, type Unit } from '../game/types';
 import { creatureAnims, instantiateCreature } from './creatures';
 import { makeIceWall } from './iceWall';
+import { makeSiege } from './siege';
 import { animsFor, instantiateCharacter, instantiateStatic, useSynty, type AnimSet } from './assets';
 import { deathClipsFor } from './syntySet';
 import { ease, tween, wait } from './tween';
@@ -61,6 +62,15 @@ export class UnitView {
       this.model.scale.setScalar(0.58);
     } else if (this.modelId === 'ice_wall') {
       this.model = makeIceWall();
+    } else if (this.modelId === 'siege') {
+      this.model = await makeSiege();
+      this.model.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const owned = (mesh.material as THREE.MeshStandardMaterial).clone();
+        mesh.material = owned;
+        this.flashMats.push(owned);
+      });
     } else {
       // Characters (KayKit or Synty) and forest beasts (Quaternius) share one animation path.
       const creature = isCreature(this.modelId);
@@ -242,6 +252,12 @@ export class UnitView {
   }
 
   attackAnim(): Promise<void> {
+    const arm = this.model?.userData.arm as THREE.Object3D | undefined;
+    if (arm) {
+      // The catapult arm whips over, then winds back.
+      void tween(0.9, (k) => { arm.rotation.x = 0.55 - Math.sin(Math.min(1, k * 2.5) * Math.PI / 2) * 2.1 + (k > 0.5 ? (k - 0.5) * 4.2 : 0); });
+      return wait(0.25);
+    }
     if (!this.anims) return this.bump();
     return this.playOnce(this.anims.attack, 0.45);
   }

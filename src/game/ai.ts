@@ -236,6 +236,43 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
       const worst = units.sort((a, b) => b.attack - a.attack || threat(b, side) - threat(a, side))[0];
       return worst.attack >= 3 || threat(worst, side) > 12 ? { target: { kind: 'unit', uid: worst.uid }, score: base + worst.attack * 2 } : null;
     }
+    case 'charge': {
+      // The slam that kills the most valuable foe and leaves our runner standing.
+      let best: { target: Target; score: number } | null = null;
+      for (const t of targets) {
+        if (t.kind !== 'unit') continue;
+        const u = g.unit(t.uid)!;
+        const foe = g.chargeTarget(u);
+        if (!foe || foe.frozen) continue;
+        const kills = foe.health <= u.health;
+        const survives = u.keywords.has('ward') || u.health > Math.ceil(u.health / 2);
+        const score = (kills ? threat(foe, side) + 8 : u.health * 1.5) + (survives ? 2 : -4);
+        if (score > 6 && (!best || score > best.score)) best = { target: t, score };
+      }
+      return best ? { target: best.target, score: base + best.score } : null;
+    }
+    case 'zone': {
+      // The 2×2 area that covers the most of our units.
+      let best: { target: Target; score: number } | null = null;
+      for (const t of targets) {
+        if (t.kind !== 'cell') continue;
+        const inside = g.unitsOf(side).filter((u) => !u.keywords.has('illusion') && u.lane >= t.lane && u.lane <= t.lane + 1 && u.row >= t.row && u.row <= t.row + 1);
+        const score = inside.reduce((v, u) => v + 2 + u.attack, 0);
+        if (inside.length >= 2 && (!best || score > best.score)) best = { target: t, score };
+      }
+      return best && foes.length > 0 ? { target: best.target, score: base + best.score / 2 } : null;
+    }
+    case 'whirl': {
+      let best: { target: Target; score: number } | null = null;
+      for (const t of targets) {
+        if (t.kind !== 'unit') continue;
+        const u = g.unit(t.uid)!;
+        const hits = foes.filter((f) => f.row === u.row && Math.abs(f.lane - u.lane) === 1 && !f.frozen);
+        const score = hits.reduce((v, f) => v + Math.min(u.attack, f.health) + (u.attack >= f.health ? 6 : 0), 0);
+        if (score > 4 && (!best || score > best.score)) best = { target: t, score };
+      }
+      return best ? { target: best.target, score: base + best.score } : null;
+    }
     case 'skip':
       return null;
     case 'ramp': {

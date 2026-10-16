@@ -35,7 +35,7 @@ const POOL = Object.values(CARDS).filter((c) => !c.enemy && !c.hero && c.rarity 
  */
 export function rollShop(rng: Rng, hero = ''): ShopState {
   const pick = (rarity: Rarity, n: number) => rng.shuffle(POOL.filter((c) => c.rarity === rarity)).slice(0, n);
-  const own = rng.shuffle(Object.values(CARDS).filter((c) => c.hero === hero)).slice(0, 1);
+  const own = rng.shuffle(Object.values(CARDS).filter((c) => c.hero === hero && !c.id.endsWith('_token'))).slice(0, 1);
   const cards = [...pick('common', 3), ...pick('rare', 2), ...pick('epic', 1), ...own];
   return {
     offers: cards.map((c) => ({ defId: c.id, price: CARD_PRICE[c.rarity], sold: false })),

@@ -401,3 +401,5 @@ button { font-family: inherit; }
 #banner.chapter .big { font-size: clamp(30px, 7.5vh, 72px); letter-spacing: .08em; color: #d8f5c0; padding: 1.6vh 9vh; }
 #banner.chapter .small { color: #cfe8c0; font-style: italic; }
 .panel p.dim { opacity: .7; font-size: .9em; }
+.unit-badge .mark-tag { position: absolute; top: -1.35em; left: 50%; transform: translateX(-50%); min-width: 0; border: none; box-shadow: none; background: none; color: #ff8a7a; font-size: .85em; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+.unit-badge .smoke-tag { position: absolute; bottom: -1.3em; right: -1.1em; min-width: 0; border: none; box-shadow: none; background: none; font-size: .85em; text-shadow: 0 1px 2px #000; }

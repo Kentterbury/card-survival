@@ -10,7 +10,7 @@ Files were re-exported with `tools/optimize-assets.mjs` (unused animations remov
 
 ## Forest beasts (`creatures/`)
 
-Wolf (Ultimate Animated Animal Pack) and GreenBlob / GreenSpikyBlob / PinkBlob (Ultimate Monsters) by
+Wolf (Ultimate Animated Animal Pack) and GreenBlob / GreenSpikyBlob / PinkBlob / Pigeon (Ultimate Monsters) by
 Quaternius (https://quaternius.com), released under CC0 1.0. Re-exported with `tools/optimize-creatures.mjs`
 (unused animations removed, meshopt compression).
 

@@ -7,7 +7,7 @@ import { Rng } from './rng';
 import { OLD_SAVE_STAGE_SHIFT, shopAfter, STAGES, type EnemyPower } from './stages';
 import {
   FORMATION_BONUS, forward, homeRow, isStructure, LANES, LAST_ROW, MANA_PER_TURN, MAX_HAND, MAX_MANA, other, RANGED_RANGE,
-  THORNS_DAMAGE, VANGUARD_BONUS, VENOM_TURNS,
+  FORT_REDUCTION, THORNS_DAMAGE, VANGUARD_BONUS, VENOM_TURNS, type ZoneKind,
   type CardInstance, type GameEvent, type HitTarget, type Keyword, type PendingChoice, type Phase, type RewardBundle, type Side, type SideState,
   type Target, type Unit,
 } from './types';
@@ -68,6 +68,8 @@ export interface GameState {
   wet: { lane: number; row: number; turns: number }[];
   /** 덫: set by `side`; the first foe to step in takes damage and is rooted. */
   traps: { lane: number; row: number; side: Side }[];
+  /** 2×2 zones (lower-left cell): 방어 진지 shields `side`'s units, 연막 hides every unit inside. */
+  zones: { kind: ZoneKind; lane: number; row: number; turns: number; side: Side }[];
 }
 
 export class Game {
@@ -104,7 +106,7 @@ export class Game {
         player: this.emptySide({ name: hero.name, model: hero.model, scale: 1.3, health: resume?.health ?? maxHealth, maxHealth }),
         enemy: this.emptySide({ name: '', model: 'Skeleton_Minion', scale: 1, health: 1, maxHealth: 1 }),
       },
-      units: [], rewards: [], choice: null, wet: [], traps: [],
+      units: [], rewards: [], choice: null, wet: [], traps: [], zones: [],
     };
     return this.collect(() => this.beginStage());
   }
@@ -224,6 +226,7 @@ export class Game {
     s.units = [];
     s.wet = [];
     s.traps = [];
+    s.zones = [];
     s.turn = 0;
     s.choice = null;
     // Hero armor does not carry over between stages.
@@ -250,6 +253,13 @@ export class Game {
     me.powerUsed = false;
     for (const u of s.units) if (u.side === side) u.fresh = false;
     this.emit({ type: 'turnStart', side, turn: s.turn });
+    // 징표 fades over its bearer's turns.
+    for (const u of this.unitsOf(side)) {
+      if (!u.marked) continue;
+      u.marked--;
+      if (u.marked <= 0) u.marked = undefined;
+      this.emit({ type: 'mark', uid: u.uid, turns: u.marked ?? 0 });
+    }
     // 독 ticks at the start of its victim's turn.
     for (const u of this.unitsOf(side)) {
       if (!u.poison) continue;
@@ -269,6 +279,9 @@ export class Game {
       for (const w of s.wet) w.turns--;
       for (const w of s.wet.filter((x) => x.turns <= 0)) this.emit({ type: 'wet', lane: w.lane, row: w.row, on: false });
       s.wet = s.wet.filter((x) => x.turns > 0);
+      for (const z of s.zones) z.turns--;
+      for (const z of s.zones.filter((x) => x.turns <= 0)) this.emit({ type: 'zone', kind: z.kind, lane: z.lane, row: z.row, on: false });
+      s.zones = s.zones.filter((x) => x.turns > 0);
     }
     for (const u of this.unitsOf(side)) {
       if (u.keywords.has('regenerate') && u.health < u.maxHealth) this.healUnit(u, u.maxHealth - u.health);
@@ -375,7 +388,7 @@ export class Game {
   private targetsOfKind(side: Side, kind: string): Target[] {
     // Foes guarded by an 엄호 unit in their lane cannot be picked by targeted cards.
     const foeUnits = (): Target[] => this.unitsOf(other(side))
-      .filter((u) => !this.coverFor(u))
+      .filter((u) => !this.coverFor(u) && !this.inSmoke(u))
       .map((u) => ({ kind: 'unit' as const, uid: u.uid }));
     switch (kind) {
       case 'none': return [{ kind: 'none' }];
@@ -403,7 +416,7 @@ export class Game {
       }
       case 'move': {
         const out: Target[] = [];
-        const units = [...this.unitsOf(other(side)).filter((u) => !this.coverFor(u)), ...this.unitsOf(side)];
+        const units = [...this.unitsOf(other(side)).filter((u) => !this.coverFor(u) && !this.inSmoke(u)), ...this.unitsOf(side)];
         for (const u of units) {
           // Back (toward the unit's own side) or sideways.
           for (const [lane, row] of [[u.lane, u.row - forward(u.side)], [u.lane - 1, u.row], [u.lane + 1, u.row]]) {
@@ -412,6 +425,24 @@ export class Game {
         }
         return out;
       }
+      case 'ownTrapCell': {
+        // The three rows nearest our own side.
+        const out: Target[] = [];
+        for (let d = 0; d < 3; d++) {
+          const row = homeRow(side) + d * forward(side);
+          for (let lane = 0; lane < LANES; lane++) {
+            if (!this.unitAt(lane, row) && !this.trapAt(lane, row)) out.push({ kind: 'cell', lane, row });
+          }
+        }
+        return out;
+      }
+      case 'area2': {
+        const out: Target[] = [];
+        for (let row = 0; row < LAST_ROW; row++) for (let lane = 0; lane < LANES - 1; lane++) out.push({ kind: 'cell', lane, row });
+        return out;
+      }
+      case 'chargeAlly':
+        return this.unitsOf(side).filter((u) => !isStructure(u.model) && this.chargeTarget(u)).map((u) => ({ kind: 'unit' as const, uid: u.uid }));
       case 'trapCell': {
         const out: Target[] = [];
         for (let row = 0; row <= LAST_ROW; row++) {
@@ -532,6 +563,8 @@ export class Game {
       // Flyers ignore units and only go for the hero.
       if (flying) continue;
       const occ = this.unitAt(u.lane, r);
+      // 연막: a shot passes over a hidden foe (a blow at arm's length still lands).
+      if (occ && occ.side !== u.side && d > 1 && this.inSmoke(occ)) continue;
       if (occ && occ.side !== u.side) {
         // Melee units cannot reach a flyer; only ranged attacks and spells can.
         if (occ.keywords.has('flying') && u.range === 1) return null;
@@ -674,6 +707,52 @@ export class Game {
     return true;
   }
 
+  /** The zone of a kind covering a cell (방어 진지 only counts for its own side). */
+  zoneAt(kind: ZoneKind, lane: number, row: number, side?: Side) {
+    return this.state.zones.find((z) => z.kind === kind && (side === undefined || z.side === side)
+      && lane >= z.lane && lane <= z.lane + 1 && row >= z.row && row <= z.row + 1);
+  }
+
+  inSmoke(u: Unit): boolean {
+    return !!this.zoneAt('smoke', u.lane, u.row);
+  }
+
+  /** 돌진: the nearest foe ahead in the unit's lane. */
+  chargeTarget(u: Unit): Unit | undefined {
+    const dir = forward(u.side);
+    return this.unitsOf(other(u.side))
+      .filter((f) => f.lane === u.lane && (f.row - u.row) * dir > 0)
+      .sort((a, b) => (a.row - b.row) * dir)[0];
+  }
+
+  /** 돌진: run up to the nearest foe in the lane and slam it for its own health; take half back. */
+  private charge(u: Unit) {
+    const foe = this.chargeTarget(u);
+    if (!foe || u.health <= 0) return;
+    const dir = forward(u.side);
+    const stop = foe.row - dir;
+    if (stop !== u.row && !this.unitAt(u.lane, stop)) {
+      const from = u.row;
+      u.row = stop;
+      this.emit({ type: 'move', uid: u.uid, lane: u.lane, from, to: stop });
+    }
+    const hit = u.health;
+    this.emit({ type: 'collide', uid: u.uid, into: foe.uid });
+    this.damageUnit(foe, hit);
+    this.damageUnit(u, Math.ceil(hit / 2));
+  }
+
+  /** 교란 사격: shove a unit into a random free neighbouring cell. */
+  private nudge(u: Unit) {
+    if (u.health <= 0 || isStructure(u.model)) return;
+    const cells = this.rng.shuffle([[u.lane - 1, u.row], [u.lane + 1, u.row], [u.lane, u.row - 1], [u.lane, u.row + 1]])
+      .filter(([l, r]) => l >= 0 && l < LANES && r >= 0 && r <= LAST_ROW && !this.unitAt(l, r));
+    if (!cells.length) return;
+    [u.lane, u.row] = cells[0];
+    this.emit({ type: 'shift', uid: u.uid, lane: u.lane, row: u.row });
+    this.springTrap(u);
+  }
+
   private poisonUnit(u: Unit, turns: number) {
     if (u.health <= 0 || isStructure(u.model)) return;
     u.poison = Math.max(u.poison ?? 0, turns);
@@ -782,6 +861,14 @@ export class Game {
       return 0;
     }
     if (this.isWet(u.lane, u.row)) amount += WET_BONUS;
+    if (u.marked) amount += 1;
+    if (this.zoneAt('fort', u.lane, u.row, u.side)) {
+      amount -= FORT_REDUCTION;
+      if (amount <= 0) {
+        this.emit({ type: 'guarded', uid: u.uid });
+        return 0;
+      }
+    }
     if (u.keywords.has('ward')) {
       u.keywords.delete('ward');
       this.emit({ type: 'wardBroken', uid: u.uid });
@@ -1006,6 +1093,48 @@ export class Game {
         if (u) this.root(u, turns);
       },
       placeTrap: (lane, row) => this.placeTrap(side, lane, row),
+      charge: (uid) => {
+        const u = this.unit(uid);
+        if (u) this.charge(u);
+      },
+      nudge: (uid) => {
+        const u = this.unit(uid);
+        if (u) this.nudge(u);
+      },
+      mark: (uid, turns) => {
+        const u = this.unit(uid);
+        if (!u || u.health <= 0 || isStructure(u.model)) return;
+        u.marked = Math.max(u.marked ?? 0, turns);
+        this.emit({ type: 'mark', uid, turns: u.marked });
+      },
+      zone: (kind, lane, row, turns) => {
+        this.state.zones = this.state.zones.filter((z) => !(z.kind === kind && z.lane === lane && z.row === row));
+        this.state.zones.push({ kind, lane, row, turns, side });
+        this.emit({ type: 'zone', kind, lane, row, on: true });
+      },
+      retreat: (uid, rows) => this.shove(uid, rows, -dir),
+      bombard: (self) => {
+        // Aim at a random foe minion (hidden or not); with none on the board, the foe hero.
+        const foes = this.unitsOf(foeSide);
+        if (!foes.length) {
+          this.emit({ type: 'bombard', uid: self.uid, lane: self.lane, row: side === 'player' ? LAST_ROW + 1 : -1 });
+          this.damageHero(foeSide, 3);
+          return;
+        }
+        const t = this.rng.pick(foes);
+        const { lane, row } = t;
+        this.emit({ type: 'bombard', uid: self.uid, lane, row });
+        // The blast covers the cross of five cells and spares no one, friend or foe.
+        const hit = [t, ...this.state.units.filter((x) => x.health > 0 && Math.abs(x.lane - lane) + Math.abs(x.row - row) === 1)];
+        for (const [l, r] of [[lane, row], [lane - 1, row], [lane + 1, row], [lane, row - 1], [lane, row + 1]]) {
+          if (l >= 0 && l < LANES && r >= 0 && r <= LAST_ROW) this.emit({ type: 'explosion', lane: l, row: r });
+        }
+        for (const x of hit) this.damageUnit(x, 3);
+      },
+      setLoaded: (self, on) => {
+        self.loaded = on || undefined;
+        this.emit({ type: 'loaded', uid: self.uid, on });
+      },
       weaken: (uid, amount) => {
         const u = this.unit(uid);
         if (!u || u.health <= 0) return;

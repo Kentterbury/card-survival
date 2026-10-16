@@ -3,6 +3,7 @@ import { isCreature, type ModelId } from '../game/types';
 import { animsFor, instantiateCharacter, instantiateStatic, useSynty } from './assets';
 import { creatureAnims, instantiateCreature } from './creatures';
 import { makeIceWall } from './iceWall';
+import { makeSiege } from './siege';
 
 /**
  * Renders a bust shot of each model once at startup so cards and the hero
@@ -32,8 +33,9 @@ export async function renderPortraits(subjects: { key: string; model: ModelId }[
 
   for (const { key, model: id } of subjects) {
     let obj: THREE.Object3D;
-    if (id === 'barrier' || id === 'ice_wall') {
-      obj = id === 'barrier' ? await instantiateStatic('barrier') : makeIceWall();
+    if (id === 'barrier' || id === 'ice_wall' || id === 'siege') {
+      obj = id === 'barrier' ? await instantiateStatic('barrier') : id === 'siege' ? await makeSiege() : makeIceWall();
+      if (id === 'siege') obj.rotation.y = 0.7;
       camera.position.set(0, 1.6, 5.5);
       camera.lookAt(0, 0.5, 0);
     } else if (isCreature(id)) {

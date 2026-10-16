@@ -18,6 +18,19 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '영웅 전용 카드 추가 (수비대장 · 전쟁 족장 · 척후대장)',
+    summary: '새 개념: 방어 진지(2×2 칸, 안의 아군은 받는 피해 −2, 3턴), 연막(2×2 칸, 안의 하수인은 적의 대상 지정 주문과 사격을 피함, 2턴), 징표(받는 피해 +1, 2턴), 돌진(자기 체력만큼 박고 절반을 입음), 공성 전차(두 턴에 한 번 십자 폭격, 아군도 맞음). 영웅에게 쌓이는 보호막은 하수인의 보호막과 헷갈리지 않게 「가호」로 이름을 바꿨습니다. 영웅마다 새 보상 꾸러미를 넣었습니다.',
+    added: [
+      'c_wall_archer', 'c_bulwark', 'c_siege', 'c_raise_shields', 'c_charge', 'c_counter', 'c_last_stand', 'c_bastion',
+      'w_drummer', 'w_ravager', 'w_bloodcry', 'w_whirl', 'w_victory', 'w_allout',
+      'h_snarer', 'h_falconer', 'h_hawk_token', 'h_trap', 'h_snare', 'h_disrupt', 'h_retreat', 'h_weakspot', 'h_smoke', 'h_volley_trap',
+    ],
+    changed: [
+      { id: 'ice_shield', note: '영웅 보호막 → 가호 (이름만 바뀜)' },
+      { id: 'e_bone_shield', note: '영웅 보호막 → 가호 (이름만 바뀜)' },
+    ],
+  },
+  {
     title: '하수인 비용 곡선 정리',
     summary: '모든 하수인을 같은 기준으로 맞췄습니다: 공격력 + 체력 + 키워드·효과 점수 = 비용 + 2(희귀 +1, 영웅 등급 +2, 영웅 전용 +1까지 허용, ±1). 늑대는 체력을 올려 곡선 위쪽으로, 곡선보다 낮던 해골들은 체력 +1, 높던 카드는 조금 낮췄습니다. 영웅 생명력: 수비대장 36 → 30, 비전술사 18 → 22, 전쟁 족장 32 → 28, 척후대장 22 → 24. 야영지 휴식 14 → 16, 던전·동굴 지휘관 생명력을 낮췄습니다.',
     changed: [

@@ -48,6 +48,10 @@ const ART = {
   e_howl: 'wolf-howl', e_gale: 'whirlwind', e_pack_ambush: 'paw-print', e_instinct: 'sniffing-dog',
   e_merge: 'gooey-molecule', e_slime_coat: 'transparent-slime', e_vines: 'vine-whip', e_spore: 'mushroom-cloud',
   e_grave_moss: 'grave-flowers', e_trap: 'wolf-trap', e_grave_vines: 'curling-vines', e_wither: 'dead-wood', e_wisp: 'floating-ghost',
+  // hero cards (2nd batch)
+  c_raise_shields: 'shield-reflect', c_charge: 'charging-bull', c_counter: 'spiked-armor', c_last_stand: 'castle', c_bastion: 'stone-tower',
+  w_bloodcry: 'bloody-sword', w_whirl: 'spinning-blades', w_victory: 'laurels-trophy', w_allout: 'sprint',
+  h_trap: 'box-trap', h_snare: 'lasso', h_disrupt: 'striking-arrows', h_retreat: 'run', h_weakspot: 'targeted', h_smoke: 'smoke-bomb', h_volley_trap: 'mantrap',
 };
 
 const missing = Object.entries(ART).filter(([, n]) => !icons[n]);

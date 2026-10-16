@@ -52,6 +52,16 @@ const HERO_BUNDLES: (RewardBundle & { tier: number; hero: string })[] = [
   { id: 'traps', name: '매복조', theme: '척후대장 전용 · 매복과 빙결', hero: 'hunter', tier: 1, cards: ['h_trapper', 'h_aimed', 'crossbowman'] },
   { id: 'sniper', name: '저격조', theme: '척후대장 전용 · 정밀 사격', hero: 'hunter', tier: 2, cards: ['h_sniper', 'h_aimed', 'longbow'] },
   { id: 'arrowstorm', name: '척후대 총공세', theme: '척후대장 전용 · 전설', hero: 'hunter', tier: 3, cards: ['h_rain', 'h_trapper', 'glider'] },
+  { id: 'walls', name: '성벽 수비대', theme: '수비대장 전용 · 성벽과 돌진', hero: 'captain', tier: 1, cards: ['c_wall_archer', 'c_raise_shields', 'c_charge'] },
+  { id: 'ironwall', name: '철벽', theme: '수비대장 전용 · 진지와 반격', hero: 'captain', tier: 2, cards: ['c_bulwark', 'c_counter', 'c_bastion'] },
+  { id: 'siegeworks', name: '공성대', theme: '수비대장 전용 · 공성 전차', hero: 'captain', tier: 3, cards: ['c_siege', 'c_last_stand', 'c_wall_archer'] },
+  { id: 'wardrums', name: '북과 피', theme: '전쟁 족장 전용 · 북소리', hero: 'warchief', tier: 1, cards: ['w_drummer', 'w_bloodcry', 'w_whirl'] },
+  { id: 'frenzy', name: '광란', theme: '전쟁 족장 전용 · 분노와 회복', hero: 'warchief', tier: 2, cards: ['w_ravager', 'w_victory', 'w_bloodcry'] },
+  { id: 'allout', name: '총공격', theme: '전쟁 족장 전용 · 전설', hero: 'warchief', tier: 3, cards: ['w_allout', 'w_ravager', 'w_whirl'] },
+  { id: 'trapline', name: '덫 사냥', theme: '척후대장 전용 · 덫과 올가미', hero: 'hunter', tier: 1, cards: ['h_snarer', 'h_trap', 'h_snare'] },
+  { id: 'harass', name: '교란조', theme: '척후대장 전용 · 밀치고 물러나기', hero: 'hunter', tier: 1, cards: ['h_disrupt', 'h_retreat', 'h_snarer'] },
+  { id: 'hawkeye', name: '매와 연막', theme: '척후대장 전용 · 연막과 징표', hero: 'hunter', tier: 2, cards: ['h_falconer', 'h_smoke', 'h_weakspot'] },
+  { id: 'ambushline', name: '일제 매복', theme: '척후대장 전용 · 전설', hero: 'hunter', tier: 3, cards: ['h_volley_trap', 'h_falconer', 'h_trap'] },
 ];
 
 /** Every bundle with its tier (and hero, for hero bundles), for data checks and docs. */
