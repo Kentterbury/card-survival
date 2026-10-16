@@ -170,7 +170,7 @@ describe('spells', () => {
     const g = freshGame(['firebolt', 'firebolt', 'firebolt', 'firebolt', 'firebolt']);
     expect(g.cardTargets(0).some((t) => t.kind === 'hero' && t.side === 'enemy')).toBe(true);
     const hp = g.side('enemy').hero.health;
-    g.side('player').mana = 4;
+    g.side('player').mana = card('firebolt').cost;
     g.playCard(0, { kind: 'hero', side: 'enemy' });
     expect(g.side('enemy').hero.health).toBe(hp - 3);
   });

@@ -18,6 +18,22 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '영웅을 때리는 주문 비용 +1',
+    summary: '주문으로 적 영웅을 너무 쉽게 잡아서, 적 영웅에게 피해를 줄 수 있는 주문의 비용을 모두 1 올렸습니다.',
+    changed: [
+      { id: 'firebolt', note: '비용 4 → 5' },
+      { id: 'thunderbolt', note: '비용 7 → 8' },
+      { id: 'chainspark', note: '비용 6 → 7' },
+      { id: 'meteor', note: '비용 12 → 13' },
+      { id: 'pyroblast', note: '비용 16 → 17' },
+      { id: 'a_missiles', note: '비용 5 → 6' },
+      { id: 'a_energy', note: '비용 6 → 7' },
+      { id: 'a_storm', note: '비용 12 → 13' },
+      { id: 'h_rain', note: '비용 10 → 11' },
+      { id: 'blizzard', note: '비용 5 → 6' },
+    ],
+  },
+  {
     title: '던전·동굴 지휘관 개편',
     summary: '지휘관을 콘셉트에 맞게 다시 짰습니다. 해골 대장(생명력 28): 앞에서 버티는 전사와 뒤에서 쏘는 석궁수. 서고의 주술사: 값싼 원거리 주술사 떼와 주문. 납골당 수호자(32): 명치가 단단함 — 두꺼운 벽과 가호. 해골 군주(40): 죽음의 폭풍, 대마도사, 죽음의 기사. 하수인이 한꺼번에 죽으면 이제 동시에 쓰러집니다.',
     added: ['sk_crossbow', 'sk_gladiator', 'sk_hexling', 'e_coven', 'sk_gatekeeper', 'e_death_storm', 'sk_archlich'],

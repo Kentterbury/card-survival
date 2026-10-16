@@ -299,7 +299,7 @@ const CARD_LIST: CardDef[] = [
 
   // ── Player spells ──────────────────────────────────────────
   {
-    id: 'firebolt', name: '불꽃 화살', type: 'spell', cost: 4, rarity: 'basic', target: 'foe', icon: 'fire', ai: { kind: 'damage', amount: 3 },
+    id: 'firebolt', name: '불꽃 화살', type: 'spell', cost: 5, rarity: 'basic', target: 'foe', icon: 'fire', ai: { kind: 'damage', amount: 3 },
     text: '적 하나(영웅 포함)에게 피해를 3 줍니다.', cast: (api, t) => api.damage(t, 3),
   },
   {
@@ -329,11 +329,11 @@ const CARD_LIST: CardDef[] = [
     text: '카드를 2장 뽑습니다.', cast: (api) => api.draw(2),
   },
   {
-    id: 'thunderbolt', name: '낙뢰', type: 'spell', cost: 7, rarity: 'common', target: 'foe', icon: 'bolt', ai: { kind: 'damage', amount: 5 },
+    id: 'thunderbolt', name: '낙뢰', type: 'spell', cost: 8, rarity: 'common', target: 'foe', icon: 'bolt', ai: { kind: 'damage', amount: 5 },
     text: '적 하나(영웅 포함)에게 피해를 5 줍니다.', cast: (api, t) => api.damage(t, 5),
   },
   {
-    id: 'chainspark', name: '연쇄 전격', type: 'spell', cost: 6, rarity: 'rare', target: 'foeUnit', icon: 'storm', ai: { kind: 'damage', amount: 3 },
+    id: 'chainspark', name: '연쇄 전격', type: 'spell', cost: 7, rarity: 'rare', target: 'foeUnit', icon: 'storm', ai: { kind: 'damage', amount: 3 },
     text: '적 하수인 하나에게 피해를 3 주고, 양옆 줄의 맨 앞 적에게 피해를 2 줍니다.',
     cast: (api, t) => {
       if (t.kind !== 'unit') return;
@@ -349,7 +349,7 @@ const CARD_LIST: CardDef[] = [
     cast: (api) => { for (const m of api.foes()) api.damage({ kind: 'unit', uid: m.uid }, 2); },
   },
   {
-    id: 'meteor', name: '운석 낙하', type: 'spell', cost: 12, rarity: 'epic', target: 'lane', icon: 'meteor', ai: { kind: 'lane' },
+    id: 'meteor', name: '운석 낙하', type: 'spell', cost: 13, rarity: 'epic', target: 'lane', icon: 'meteor', ai: { kind: 'lane' },
     text: '한 줄의 적 하수인 모두에게 피해를 6 줍니다. 그 줄이 비어 있으면 적 영웅에게 6.',
     cast: (api, t) => {
       if (t.kind !== 'lane') return;
@@ -359,7 +359,7 @@ const CARD_LIST: CardDef[] = [
     },
   },
   {
-    id: 'pyroblast', name: '화염 작렬', type: 'spell', cost: 16, rarity: 'epic', target: 'foe', icon: 'meteor', ai: { kind: 'damage', amount: 9 },
+    id: 'pyroblast', name: '화염 작렬', type: 'spell', cost: 17, rarity: 'epic', target: 'foe', icon: 'meteor', ai: { kind: 'damage', amount: 9 },
     text: '적 하나(영웅 포함)에게 피해를 9 줍니다.', cast: (api, t) => api.damage(t, 9),
   },
   {
@@ -515,7 +515,7 @@ const CARD_LIST: CardDef[] = [
 
   // ── 비전술사 전용: 주문과 비전 ──────────────────────────────
   {
-    id: 'a_missiles', name: '비전 화살비', type: 'spell', cost: 5, rarity: 'common', hero: 'arcanist', target: 'none', icon: 'bolt', ai: { kind: 'aoe' },
+    id: 'a_missiles', name: '비전 화살비', type: 'spell', cost: 6, rarity: 'common', hero: 'arcanist', target: 'none', icon: 'bolt', ai: { kind: 'aoe' },
     text: '무작위 적에게 피해 1을 4번 나누어 줍니다(적 하수인이 없으면 적 영웅).',
     cast: (api) => { for (let i = 0; i < 4; i++) randomFoeOrHero(api, 1); },
   },
@@ -530,7 +530,7 @@ const CARD_LIST: CardDef[] = [
     cast: (api) => { api.draw(2); api.modifyHandCosts(-1); },
   },
   {
-    id: 'a_storm', name: '비전 폭풍', type: 'spell', cost: 12, rarity: 'epic', hero: 'arcanist', target: 'none', icon: 'storm', ai: { kind: 'aoe' },
+    id: 'a_storm', name: '비전 폭풍', type: 'spell', cost: 13, rarity: 'epic', hero: 'arcanist', target: 'none', icon: 'storm', ai: { kind: 'aoe' },
     text: '모든 적 하수인과 적 영웅에게 피해를 3 줍니다.',
     cast: (api) => { for (const u of api.foes()) api.damage({ kind: 'unit', uid: u.uid }, 3); api.damageFoeHero(3); },
   },
@@ -575,7 +575,7 @@ const CARD_LIST: CardDef[] = [
     onSummon: (api) => randomFoeOrHero(api, 3),
   },
   {
-    id: 'h_rain', name: '화살비', type: 'spell', cost: 10, rarity: 'epic', hero: 'hunter', target: 'none', icon: 'arrows', ai: { kind: 'aoe' },
+    id: 'h_rain', name: '화살비', type: 'spell', cost: 11, rarity: 'epic', hero: 'hunter', target: 'none', icon: 'arrows', ai: { kind: 'aoe' },
     text: '모든 줄의 맨 앞 적에게 피해를 3 줍니다. 비어 있는 줄마다 적 영웅에게 피해 1.',
     cast: (api) => {
       for (let lane = 0; lane < 5; lane++) {
@@ -710,7 +710,7 @@ const CARD_LIST: CardDef[] = [
     },
   },
   {
-    id: 'blizzard', name: '눈보라', type: 'spell', cost: 5, rarity: 'rare', target: 'none', icon: 'frost', ai: { kind: 'blizzard' },
+    id: 'blizzard', name: '눈보라', type: 'spell', cost: 6, rarity: 'rare', target: 'none', icon: 'frost', ai: { kind: 'blizzard' },
     text: '<b>모든</b> 하수인과 양쪽 영웅에게 피해를 2 줍니다(아군 포함).',
     cast: (api) => api.damageEverything(2),
   },
@@ -731,7 +731,7 @@ const CARD_LIST: CardDef[] = [
     cast: (api) => api.empower(2),
   },
   {
-    id: 'a_energy', name: '에너지 미사일', type: 'spell', cost: 6, rarity: 'common', hero: 'arcanist', target: 'none', icon: 'bolt', ai: { kind: 'aoe' },
+    id: 'a_energy', name: '에너지 미사일', type: 'spell', cost: 7, rarity: 'common', hero: 'arcanist', target: 'none', icon: 'bolt', ai: { kind: 'aoe' },
     text: '무작위 적(영웅 포함)에게 피해 2를 3번 줍니다.',
     cast: (api) => {
       for (let i = 0; i < 3; i++) {
