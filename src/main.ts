@@ -1692,23 +1692,32 @@ class App {
         <div class="bundle" id="camp-trim"><h3>정비</h3><div class="theme">덱에서 카드 1장 제거</div></div>
       </div>
       ${s.shop
-        ? '<button class="btn secondary" id="camp-shop">왕국 보급관 찾아가기 (선택과 별개)</button>'
+        ? '<p>고르고 나면 <b>왕국 보급관</b>이 찾아옵니다.</p>'
         : '<p class="dim">왕국 보급관은 챕터를 마칠 때마다(그리고 최종 결전 직전에) 찾아옵니다.</p>'}`);
-    m.querySelector('#camp-shop')?.addEventListener('click', () => this.showShop());
     m.querySelector('#camp-rest')!.addEventListener('click', () => {
-      this.closeModal();
-      void this.play(this.game.campRest());
+      sound.play('heal');
+      this.afterCamp(this.game.campRest());
     });
     const trim = m.querySelector<HTMLElement>('#camp-trim')!;
     if (s.deckList.length <= 5) trim.classList.add('disabled');
     else trim.addEventListener('click', () => this.showTrim());
   }
 
-  /** The merchant: spend gold on cards, a card removal or a healing draught, then return to the camp. */
+  /** After the camp choice: the merchant if one came this chapter, else straight on to the next stage. */
+  private afterCamp(events: GameEvent[]) {
+    this.writeSave();
+    this.heroHp.player = this.game.state.sides.player.hero.health;
+    this.renderHeroHp();
+    if (this.game.state.campChosen) return this.showShop();
+    this.closeModal();
+    void this.play(events);
+  }
+
+  /** The merchant (after the camp choice): spend gold on cards, a card removal or a healing draught, then set out. */
   private showShop() {
     const s = this.game.state;
     const shop = s.shop;
-    if (!shop) return this.showCamp();
+    if (!shop || !s.campChosen) return this.showCamp();
     const hero = s.sides.player.hero;
     const deckFull = s.deckList.length <= 5;
     const m = this.openModal(`
@@ -1721,7 +1730,7 @@ class App {
         <div class="bundle ${shop.healed || hero.health >= hero.maxHealth || s.gold < HEAL_PRICE ? 'disabled' : ''}" id="shop-heal">
           <h3>회복 물약</h3><div class="theme">${shop.healed ? '이번 방문에 이미 사용' : `생명력 ${HEAL_AMOUNT} 회복`} · <span class="gold">${HEAL_PRICE}</span></div></div>
       </div>
-      <button class="btn secondary" id="shop-back">야영지로 돌아가기</button>`);
+      <button class="btn" id="shop-back">다음 전투로 출발</button>`);
     const row = m.querySelector('.shop-row')!;
     shop.offers.forEach((o, i) => {
       const item = document.createElement('div');
@@ -1745,7 +1754,10 @@ class App {
       this.showShop();
     });
     m.querySelector('#shop-remove')!.addEventListener('click', () => this.showTrim(true));
-    m.querySelector('#shop-back')!.addEventListener('click', () => this.showCamp());
+    m.querySelector('#shop-back')!.addEventListener('click', () => {
+      this.closeModal();
+      void this.play(this.game.departCamp());
+    });
   }
 
   /** Pick a card to remove: free at the camp (ends the camp), or bought from the merchant. */
@@ -1765,8 +1777,7 @@ class App {
           this.showShop();
           return;
         }
-        this.closeModal();
-        void this.play(this.game.campRemove(i));
+        this.afterCamp(this.game.campRemove(i));
       });
       grid.appendChild(el);
     }

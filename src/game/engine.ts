@@ -64,6 +64,8 @@ export interface GameState {
   gold: number;
   /** The merchant's stock while at the camp. */
   shop: ShopState | null;
+  /** The camp's rest / trim is taken and the merchant is open; `departCamp` moves on. */
+  campChosen?: boolean;
   /** 젖은 칸: left by a broken or melted 빙벽; units there take +1 from every hit. */
   wet: { lane: number; row: number; turns: number }[];
   /** 덫: set by `side`; the first foe to step in takes damage and is rooted. */
@@ -170,25 +172,39 @@ export class Game {
     return true;
   }
 
-  /** Camp option: rest and recover health, then move on. */
+  /** Camp option: rest and recover health, then the merchant (if one came) or the next stage. */
   campRest(): GameEvent[] {
     const s = this.state;
-    if (s.phase !== 'camp') return [];
+    if (s.phase !== 'camp' || s.campChosen) return [];
     const hero = s.sides.player.hero;
     hero.health = Math.min(hero.maxHealth, hero.health + CAMP_HEAL);
+    return this.afterCampChoice();
+  }
+
+  /** Camp option: remove one card from the deck, then the merchant (if one came) or the next stage. */
+  campRemove(deckIndex: number): GameEvent[] {
+    const s = this.state;
+    if (s.phase !== 'camp' || s.campChosen || !s.deckList[deckIndex] || s.deckList.length <= 5) return [];
+    s.deckList.splice(deckIndex, 1);
+    return this.afterCampChoice();
+  }
+
+  /** Leaves the merchant for the next stage (after the camp choice). */
+  departCamp(): GameEvent[] {
+    if (this.state.phase !== 'camp' || !this.state.campChosen) return [];
     return this.leaveCamp();
   }
 
-  /** Camp option: remove one card from the deck, then move on. */
-  campRemove(deckIndex: number): GameEvent[] {
-    const s = this.state;
-    if (s.phase !== 'camp' || !s.deckList[deckIndex] || s.deckList.length <= 5) return [];
-    s.deckList.splice(deckIndex, 1);
-    return this.leaveCamp();
+  /** With a merchant in camp the shop opens straight after the choice; otherwise move on. */
+  private afterCampChoice(): GameEvent[] {
+    if (!this.state.shop) return this.leaveCamp();
+    this.state.campChosen = true;
+    return [];
   }
 
   private leaveCamp(): GameEvent[] {
     this.state.shop = null;
+    this.state.campChosen = false;
     this.state.stage++;
     return this.collect(() => this.beginStage());
   }

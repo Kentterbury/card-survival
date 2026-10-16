@@ -799,9 +799,15 @@ describe('gold and the merchant', () => {
     expect(g.state.deckList).toHaveLength(size - 1);
     expect(g.shopRemove(0)).toBe(false);
     expect(g.state.gold).toBe(200 - HEAL_PRICE - REMOVE_PRICE);
-    // Leaving the camp closes the shop; the next camp restocks it.
+    // Resting opens the shop straight away; departing closes it and the next camp restocks it.
     g.campRest();
+    expect(g.state.phase).toBe('camp');
+    expect(g.state.campChosen).toBe(true);
+    expect(g.campRest()).toEqual([]);
+    expect(g.shopBuy(1)).toBe(g.state.gold >= g.state.shop!.offers[1].price);
+    g.departCamp();
     expect(g.state.shop).toBeNull();
+    expect(g.state.campChosen).toBe(false);
     expect(g.shopBuy(0)).toBe(false);
   });
 });

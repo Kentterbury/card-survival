@@ -18,11 +18,12 @@ export function playRun(game: Game, maxTurns = 600, hero = 'captain'): { stagesC
       continue;
     }
     if (s.phase === 'camp') {
-      // Buy the priciest card we can afford, then rest.
+      // Rest, then buy the priciest card we can afford and set out.
+      game.campRest();
       const offers = s.shop?.offers.map((o, i) => ({ ...o, i })).filter((o) => !o.sold && o.price <= s.gold) ?? [];
       offers.sort((a, b) => b.price - a.price);
       if (offers[0]) game.shopBuy(offers[0].i);
-      game.campRest();
+      game.departCamp();
       continue;
     }
     playTurn(game);
