@@ -19,7 +19,7 @@ export const EFFECT_POINTS: Record<string, number> = {
   sk_drummer: 2, sk_trapper: 1.5, medic: 2, apprentice: 2, a_scholar: 2, bomber: 2, c_standard: 3, h_trapper: 2,
   sk_plague: 1.5, sk_beastmaster: 4, warden: 4, priest: 4, veteran: 2, stormcaller: 4, c_commander: 3, h_sniper: 3,
   siege_mage: 4, sk_rotwood: 2, w_axelord: 1, warlord: 3, archmage: 5,
-  c_siege: 11, w_drummer: 2, h_snarer: 1.5, h_falconer: 4,
+  c_siege: 11, w_drummer: 2, h_snarer: 1.5, h_falconer: 4, sk_archlich: 4,
 };
 
 /** How far above the curve a card may sit. */

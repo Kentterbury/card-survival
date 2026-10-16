@@ -68,6 +68,8 @@ class App {
   views = new Map<number, UnitView>();
   enemyHero: UnitView | null = null;
   busy = false;
+  /** Death animations still running in the background during playback. */
+  private dying: Promise<void>[] = [];
   aim: Aim | null = null;
   pointer = { x: 0, y: 0 };
   lastPointerType = 'mouse';
@@ -199,12 +201,20 @@ class App {
           while (j < events.length && events[j].type === 'move') j++;
           await Promise.all(events.slice(i, j).map((ev) => this.playEvent(ev)));
           i = j;
+        } else if (e.type === 'death') {
+          // Deaths play in the background, so everything that falls in one turn goes down together
+          // instead of one after another.
+          this.dying.push(this.playEvent(e));
+          i++;
         } else {
           await this.playEvent(e);
           i++;
         }
       }
+      // Let the last of the fallen finish before the board settles (and any end screen opens).
+      await Promise.all(this.dying);
     } finally {
+      this.dying = [];
       this.busy = false;
     }
     await this.sync();

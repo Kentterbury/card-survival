@@ -78,42 +78,41 @@ export const STAGES: StageDef[] = [
     ],
   },
   {
-    chapter: 1, name: '횃불의 회랑', subtitle: '해골 대장의 기습대', concept: '졸개 물량과 빠른 기습, 매복과 독',
-    hero: { name: '해골 대장', model: 'Skeleton_Rogue', scale: 1.55, health: 22 },
+    chapter: 1, name: '횃불의 회랑', subtitle: '해골 대장의 정예 부대', concept: '강력한 하수인: 앞에서 버티는 전사들과 뒤에서 쏘는 석궁수',
+    hero: { name: '해골 대장', model: 'Skeleton_Rogue', scale: 1.55, health: 28 },
     power: 'rush', startMana: 3,
     deck: [
-      ...x('sk_minion', 2), 'sk_drummer', 'e_march', 'e_curse', ...x('e_poison_arrow', 2), 'e_soul_mirror',
-      ...x('sk_rogue', 3), ...x('sk_undying', 2), 'e_ambush', 'sk_captain',
-      'sk_wraith', ...x('sk_assassin', 2), 'sk_berserker',
+      ...x('sk_minion', 2), ...x('sk_rogue', 2), ...x('sk_hunter', 2), 'e_bonearmor', 'e_march', 'e_poison_arrow',
+      ...x('sk_warrior', 2), 'sk_captain', 'sk_berserker', ...x('sk_crossbow', 2), 'sk_gladiator',
     ],
   },
   {
-    chapter: 1, name: '주술사의 서고', subtitle: '멀리서 날아오는 저주', concept: '원거리 저주, 빙결과 금지된 주문',
+    chapter: 1, name: '주술사의 서고', subtitle: '멀리서 날아오는 저주', concept: '주문과 원거리: 값싼 주술사 떼가 뒤에서 쏘고 저주와 빙결을 퍼붓는다',
     hero: { name: '서고의 주술사', model: 'Skeleton_Mage', scale: 1.5, health: 24 },
     power: 'curse', startMana: 4,
     deck: [
-      ...x('sk_acolyte', 2), ...x('e_frostbolt', 2), ...x('e_chill', 2), 'e_hex', 'e_insight', 'e_dark_power',
-      ...x('sk_mage', 3), ...x('e_darkwave', 2), 'e_drain', 'sk_shieldwall', 'sk_leech',
+      ...x('sk_hexling', 3), ...x('sk_acolyte', 2), 'e_coven', ...x('e_frostbolt', 2), 'e_chill', 'e_hex', 'e_insight', 'e_dark_power',
+      ...x('sk_mage', 2), ...x('e_darkwave', 2), 'e_drain', 'sk_shieldwall', 'sk_leech',
     ],
   },
   // ── 3장 동굴
   {
-    chapter: 2, name: '뼈의 납골당', subtitle: '거대한 것이 깨어난다', concept: '뼈 장벽, 뼈 방패와 거인',
-    hero: { name: '납골당 수호자', model: 'Skeleton_Warrior', scale: 1.7, health: 22 },
+    chapter: 2, name: '뼈의 납골당', subtitle: '거대한 것이 깨어난다', concept: '명치가 단단하다: 두꺼운 뼈 장벽과 가호로 지휘관을 감싼다',
+    hero: { name: '납골당 수호자', model: 'Skeleton_Warrior', scale: 1.7, health: 32 },
     power: 'bonewall', startMana: 3,
     deck: [
-      'e_bonearmor', 'e_bone_shield', ...x('sk_phalanx', 3), 'e_bonewall', 'sk_thorn', 'sk_regen', 'sk_pikeman', 'sk_warrior',
-      'e_warcry', 'sk_guard', 'sk_brute',
+      'e_bonearmor', ...x('e_bone_shield', 2), ...x('sk_phalanx', 3), 'e_bonewall', 'sk_thorn', 'sk_regen', 'sk_pikeman', 'sk_warrior',
+      'sk_shieldwall', 'e_warcry', 'sk_guard', 'sk_gatekeeper', 'sk_brute',
     ],
   },
   {
-    chapter: 2, name: '군주의 왕좌', subtitle: '최종 결전', concept: '사령술, 역병, 얼음벽과 불사의 군단',
-    hero: { name: '해골 군주', model: 'Skeleton_Mage', scale: 1.9, health: 28 },
+    chapter: 2, name: '군주의 왕좌', subtitle: '최종 결전', concept: '강력한 주문과 하수인: 죽음의 폭풍, 대마도사와 죽음의 기사',
+    hero: { name: '해골 군주', model: 'Skeleton_Mage', scale: 1.9, health: 40 },
     power: 'legion', startMana: 4,
     deck: [
-      ...x('sk_undying', 2), 'e_grave_frost', 'sk_wraith', ...x('sk_mage', 2), ...x('sk_plague', 2), 'e_corpse_blast',
+      'sk_undying', 'e_grave_frost', ...x('sk_mage', 2), 'sk_plague', 'e_corpse_blast',
       'e_darkwave', 'e_drain', 'e_warcry', 'sk_shieldwall', 'sk_leech',
-      'e_mass_raise', 'sk_reaper', 'e_soulfire', 'sk_deathknight',
+      'e_soul_mirror', 'e_mass_raise', 'e_death_storm', 'sk_reaper', 'e_soulfire', 'sk_deathknight', 'sk_archlich',
     ],
   },
 ];

@@ -1076,6 +1076,39 @@ const CARD_LIST: CardDef[] = [
     text: '가장 앞선 적 셋이 밟을 칸에 <b>덫</b>을 하나씩 놓습니다.',
     cast: (api) => { for (let i = 0; i < 3; i++) trapAhead(api); },
   },
+  // ══ 던전·동굴 지휘관 보강 ═══════════════════════════════════
+  // 해골 대장: 강한 근접·원거리 하수인
+  {
+    id: 'sk_crossbow', name: '해골 석궁수', type: 'minion', cost: 6, rarity: 'common', enemy: true, attack: 3, health: 4, model: 'Skeleton_Rogue', keywords: ['ranged'], missile: 'arrow',
+    text: '<b>사격</b>',
+  },
+  {
+    id: 'sk_gladiator', name: '해골 검투사', type: 'minion', cost: 8, rarity: 'rare', enemy: true, attack: 4, health: 5, model: 'Skeleton_Warrior', keywords: ['vanguard', 'enrage'], scale: 1.15,
+    text: '<b>선봉</b>. <b>분노</b>',
+  },
+  // 서고의 주술사: 주문과 원거리 짤짤이
+  { id: 'sk_hexling', name: '해골 잡역 주술사', type: 'minion', cost: 2, rarity: 'basic', enemy: true, attack: 1, health: 1, model: 'Skeleton_Mage', keywords: ['ranged'], scale: 0.75, text: '<b>사격</b>' },
+  {
+    id: 'e_coven', name: '주술사 소환진', type: 'spell', cost: 4, rarity: 'common', enemy: true, target: 'none', icon: 'skull', ai: { kind: 'summon' },
+    text: '빈 칸 두 곳에 해골 잡역 주술사(1/1 <b>사격</b>)를 소환합니다.',
+    cast: (api) => { for (const lane of api.rng.shuffle(api.freeHomeLanes()).slice(0, 2)) api.summon('sk_hexling', lane); },
+  },
+  // 납골당 수호자: 명치가 단단하다
+  {
+    id: 'sk_gatekeeper', name: '납골당 문지기', type: 'minion', cost: 9, rarity: 'rare', enemy: true, attack: 2, health: 9, model: 'Skeleton_Warrior', keywords: ['cover', 'thorns'], scale: 1.3,
+    text: '<b>엄호</b>. <b>가시</b>',
+  },
+  // 해골 군주: 주문과 강력한 하수인
+  {
+    id: 'e_death_storm', name: '죽음의 폭풍', type: 'spell', cost: 8, rarity: 'rare', enemy: true, target: 'none', icon: 'skull', ai: { kind: 'aoe' },
+    text: '모든 적 하수인에게 피해를 2 줍니다.',
+    cast: (api) => { for (const m of api.foes()) api.damage({ kind: 'unit', uid: m.uid }, 2); },
+  },
+  {
+    id: 'sk_archlich', name: '해골 대마도사', type: 'minion', cost: 12, rarity: 'epic', enemy: true, attack: 4, health: 7, model: 'Skeleton_Mage', keywords: ['ranged'], scale: 1.3, elite: true,
+    text: '<b>사격</b>. 내 턴이 끝날 때 무작위 적(영웅 포함)에게 피해를 2 줍니다.',
+    onEndTurn: (api) => randomFoeOrHero(api, 2),
+  },
 ];
 
 export const CARDS: Record<string, CardDef> = Object.fromEntries(CARD_LIST.map((c) => [c.id, c]));

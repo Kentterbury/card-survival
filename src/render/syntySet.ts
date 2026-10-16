@@ -113,6 +113,12 @@ export const LOOKS: Record<string, Look> = {
   sk_acolyte: DG('Ghost_02', 1, 'SM_Wep_Staff_03'),
   sk_deathknight: DG('Skeleton_Knight', 1, 'SM_Wep_Greatsword_Straight_01'),
   sk_plague: DG('Goblin_Shaman', 1, 'SM_Wep_Bone_01'),
+  // ── Dungeon and cave reinforcements
+  sk_crossbow: DG('Skeleton_Soldier_01', 2, 'SM_Prop_Crossbow_01'),
+  sk_gladiator: DG('Skeleton_Knight', 4, 'SM_Wep_Axe_06', 'SM_Wep_Shield_Spike_01'),
+  sk_hexling: DG('Ghost_02', 2, 'SM_Wep_Staff_03'),
+  sk_gatekeeper: DG('Skeleton_Knight', 2, 'SM_Wep_Hammer_Large_Metal_01', 'SM_Wep_Shield_Gravestone_01'),
+  sk_archlich: DG('Tormented_Soul', 3, 'SM_Wep_Staff_Gem_01'),
   // ── 1장 숲: the forest dead, moss on old bones
   sk_hunter: FD('Skeleton_Soldier_02', 2, undefined, 'SM_Prop_Bow_01'),
   sk_moss: FD('Skeleton_Slave_01', 3, 'SM_Wep_Bone_01'),
@@ -284,16 +290,16 @@ const DEATHS: Record<string, string[]> = {
   Death_Shield: ['hero:captain', 'shieldbearer', 'fortress', 'warden', 'thornguard', 'cover_knight', 'phalanx', 'vanguard_captain',
     'sk_guard', 'sk_shieldwall', 'sk_phalanx', 'sk_thorn', 'boss:해골 하사', 'boss:납골당 수호자'],
   // "Two Handed Sword Death": heavy two-handers.
-  Death_Heavy: ['hero:warchief', 'greatsword', 'warlord', 'w_axelord', 'c_commander', 'stalwart', 'sk_brute', 'sk_deathknight', 'sk_reaper',
+  Death_Heavy: ['sk_gladiator', 'sk_gatekeeper', 'hero:warchief', 'greatsword', 'warlord', 'w_axelord', 'c_commander', 'stalwart', 'sk_brute', 'sk_deathknight', 'sk_reaper',
     'sk_barrow_knight', 'sk_rotwood'],
   // "Falling Forward Death": fast skirmishers pitch forward.
   Death_Forward: ['shadowblade', 'w_rider', 'glider', 'berserker', 'sk_rogue', 'sk_assassin', 'sk_berserker', 'boss:해골 대장', 'sk_trapper'],
   // "Death From Front Headshot": archers snap back.
-  Death_Shot: ['hero:hunter', 'crossbowman', 'longbow', 'h_trapper', 'h_sniper', 'sk_hunter', 'boss:해골 사냥꾼장'],
+  Death_Shot: ['sk_crossbow', 'hero:hunter', 'crossbowman', 'longbow', 'h_trapper', 'h_sniper', 'sk_hunter', 'boss:해골 사냥꾼장'],
   // "Dying": casters and priests sink to their knees.
   Death_Kneel: ['hero:arcanist', 'apprentice', 'medic', 'stormcaller', 'priest', 'monk', 'a_scholar', 'bomber'],
   // "Dying Backwards": dark casters stagger back.
-  Death_Caster: ['archmage', 'siege_mage', 'sk_mage', 'sk_leech', 'sk_acolyte', 'boss:서고의 주술사', 'boss:해골 군주'],
+  Death_Caster: ['sk_hexling', 'sk_archlich', 'archmage', 'siege_mage', 'sk_mage', 'sk_leech', 'sk_acolyte', 'boss:서고의 주술사', 'boss:해골 군주'],
   // "Zombie Dying": the rank-and-file dead collapse.
   Death_Undead: ['sk_minion', 'sk_undying', 'sk_regen', 'sk_drummer', 'sk_wraith', 'sk_warrior', 'sk_captain', 'sk_pikeman',
     'sk_moss', 'sk_beastmaster'],

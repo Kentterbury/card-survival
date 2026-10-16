@@ -25,6 +25,7 @@ export function sourcesOf(def: CardDef): string[] {
     wolf_pup: ['상대 지휘술 「무리 부르기」', '포위 사냥', '해골 조련사'],
     slime_small_token: ['초록 슬라임의 분열', '점액 융합의 분열'],
     slime_mid_token: ['거대 슬라임의 분열'],
+    sk_hexling: ['주술사 소환진'],
   };
   for (const s of summonedBy[def.id] ?? []) out.push(s.startsWith('상대') ? `${s}으로 소환` : `「${s}」로 소환`);
   if (def.id === 'barricade_token') out.push('바리케이드 설치 · 방벽 수호자가 소환하는 토큰');
