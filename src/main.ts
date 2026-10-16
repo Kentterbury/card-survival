@@ -52,6 +52,7 @@ const SPELL_SOUND: Record<SpellIcon, SfxName> = {
 
 /** Pick-proxy uid of the enemy hero's 3D model. */
 const ENEMY_HERO_UID = -2;
+const PLAYER_HERO_UID = -3;
 
 type Aim =
   /** `first`: the unit already picked by a two-step card (환영, 염력). */
@@ -67,6 +68,8 @@ class App {
   fx = new Fx(this.board.scene, this.board.camera, $('float-layer'));
   views = new Map<number, UnitView>();
   enemyHero: UnitView | null = null;
+  /** The player's own hero, standing behind the home row. */
+  playerHero: UnitView | null = null;
   busy = false;
   /** Death animations still running in the background during playback. */
   private dying: Promise<void>[] = [];
@@ -130,6 +133,7 @@ class App {
     this.board.update(dt, this.elapsed);
     for (const v of this.views.values()) v.update(dt);
     this.enemyHero?.update(dt);
+    this.playerHero?.update(dt);
     this.fx.update(dt);
     this.placeBadges();
     this.board.render();
@@ -261,7 +265,18 @@ class App {
     v.group.position.copy(ENEMY_HERO_POS);
     this.board.scene.add(v.group);
     this.enemyHero = v;
+    await this.setupPlayerHero();
     $('enemy-portrait').style.backgroundImage = `url(${portrait(h.model, `boss:${h.name}`)})`;
+  }
+
+  private async setupPlayerHero() {
+    const hero = heroDef(this.game.state.heroId);
+    this.playerHero?.dispose();
+    const v = new UnitView(PLAYER_HERO_UID, 'hero', hero.model, 1.35, $('badges'), `hero:${hero.id}`);
+    await v.load('enemy');
+    v.group.position.copy(HERO_POS);
+    this.board.scene.add(v.group);
+    this.playerHero = v;
   }
 
   private heroFrameHit(side: Side) {
@@ -394,7 +409,7 @@ class App {
           this.heroFrameHit(side);
           sound.play('heroHit');
           this.board.addShake(side === 'player' ? 0.5 : 0.3);
-          if (side === 'enemy') this.enemyHero?.hitAnim();
+          (side === 'enemy' ? this.enemyHero : this.playerHero)?.hitAnim();
           const at = side === 'player' ? HERO_POS.clone().setY(2.6) : ENEMY_HERO_POS.clone().setY(4);
           this.fx.floatText(at, `-${e.amount}`, 'dmg');
           await wait(0.15);
@@ -685,6 +700,8 @@ class App {
         if (e.side === 'enemy') {
           await this.castingGlow();
           void this.enemyHero?.playOnce('Spellcast_Raise', 1);
+        } else {
+          void this.playerHero?.playOnce('Spellcast_Raise', 1);
         }
         sound.play(e.side === 'player' ? 'magic' : 'curse');
         if (e.target.kind === 'hero' || (e.target.kind === 'unit' && this.game.powerOf(e.side).target !== 'ally')) {
@@ -711,12 +728,14 @@ class App {
       case 'stageClear':
         sound.play('stageClear');
         for (const v of this.views.values()) if (v.side === 'player') void v.playOnce('Cheer', 1);
+        void this.playerHero?.playOnce('Cheer', 1);
         if (this.enemyHero) await this.enemyHero.die();
         await this.banner('승리!', `${stageLabel(e.stage)} ${STAGES[e.stage].hero.name} 처치 · 보수 금화 +${e.gold}`, 1.8);
         return;
       case 'defeat':
         sound.play('defeat');
         void this.enemyHero?.playOnce('Cheer', 1);
+        if (this.playerHero) await this.playerHero.die();
         await this.banner('패배', '', 1.2, 'enemy');
         return;
       case 'victory':
@@ -752,6 +771,8 @@ class App {
     if (side === 'enemy') {
       this.renderEnemyInfo();
       void this.enemyHero?.playOnce('Spellcast_Raise', 1);
+    } else {
+      void this.playerHero?.playOnce('Spellcast_Raise', 1);
     }
     await wait(legend ? 1.8 : side === 'enemy' ? 0.9 : 0.55);
     holder.remove();

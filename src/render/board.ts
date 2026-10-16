@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { LANES, LAST_ROW, ROWS, type ZoneKind } from '../game/types';
 import { instantiateStatic } from './assets';
+import { decorPiece, type DecorKind } from './decor';
 import { groundTexture, naturePiece, type NatureKind } from './forest';
 
 export type EnvName = 'forest' | 'dungeon';
@@ -26,8 +27,8 @@ const MOOD: Record<EnvName, { bg: number; fogNear: number; fogFar: number; sky: 
 
 export const LANE_W = 2.6;
 export const ROW_D = 2.35;
-/** Where the player's spells and hero power are cast from (the hero itself is the HUD portrait). */
-export const HERO_POS = new THREE.Vector3(-5.2, 0, 3.4);
+/** The player's hero stands behind the home row, mid-board; spells and the hero power start here. */
+export const HERO_POS = new THREE.Vector3(0, 0, 3.5);
 /** The enemy hero stands in front of the gate, past the last row. */
 export const ENEMY_HERO_POS = new THREE.Vector3(0, 0, -(ROWS + 0.35) * ROW_D);
 
@@ -195,7 +196,7 @@ export class Board {
       this.building = group;
       await (env === 'forest' ? this.buildForest() : this.buildDungeon());
       this.building = this.scene;
-      this.nearSide.set(env, group.children.filter((o) => o.position.x > NEAR_SIDE_X && o.position.z > -16.5 && !(o as THREE.Light).isLight));
+      this.nearSide.set(env, group.children.filter((o) => o.position.x > NEAR_SIDE_X && o.position.z > -16.5 && !(o as THREE.Light).isLight && !o.userData.keep));
     }
     for (const [name, g] of this.envs) g.visible = name === env;
     this.env = env;
@@ -232,7 +233,8 @@ export class Board {
       for (let z = 6; z >= -22; z -= 4) {
         const variant = (x * 7 + z * 13) & 7;
         const tile = z < -15 ? 'floor_dirt_large' : variant === 0 ? 'floor_tile_large_rocks' : variant === 3 && z < -4 ? 'floor_tile_big_grate' : 'floor_tile_large';
-        jobs.push(add(tile, x, z));
+        // The floor never hides, even on the camera side.
+        jobs.push(add(tile, x, z).then((o) => { o.userData.keep = true; }));
       }
     }
     // Side walls with pillars and torches.
@@ -270,6 +272,7 @@ export class Board {
     jobs.push(add('crates_stacked', 7.4, 4.8, 0.4));
     jobs.push(add('chest_gold', -5.8, 5.2, 0.5));
     jobs.push(add('sword_shield', -8.9, -2, Math.PI / 2, 2.2));
+    this.dungeonDecor(jobs);
     await Promise.all(jobs);
   }
 
@@ -347,7 +350,105 @@ export class Board {
     for (const [x, z] of [[-8.1, -3.2], [8.0, -7.4], [-8.2, -11.5], [7.9, 0.4], [-7.9, 1.3]] as const) put('mushrooms', 0.55, x, z, rnd() * 6);
     for (const [x, z] of [[-8.3, -6.8], [8.4, -12.6], [8.2, -3.5], [-8.6, -14.2]] as const) put('rock', 0.7 + rnd() * 0.4, x, z, rnd() * 6, Math.floor(rnd() * 2));
     put('stump', 0.7, -8.4, -9.4, 2);
+    this.forestDecor(jobs);
     await Promise.all(jobs);
+  }
+
+  /**
+   * Puts a decoration on the board being built. `keep`: low pieces on the camera side that stay
+   * visible in the side / iso views. `flame`: a glow sprite this high above the piece (braziers).
+   */
+  private decor(jobs: Promise<unknown>[], kind: DecorKind, size: number, x: number, z: number,
+    o: { rotY?: number; fit?: 'height' | 'width'; y?: number; keep?: boolean; flame?: number } = {}) {
+    const g = this.building;
+    jobs.push(decorPiece(kind, size, o.fit).then((p) => {
+      if (!p) return;
+      p.position.set(x, o.y ?? 0, z);
+      p.rotation.y = o.rotY ?? 0;
+      p.userData.keep = !!o.keep;
+      g.add(p);
+      if (o.flame !== undefined) {
+        const prev = this.building;
+        this.building = g;
+        this.addFlame(new THREE.Vector3(x, (o.y ?? 0) + o.flame, z), 1.1);
+        this.building = prev;
+      }
+    }));
+  }
+
+  /** Dungeon dressing: bones, candles and a statue along the far wall, a camp, a crypt at the gate. */
+  private dungeonDecor(jobs: Promise<unknown>[]) {
+    const E = Math.PI / 2; // facing +x, away from the far wall
+    // Far wall.
+    this.decor(jobs, 'wallBanner', 3.2, -9.3, 1.0, { rotY: E, y: 0.6 });
+    this.decor(jobs, 'candleStand', 1.6, -8.2, -0.2, { rotY: E });
+    this.decor(jobs, 'bonePile', 1.0, -8.0, -4.2, { rotY: 0.4, fit: 'width' });
+    this.decor(jobs, 'beastSkull', 1.1, -7.7, -7.4, { rotY: E + 0.3 });
+    this.decor(jobs, 'skeletonSitting', 1.3, -8.9, -8.6, { rotY: E });
+    this.decor(jobs, 'candles', 0.5, -7.6, -9.4);
+    this.decor(jobs, 'barrelBroken', 0.9, -7.4, -11.0, { rotY: 1.1 });
+    this.decor(jobs, 'statue', 3.6, -8.5, -12.0, { rotY: E });
+    this.decor(jobs, 'bonesSmall', 1.4, -7.3, -13.6, { fit: 'width', rotY: 2.2 });
+    this.decor(jobs, 'vases', 1.2, -8.3, -15.2, { rotY: E });
+    this.decor(jobs, 'chain', 1.6, -9.3, -4.0, { rotY: E, y: 1.6 });
+    // The defenders' camp.
+    this.decor(jobs, 'brazier', 1.0, -7.2, 2.9, { flame: 1.15 });
+    this.decor(jobs, 'weaponRack', 1.5, -3.4, 5.6);
+    this.decor(jobs, 'table', 2.6, 2.4, 5.8, { fit: 'width' });
+    this.decor(jobs, 'stool', 0.6, 1.2, 4.9, { rotY: 0.5 });
+    this.decor(jobs, 'crate', 1.1, 4.6, 5.6, { rotY: 0.3 });
+    this.decor(jobs, 'barrel', 1.1, 5.6, 4.9);
+    this.decor(jobs, 'rug', 5.0, 0, 3.6, { fit: 'width', rotY: E });
+    // The crypt in front of the gate.
+    this.decor(jobs, 'brazier', 1.0, -2.9, -15.7, { flame: 1.15 });
+    this.decor(jobs, 'brazier', 1.0, 2.9, -15.7, { flame: 1.15 });
+    this.decor(jobs, 'cage', 2.4, -6.0, -15.4, { rotY: 0.5 });
+    this.decor(jobs, 'ribs', 2.6, 5.6, -16.2, { fit: 'width', rotY: -0.4 });
+    this.decor(jobs, 'pillarStump', 1.2, -4.4, -14.6, { rotY: 0.7 });
+    // Low pieces on the camera side, seen past the board in the side / iso views.
+    this.decor(jobs, 'brickRubble', 1.0, 7.8, 3.6, { fit: 'width', keep: true });
+    this.decor(jobs, 'skeletonLying', 2.0, 8.2, -0.2, { fit: 'width', rotY: 0.3, keep: true });
+    this.decor(jobs, 'bonesSmall2', 1.3, 7.7, -4.0, { fit: 'width', keep: true });
+    this.decor(jobs, 'candles', 0.45, 8.6, -6.0, { keep: true });
+    this.decor(jobs, 'vaseBroken', 0.5, 7.6, -8.2, { keep: true });
+    this.decor(jobs, 'pillarRubble', 1.4, 8.3, -11.0, { fit: 'width', rotY: 1.2, keep: true });
+    this.decor(jobs, 'coffin', 2.2, 8.0, -14.4, { fit: 'width', rotY: 0.1, keep: true });
+  }
+
+  /** Forest dressing: ferns, flowers and the forest dead along the edges of the clearing. */
+  private forestDecor(jobs: Promise<unknown>[]) {
+    const E = Math.PI / 2;
+    // Far edge of the clearing.
+    this.decor(jobs, 'fern', 1.1, -8.0, -1.0, { rotY: 0.6 });
+    this.decor(jobs, 'flowers', 0.9, -7.4, 2.6);
+    this.decor(jobs, 'grassTuft', 0.7, -7.5, -3.8);
+    this.decor(jobs, 'fern', 1.0, -8.2, -5.2, { rotY: 2.0 });
+    this.decor(jobs, 'skeletonGround', 1.8, -7.5, -7.0, { fit: 'width', rotY: E + 0.4 });
+    this.decor(jobs, 'arrow', 0.9, -7.0, -6.2, { rotY: 0.3 });
+    this.decor(jobs, 'flowers', 0.9, -7.4, -9.2);
+    this.decor(jobs, 'log', 2.2, -8.0, -11.6, { fit: 'width', rotY: 0.2 });
+    this.decor(jobs, 'fern', 1.1, -7.6, -13.2, { rotY: 1.2 });
+    this.decor(jobs, 'flowers', 0.8, -7.2, -14.6);
+    this.decor(jobs, 'ruinPillar', 1.8, -8.6, -15.8, { rotY: 0.5 });
+    // The defenders' camp.
+    this.decor(jobs, 'chest', 1.0, -4.8, 6.2, { rotY: 0.3 });
+    this.decor(jobs, 'roadSign', 2.2, -6.8, 6.6, { rotY: 0.6 });
+    this.decor(jobs, 'fence', 3.0, 3.0, 6.6, { fit: 'width' });
+    this.decor(jobs, 'plant', 1.0, 4.8, 5.0);
+    // The enemy's end.
+    this.decor(jobs, 'rockPile', 2.0, -5.6, -15.4, { fit: 'width', rotY: 0.8 });
+    this.decor(jobs, 'mushroomsRed', 0.7, 2.6, -15.4);
+    this.decor(jobs, 'skeletonGround', 1.6, 5.8, -15.2, { fit: 'width', rotY: -0.6 });
+    // Low plants on the camera side.
+    this.decor(jobs, 'grass', 0.8, 7.6, 3.0, { keep: true });
+    this.decor(jobs, 'flowers', 0.8, 8.3, 0.4, { keep: true });
+    this.decor(jobs, 'rockSmall', 0.7, 7.8, -2.4, { keep: true });
+    this.decor(jobs, 'plant', 0.7, 8.6, -4.6, { keep: true });
+    this.decor(jobs, 'mushroomsRed', 0.55, 7.5, -6.6, { keep: true });
+    this.decor(jobs, 'grass', 0.7, 8.4, -8.8, { keep: true });
+    this.decor(jobs, 'grassTuft', 0.6, 7.7, -11.0, { keep: true });
+    this.decor(jobs, 'rockSmall', 0.6, 8.5, -13.2, { rotY: 1.4, keep: true });
+    this.decor(jobs, 'flowers', 0.7, 7.6, -14.8, { keep: true });
   }
 
   /** A burning flame sprite (campfires, torch poles). */
