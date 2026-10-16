@@ -87,6 +87,7 @@ rm -rf public/synty && cp -r ../cardproject/WebExport/card-survival/synty public
 - 배경 조각을 바꾸려면 `syntySet.ts`의 `SYNTY_STATICS`도 함께 고칩니다.
 - 숲 보드(1장)는 POLYGON Nature의 단색 아틀라스 조각(`forest/*.glb`, `PolygonNature_01.png`)을 씁니다. 잎 카드(알파 텍스처)를 쓰는 나무는 빼고, 목록은 `build_card_survival.sh`의 `forest()`와 `src/render/forest.ts`의 `SYNTY_NATURE`에 있습니다. 숲 조각만 다시 뽑으려면 `ONLY=forest WebExport/tools/build_card_survival.sh`(나머지 `assets-raw`는 그대로 둡니다).
 - 보드 장식(`decor/*.glb`): POLYGON Dungeon(뼈 무더기, 화로, 촛대, 관, 고문 우리, 석상, 무기 거치대, 탁자, 깔개 등)과 POLYGON Nature(고사리, 꽃, 풀, 버섯, 바위, 땅에 누운 해골, 울타리, 이정표 등). 측면·아이소메트릭 카메라에서 보이는 보드 가장자리를 채운다. 목록은 `build_card_survival.sh`의 `decor()`와 `src/render/decor.ts`, 배치는 `board.ts`의 `dungeonDecor()`/`forestDecor()`. 따로 뽑으려면 `ONLY=decor`. 꽃밭·보라꽃·덤불(`FlowerPatch`, `PurpleFlower`, `Undergrowth`)은 자체 알파 텍스처라 아틀라스로 바꾸면 깨져서 뺐다. KayKit 세트에는 장식이 없다(그냥 빠짐).
+- 용병 야영지(`decor/SM_Bld_Tent_*`, `SM_Prop_Camp_*`, `SM_Veh_Cart_01` 등): POLYGON Fantasy Kingdom 아틀라스. `decor()` 안에서 같이 뽑는다.
 - 숲의 해골은 Dungeon 해골에 `tint`(이끼색)를 곱한 생김새입니다(`syntySet.ts`의 `FD`). 늑대와 슬라임은 Synty가 아니라 공개 저장소의 Quaternius 모델(CC0, `public/assets/creatures/`)입니다.
 - 결과물(`WebExport/card-survival/synty/`)은 `cardproject`에 커밋하고 푸시합니다. 그다음 card-survival 배포를 다시 실행하면 반영됩니다.
 

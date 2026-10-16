@@ -52,6 +52,28 @@ const FILES = {
   ruinPillar: 'SM_Prop_Pillar_Broken_02',
   chest: 'SM_Prop_Chest_Wood_01',
   arrow: 'SM_Prop_Arrow_01',
+  // the mercenaries' camp (Fantasy Kingdom)
+  tentLarge: 'SM_Bld_Tent_Large_01',
+  tentRound: 'SM_Bld_Tent_Round_01',
+  tentSquare: 'SM_Bld_Tent_Square_01',
+  tentOpen: 'SM_Bld_Tent_Open_01',
+  firepit: 'SM_Prop_Camp_Firepit_01',
+  campRack: 'SM_Prop_Camp_Weapon_Rack_01',
+  battleBanner: 'SM_Prop_Battle_Banner_01',
+  hayBale: 'SM_Prop_Hay_Bale_01',
+  hayPile: 'SM_Prop_Hay_Pile_01',
+  cart: 'SM_Veh_Cart_01',
+  crateStack: 'SM_Prop_Crate_Stack_01',
+  barrelStack: 'SM_Prop_Barrel_Stack_01',
+  sacks: 'SM_Prop_Sack_Stack_01',
+  target: 'SM_Prop_Target_01',
+  dummy: 'SM_Prop_Dummy_Armour_01',
+  woodPile: 'SM_Prop_Wood_Pile_01',
+  warTable: 'SM_Prop_Table_War_01',
+  anvil: 'SM_Prop_Anvil_01',
+  arrowBarrel: 'SM_Prop_Barrel_Arrows_01',
+  bench: 'SM_Prop_Bench_Seat_01',
+  cookingRack: 'SM_Prop_Cooking_Rack_01',
 } as const;
 
 export type DecorKind = keyof typeof FILES;

@@ -230,7 +230,7 @@ export class Board {
     const jobs: Promise<unknown>[] = [];
     // Floor: 4x4 tiles covering the hall.
     for (let x = -8; x <= 8; x += 4) {
-      for (let z = 6; z >= -22; z -= 4) {
+      for (let z = 14; z >= -22; z -= 4) {
         const variant = (x * 7 + z * 13) & 7;
         const tile = z < -15 ? 'floor_dirt_large' : variant === 0 ? 'floor_tile_large_rocks' : variant === 3 && z < -4 ? 'floor_tile_big_grate' : 'floor_tile_large';
         // The floor never hides, even on the camera side.
@@ -238,12 +238,12 @@ export class Board {
       }
     }
     // Side walls with pillars and torches.
-    for (let z = 4; z >= -20; z -= 4) {
+    for (let z = 12; z >= -20; z -= 4) {
       const crack = ((z * 5) & 3) === 0;
       jobs.push(add(crack ? 'wall_cracked' : 'wall', -9.5, z, Math.PI / 2));
       jobs.push(add(crack ? 'wall' : 'wall_cracked', 9.5, z, -Math.PI / 2));
     }
-    for (let z = 2; z >= -18; z -= 8) {
+    for (let z = 10; z >= -18; z -= 8) {
       jobs.push(add('pillar', -8.7, z));
       jobs.push(add('pillar', 8.7, z));
     }
@@ -254,6 +254,12 @@ export class Board {
     }
     jobs.push(add('banner_patternA_red', -9.0, -6, Math.PI / 2));
     jobs.push(add('banner_shield_blue', 9.0, -6, -Math.PI / 2));
+    // The hall's entrance behind the defenders' camp.
+    jobs.push(add('wall', -6, 14.5, Math.PI));
+    jobs.push(add('wall_doorway', -2, 14.5, Math.PI));
+    jobs.push(add('wall', 2, 14.5, Math.PI));
+    jobs.push(add('wall_cracked', 6, 14.5, Math.PI));
+    jobs.push(this.addTorch(-9.0, 7, Math.PI / 2, 2.2, false));
     // The gate monsters pour out of.
     jobs.push(add('wall', -6, -17.5));
     jobs.push(add('wall_gated', -2, -17.5));
@@ -307,7 +313,7 @@ export class Board {
     let seed = 11;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     for (const side of [-1, 1]) {
-      for (let z = 6; z >= -24; z -= 3.2) {
+      for (let z = 15.6; z >= -24; z -= 3.2) {
         const kinds: NatureKind[] = ['pine', 'round', 'pine', 'tallRound'];
         const k = kinds[Math.floor(rnd() * kinds.length)];
         put(k, 5.2 + rnd() * 2, side * (10.3 + rnd() * 0.8), z + rnd(), rnd() * 6, Math.floor(rnd() * 3));
@@ -350,6 +356,10 @@ export class Board {
     for (const [x, z] of [[-8.1, -3.2], [8.0, -7.4], [-8.2, -11.5], [7.9, 0.4], [-7.9, 1.3]] as const) put('mushrooms', 0.55, x, z, rnd() * 6);
     for (const [x, z] of [[-8.3, -6.8], [8.4, -12.6], [8.2, -3.5], [-8.6, -14.2]] as const) put('rock', 0.7 + rnd() * 0.4, x, z, rnd() * 6, Math.floor(rnd() * 2));
     put('stump', 0.7, -8.4, -9.4, 2);
+    // Deep woods behind the mercenaries' camp.
+    for (let x = -14; x <= 8; x += 2.8) {
+      put(rnd() > 0.5 ? 'pine' : 'round', 7 + rnd() * 3, x + rnd(), 17.5 + rnd() * 1.5, rnd() * 6, Math.floor(rnd() * 3));
+    }
     this.forestDecor(jobs);
     await Promise.all(jobs);
   }
@@ -399,6 +409,23 @@ export class Board {
     this.decor(jobs, 'crate', 1.1, 4.6, 5.6, { rotY: 0.3 });
     this.decor(jobs, 'barrel', 1.1, 5.6, 4.9);
     this.decor(jobs, 'rug', 5.0, 0, 3.6, { fit: 'width', rotY: E });
+    // The mercenaries' supply camp behind them, up to the hall's entrance.
+    this.decor(jobs, 'tentOpen', 3.0, -2.4, 9.4, { rotY: 0.2 });
+    this.decor(jobs, 'warTable', 2.2, -2.4, 9.4, { rotY: 0.2, fit: 'width' });
+    this.decor(jobs, 'bench', 0.7, 0.4, 8.2, { rotY: Math.PI / 2 });
+    this.decor(jobs, 'battleBanner', 2.6, -4.4, 6.9);
+    this.decor(jobs, 'battleBanner', 2.6, 3.6, 7.2);
+    this.decor(jobs, 'arrowBarrel', 1.4, -5.2, 7.4);
+    this.decor(jobs, 'crateStack', 2.2, -7.6, 8.6, { rotY: E });
+    this.decor(jobs, 'sacks', 1.1, -6.2, 10.6, { rotY: 0.6 });
+    this.decor(jobs, 'barrelStack', 2.0, -8.2, 11.8, { rotY: E });
+    this.decor(jobs, 'woodPile', 0.8, -4.6, 13.0);
+    this.decor(jobs, 'campRack', 2.0, 5.2, 7.8, { rotY: -0.3 });
+    this.decor(jobs, 'brazier', 1.0, 4.6, 10.2, { flame: 1.15 });
+    this.decor(jobs, 'anvil', 0.6, 3.2, 9.8, { rotY: 0.4 });
+    this.decor(jobs, 'dummy', 2.2, 1.4, 12.2, { rotY: Math.PI });
+    this.decor(jobs, 'target', 1.4, 4.2, 12.8, { rotY: Math.PI });
+    this.decor(jobs, 'cart', 1.8, 5.8, 11.8, { rotY: 1.2 });
     // The crypt in front of the gate.
     this.decor(jobs, 'brazier', 1.0, -2.9, -15.7, { flame: 1.15 });
     this.decor(jobs, 'brazier', 1.0, 2.9, -15.7, { flame: 1.15 });
@@ -435,6 +462,29 @@ export class Board {
     this.decor(jobs, 'roadSign', 2.2, -6.8, 6.6, { rotY: 0.6 });
     this.decor(jobs, 'fence', 3.0, 3.0, 6.6, { fit: 'width' });
     this.decor(jobs, 'plant', 1.0, 4.8, 5.0);
+    // The mercenaries' camp behind the defenders: tents, a cooking fire, the war table.
+    this.decor(jobs, 'tentLarge', 3.6, -6.8, 11.6, { rotY: 0.3 });
+    this.decor(jobs, 'tentRound', 3.6, -1.6, 14.0);
+    this.decor(jobs, 'tentSquare', 3.4, 4.4, 12.2, { rotY: -0.3 });
+    this.decor(jobs, 'tentOpen', 3.0, -2.2, 8.4, { rotY: 0.2 });
+    this.decor(jobs, 'warTable', 2.2, -2.2, 8.4, { rotY: 0.2, fit: 'width' });
+    this.decor(jobs, 'firepit', 0.55, 2.0, 8.4, { flame: 0.45 });
+    this.decor(jobs, 'cookingRack', 2.0, 2.0, 8.4);
+    this.decor(jobs, 'bench', 0.7, 2.0, 9.9);
+    this.decor(jobs, 'bench', 0.7, 3.6, 8.2, { rotY: Math.PI / 2 });
+    this.decor(jobs, 'battleBanner', 2.6, -4.2, 6.8);
+    this.decor(jobs, 'battleBanner', 2.6, 3.4, 6.9);
+    this.decor(jobs, 'arrowBarrel', 1.4, -3.6, 6.6);
+    this.decor(jobs, 'barrelStack', 2.0, -4.8, 7.6, { rotY: 0.4 });
+    this.decor(jobs, 'sacks', 1.1, -5.6, 8.4, { rotY: 0.6 });
+    this.decor(jobs, 'cart', 1.8, -9.2, 7.8, { rotY: 0.8 });
+    this.decor(jobs, 'hayBale', 1.2, 5.4, 7.6, { rotY: 0.3 });
+    this.decor(jobs, 'hayPile', 1.8, 5.6, 9.2);
+    this.decor(jobs, 'campRack', 2.0, 0.6, 11.0, { rotY: Math.PI });
+    this.decor(jobs, 'crateStack', 2.2, -9.4, 12.6, { rotY: 0.5 });
+    this.decor(jobs, 'woodPile', 0.8, 1.6, 13.6);
+    this.decor(jobs, 'target', 1.4, -9.8, 4.6, { rotY: E });
+    this.decor(jobs, 'dummy', 2.2, -9.0, 9.6, { rotY: E });
     // The enemy's end.
     this.decor(jobs, 'rockPile', 2.0, -5.6, -15.4, { fit: 'width', rotY: 0.8 });
     this.decor(jobs, 'mushroomsRed', 0.7, 2.6, -15.4);
