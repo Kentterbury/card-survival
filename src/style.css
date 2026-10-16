@@ -23,7 +23,7 @@ button { font-family: inherit; }
 @keyframes dash { to { stroke-dashoffset: -18; } }
 
 /* ── Unit badges ─────────────────────────────── */
-.unit-badge { position: absolute; display: flex; gap: 2px; transform: translate(-50%, -100%); font-weight: 900; font-size: clamp(12px, 2.1vh, 20px); text-shadow: 0 1px 2px #000, 0 0 3px #000; transition: opacity .2s; }
+.unit-badge { position: absolute; display: flex; gap: 2px; transform: translate(-50%, 15%); font-weight: 900; font-size: clamp(12px, 2.1vh, 20px); text-shadow: 0 1px 2px #000, 0 0 3px #000; transition: opacity .2s; }
 .unit-badge span { min-width: 1.75em; height: 1.75em; display: grid; place-items: center; border: 2px solid #1a1208; box-shadow: 0 2px 4px rgba(0,0,0,.6); }
 .unit-badge .atk { background: radial-gradient(circle at 35% 30%, #ffe18a, var(--atk) 60%, #8a5a10); border-radius: 4px 4px 4px 12px; clip-path: polygon(50% 0, 100% 30%, 100% 100%, 0 100%, 0 30%); }
 .unit-badge .hp { background: radial-gradient(circle at 35% 30%, #ff9a8a, var(--hp) 60%, #6a1410); border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%; }

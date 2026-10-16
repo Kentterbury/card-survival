@@ -381,6 +381,11 @@ export class UnitView {
     if (this.ward) this.ward.rotation.y += dt;
   }
 
+  /** Where the stat badge hangs: at the unit's feet (under the character in every camera). */
+  footPosition(): THREE.Vector3 {
+    return this.group.position.clone().add(new THREE.Vector3(0, this.hover, 0));
+  }
+
   headPosition(): THREE.Vector3 {
     return this.group.position.clone().add(new THREE.Vector3(0, 2.25 * this.scale * UNIT_SCALE + 0.15 + this.hover, 0));
   }

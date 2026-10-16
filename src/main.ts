@@ -138,9 +138,11 @@ class App {
   private placeBadges() {
     const w = window.innerWidth;
     const h = window.innerHeight;
+    // The camera may have just moved (mode change, shake): project with this frame's matrix.
+    this.board.camera.updateMatrixWorld();
     for (const v of this.views.values()) {
       if (v.dead) continue;
-      const p = v.headPosition().project(this.board.camera);
+      const p = v.footPosition().project(this.board.camera);
       v.badge.style.left = `${(p.x * 0.5 + 0.5) * w}px`;
       v.badge.style.top = `${(-p.y * 0.5 + 0.5) * h}px`;
     }
