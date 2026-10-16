@@ -28,7 +28,7 @@ const ART = {
   // healing
   sanctuary: 'sunbeams', renewal: 'healing',
   // archery
-  volley: 'interleaved-arrows', h_aimed: 'archery-target', h_rain: 'arrow-cluster',
+  volley: 'barbed-arrow', h_aimed: 'archery-target', h_rain: 'arrow-cluster',
   // death and theft
   execute: 'guillotine', pickpocket: 'robber-hand', grave_rob: 'tombstone', e_raise: 'raise-skeleton',
   e_warcry: 'death-skull', e_ambush: 'skeletal-hand', e_mass_raise: 'graveyard',
@@ -41,6 +41,9 @@ const ART = {
   ice_wall: 'frozen-block', blizzard: 'snowing', deep_freeze: 'frozen-body', ice_shield: 'ice-shield',
   a_empower: 'magic-swirl', a_energy: 'triorb', a_illusion: 'two-shadows', a_telekinesis: 'glowing-hands',
   decay: 'poison-cloud',
+  // new enemy spells
+  e_poison_arrow: 'broadhead-arrow', e_soul_mirror: 'shadow-follower', e_dark_power: 'book-aura',
+  e_bone_shield: 'backbone-shell', e_grave_frost: 'icebergs', e_corpse_blast: 'death-zone',
 };
 
 const missing = Object.entries(ART).filter(([, n]) => !icons[n]);

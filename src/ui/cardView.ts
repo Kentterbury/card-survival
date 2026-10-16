@@ -53,6 +53,7 @@ export function keywordNotes(defId: string): string {
   if (text.includes('등장 시')) extra.push('<b>등장 시</b>: 이 하수인을 낼 때 효과가 발동합니다.');
   if (text.includes('파괴 시')) extra.push('<b>파괴 시</b>: 이 하수인이 죽을 때 효과가 발동합니다.');
   if (text.includes('빙결')) extra.push('<b>빙결</b>: 얼어 있는 동안 행동하지 못하지만, 어떤 피해도 받지 않습니다(반격도 못 함).');
+  if (text.includes('중독')) extra.push('<b>중독</b>: 그 하수인 쪽 턴이 시작될 때마다 피해를 1 받습니다(빙결 중에는 막힘).');
   if (text.includes('젖')) extra.push('<b>젖은 칸</b>: 그 칸에 선 하수인은 받는 피해가 1 늘어납니다. 3턴 뒤 마릅니다.');
   if (text.includes('충돌')) extra.push('<b>충돌</b>: 옮긴 대상의 체력 절반(올림)만큼 두 대상이 각각 피해를 입고, 옮긴 대상은 제자리에 남습니다.');
   if (text.includes('영웅에게 <b>보호막</b>')) extra.push('<b>영웅 보호막</b>: 영웅이 받는 피해를 그 수치만큼 먼저 막습니다. 스테이지가 끝나면 사라집니다.');

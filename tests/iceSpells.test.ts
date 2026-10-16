@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { card, type MinionCard } from '../src/game/cards';
 import { Game, unitSpeed, WET_BONUS } from '../src/game/engine';
 import { RANGED_RANGE, type Side, type Unit } from '../src/game/types';
+import { STAGES } from '../src/game/stages';
 
 let uidSeq = 9000;
 function place(g: Game, defId: string, side: Side, lane: number, row: number): Unit {
@@ -195,5 +196,56 @@ describe('부패', () => {
     expect(n.health).toBe(n.maxHealth - victim.maxHealth);
     expect(g.unit(s.uid)).toBeUndefined();
     expect(diag.health).toBe(diag.maxHealth);
+  });
+});
+
+describe('적 새 카드', () => {
+  const enemyGame = (stage: number, hand: string[]) => {
+    const g = new Game(11);
+    g.startRun(Array(10).fill('squire'), 'captain', { hero: 'captain', deck: Array(10).fill('squire'), stage, stagesCleared: stage, health: 30 });
+    g.state.units = [];
+    g.state.phase = 'enemy';
+    g.side('enemy').hand = hand.map((defId, i) => ({ iid: 700 + i, defId }));
+    g.side('enemy').mana = 20;
+    return g;
+  };
+
+  it('every new enemy card is in a commander deck', () => {
+    const decks = new Set(STAGES.flatMap((s) => s.deck));
+    for (const id of ['e_poison_arrow', 'e_soul_mirror', 'e_dark_power', 'e_bone_shield', 'e_grave_frost', 'sk_plague', 'e_corpse_blast']) {
+      expect(decks.has(id), id).toBe(true);
+    }
+  });
+
+  it('the AI plays them sensibly', async () => {
+    const { aiTakeTurn } = await import('../src/game/ai');
+    // 뼈 방패 with a hurt hero; 독 묻은 화살 at our unit.
+    let g = enemyGame(1, ['e_bone_shield', 'e_poison_arrow']);
+    const mine = place(g, 'veteran', 'player', 2, 2);
+    g.side('enemy').hero.health -= 5;
+    aiTakeTurn(g, 'enemy');
+    expect(g.side('enemy').hero.armor).toBe(2);
+    expect(mine.poison).toBe(3);
+    // 금지된 주문 goes right before a damage spell.
+    g = enemyGame(2, ['e_dark_power', 'e_frostbolt']);
+    const target = place(g, 'veteran', 'player', 1, 2);
+    aiTakeTurn(g, 'enemy');
+    expect(target.health).toBe(target.maxHealth - 4);
+    // 망령의 분신 copies a skeleton onto the enemy home row.
+    g = enemyGame(1, ['e_soul_mirror']);
+    place(g, 'sk_brute', 'enemy', 2, 4);
+    aiTakeTurn(g, 'enemy');
+    expect(g.state.units.some((u) => u.keywords.has('illusion') && u.side === 'enemy' && u.row === 5)).toBe(true);
+  });
+
+  it('역병 해골 poisons the foes beside it when it dies', () => {
+    const g = game(['blizzard'], 'captain');
+    const plague = place(g, 'sk_plague', 'enemy', 2, 3);
+    plague.health = 2;
+    const a = place(g, 'veteran', 'player', 2, 2);
+    const b = place(g, 'veteran', 'player', 3, 3);
+    g.playCard(0, { kind: 'none' });
+    expect(g.unit(plague.uid)).toBeUndefined();
+    expect([a.poison, b.poison]).toEqual([2, 2]);
   });
 });

@@ -95,7 +95,7 @@ export const HEROES: HeroDef[] = [
     deck: ['squire', 'crossbowman', 'phalanx', 'phalanx', 'brawler', 'berserker', 'war_drums', 'firebolt', 'firebolt', 'shockwave'],
   },
   {
-    id: 'hunter', name: '척후대장', title: '정찰', model: 'Rogue_Hooded', health: 20, startMana: 3, power: 'aim',
+    id: 'hunter', name: '척후대장', title: '정찰', model: 'Rogue_Hooded', health: 22, startMana: 3, power: 'aim',
     blurb: '왕국군의 눈이 되어 주는 척후 용병. 정찰병과 궁수로 먼저 보고 먼저 쏜다.',
     deck: ['crossbowman', 'crossbowman', 'longbow', 'glider', 'glider', 'shieldbearer', 'firebolt', 'volley', 'frostring', 'regroup'],
   },

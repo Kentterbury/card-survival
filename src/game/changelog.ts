@@ -18,6 +18,12 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '독화살 · 새 적 카드',
+    summary: '일제 사격(줄마다 맨 앞 적에게 1)이 척후대장의 화살비와 같은 방식이라 독화살로 바꿨습니다. 새 상태 중독: 자기 턴 시작마다 피해 1. 적 지휘관마다 새 개념을 쓰는 카드를 넣었습니다(추적자 대장: 독·분신, 서고의 주술사: 금지된 주문, 납골당 수호자: 뼈 방패·얼음벽, 해골 군주: 역병 해골·시체 폭발).',
+    added: ['e_poison_arrow', 'e_soul_mirror', 'e_dark_power', 'e_bone_shield', 'e_grave_frost', 'sk_plague', 'e_corpse_blast'],
+    changed: [{ id: 'volley', note: '일제 사격 → 독화살: 적 하수인에게 2 + 3턴 중독 (5 → 3마나). 척후대장 생명력 20 → 22' }],
+  },
+  {
     title: '얼음 · 주문 마법 · 부패',
     summary: '빙결 규칙 변경: 빙결된 하수인은 행동하지 못하는 대신 어떤 피해도 받지 않고 반격도 하지 않습니다. 새 개념: 젖은 칸(받는 피해 +1, 3턴), 영웅 보호막, 주문 강화, 환영, 충돌, 구조물 빙벽. 균형: 빙결 규칙으로 약해진 비전술사 생명력 16 → 18.',
     added: ['ice_wall', 'blizzard', 'deep_freeze', 'ice_shield', 'a_empower', 'a_energy', 'a_illusion', 'a_telekinesis', 'decay', 'ice_wall_token'],

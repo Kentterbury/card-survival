@@ -106,6 +106,7 @@ export const LOOKS: Record<string, Look> = {
   sk_assassin: DG('Skeleton_Soldier_02', 2, 'SM_Wep_Dagger_05'),
   sk_acolyte: DG('Ghost_02', 1, 'SM_Wep_Staff_03'),
   sk_deathknight: DG('Skeleton_Knight', 1, 'SM_Wep_Greatsword_Straight_01'),
+  sk_plague: DG('Goblin_Shaman', 1, 'SM_Wep_Bone_01'),
   // ── Commanders
   'boss:해골 하사': DG('Skeleton_Knight', 1, 'SM_Wep_Sword_05', 'SM_Wep_Shield_Skull_01'),
   'boss:추적자 대장': DG('Skeleton_Soldier_02', 1, 'SM_Wep_Cutlass_01'),

@@ -446,6 +446,16 @@ class App {
         await wait(0.12);
         return;
       }
+      case 'poison': {
+        const v = this.views.get(e.uid);
+        if (!v || e.turns <= 0) return;
+        sound.play('curse');
+        v.flash(0x7dff5a);
+        this.fx.burst(v.group.position.clone().setY(1.2), 0x8aff5a, 12, 1.5);
+        this.fx.floatText(v.headPosition(), `중독 ${e.turns}`, 'info');
+        await wait(0.12);
+        return;
+      }
       case 'immune': {
         const v = this.views.get(e.uid);
         if (!v) return;
@@ -794,7 +804,8 @@ class App {
       // Show situational attack (대열) on the badge.
       v.setStats({ ...u, attack: this.game.attackOf(u) });
       const mark = next && u.side === 'enemy' ? '<span class="threat" title="다음 턴에 공격">!</span>' : '';
-      v.renderBadge(mark + (u.frozen ? `<span class="frozen-tag">❄${(u.frozenTurns ?? 1) > 1 ? u.frozenTurns : ''}</span>` : ''));
+      v.renderBadge(mark + (u.frozen ? `<span class="frozen-tag">❄${(u.frozenTurns ?? 1) > 1 ? u.frozenTurns : ''}</span>` : '')
+        + (u.poison ? `<span class="poison-tag" title="중독: 턴마다 피해 1">☠${u.poison}</span>` : ''));
     }
   }
 
@@ -1310,6 +1321,7 @@ class App {
       `이동 ${unit.speed}칸 · 사거리 ${unit.range}칸`,
       unit.frozen ? `빙결: 행동하지 못하고 피해를 받지 않음 (${unit.frozenTurns ?? 1}턴)` : '',
       this.game.state.wet.some((w) => w.lane === unit.lane && w.row === unit.row) ? '젖은 칸: 받는 피해 +1' : '',
+      unit.poison ? `중독: 자기 턴 시작마다 피해 1 (${unit.poison}턴)` : '',
       unit.fresh && !unit.keywords.has('swift') ? '이번 턴에 소환됨' : '',
     ].filter(Boolean).join('<br>');
     inspect.insertAdjacentHTML('beforeend', `<div class="notes"><div class="kw-note">${status}</div>${keywordNotes(unit.defId)}</div>`);

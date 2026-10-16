@@ -234,6 +234,13 @@ export class Game {
     me.powerUsed = false;
     for (const u of s.units) if (u.side === side) u.fresh = false;
     this.emit({ type: 'turnStart', side, turn: s.turn });
+    // 독 ticks at the start of its victim's turn.
+    for (const u of this.unitsOf(side)) {
+      if (!u.poison) continue;
+      u.poison--;
+      this.damageUnit(u, 1);
+      this.emit({ type: 'poison', uid: u.uid, turns: u.poison });
+    }
     // Structures with a lifetime (빙벽) melt after that many of their owner's turns.
     for (const u of this.unitsOf(side)) {
       if (u.lifetime === undefined) continue;
@@ -614,7 +621,7 @@ export class Game {
     const keywords = new Set([...of.keywords].filter((k) => !ILLUSION_DROPS.includes(k)));
     keywords.add('illusion');
     const u: Unit = {
-      ...of, uid: this.nextUid++, keywords, lane, row, frozen: false, frozenTurns: undefined, lifetime: undefined, fresh: true,
+      ...of, uid: this.nextUid++, keywords, lane, row, frozen: false, frozenTurns: undefined, lifetime: undefined, poison: undefined, fresh: true,
       speed: unitSpeed(of.attack, keywords),
     };
     this.state.units.push(u);
@@ -888,6 +895,12 @@ export class Game {
         if (u && u.health > 0) this.summonIllusion(side, u, lane);
       },
       telekinesis: (uid, lane, row) => this.telekinesis(uid, lane, row),
+      poison: (uid, turns) => {
+        const u = this.unit(uid);
+        if (!u || u.health <= 0 || isStructure(u.model)) return;
+        u.poison = Math.max(u.poison ?? 0, turns);
+        this.emit({ type: 'poison', uid, turns: u.poison });
+      },
       sacrifice: (uid) => {
         const u = this.unit(uid);
         if (!u || u.health <= 0) return 0;

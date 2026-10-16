@@ -37,6 +37,8 @@ export interface EffectApi {
   illusion(uid: number, lane: number): void;
   /** 염력: move a unit to a neighbouring cell (충돌 if it is taken). */
   telekinesis(uid: number, lane: number, row: number): void;
+  /** 독: 1 damage at the start of each of the unit's turns, for `turns` turns (structures are immune). */
+  poison(uid: number, turns: number): void;
   /** Kill an ally outright; returns the health it had. */
   sacrifice(uid: number): number;
   /** Units in the four cells next to a cell (north, south, east, west). */
@@ -318,9 +320,9 @@ const CARD_LIST: CardDef[] = [
   },
 
   {
-    id: 'volley', name: '일제 사격', type: 'spell', cost: 5, rarity: 'common', target: 'none', icon: 'arrows', ai: { kind: 'aoe' },
-    text: '모든 줄의 맨 앞 적에게 피해를 1 줍니다. 비어 있는 줄마다 적 영웅에게 피해 1.',
-    cast: (api) => { for (let lane = 0; lane < 5; lane++) hitLaneFront(api, lane, 1); },
+    id: 'volley', name: '독화살', type: 'spell', cost: 3, rarity: 'common', target: 'foeUnit', icon: 'arrows', ai: { kind: 'damage', amount: 2 },
+    text: '적 하수인에게 피해를 2 주고 3턴 동안 <b>중독</b>시킵니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.damage(t, 2); api.poison(t.uid, 3); } },
   },
   {
     id: 'execute', name: '처형', type: 'spell', cost: 6, rarity: 'common', target: 'foeUnit', icon: 'skull', ai: { kind: 'damage', amount: 2 },
@@ -701,6 +703,53 @@ const CARD_LIST: CardDef[] = [
   {
     id: 'decay', name: '부패', type: 'spell', cost: 2, rarity: 'rare', target: 'ally', icon: 'curse', ai: { kind: 'decay' },
     text: '아군 하나를 희생해, 그 체력만큼 상하좌우 칸의 모든 대상에게 피해를 줍니다(아군 포함).',
+    cast: (api, t) => {
+      if (t.kind !== 'unit') return;
+      const u = api.allies().find((a) => a.uid === t.uid);
+      if (!u) return;
+      const { lane, row } = u;
+      const hp = api.sacrifice(u.uid);
+      for (const n of api.unitsBeside(lane, row)) api.damage({ kind: 'unit', uid: n.uid }, hp);
+    },
+  },
+  // ── 적 (새 개념) ────────────────────────────────────────────
+  {
+    id: 'e_poison_arrow', name: '독 묻은 화살', type: 'spell', cost: 3, rarity: 'common', enemy: true, target: 'foeUnit', icon: 'curse', ai: { kind: 'damage', amount: 2 },
+    text: '적 하수인에게 피해를 2 주고 3턴 동안 <b>중독</b>시킵니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.damage(t, 2); api.poison(t.uid, 3); } },
+  },
+  {
+    id: 'e_soul_mirror', name: '망령의 분신', type: 'spell', cost: 2, rarity: 'rare', enemy: true, target: 'allySlot', icon: 'skull', ai: { kind: 'illusion' },
+    text: '아군 하나를 고른 뒤 진영 빈 칸에 똑같이 생긴 <b>환영</b>을 만듭니다.',
+    cast: (api, t) => { if (t.kind === 'unitTo') api.illusion(t.uid, t.lane); },
+  },
+  {
+    id: 'e_dark_power', name: '금지된 주문', type: 'spell', cost: 1, rarity: 'rare', enemy: true, target: 'none', icon: 'curse', ai: { kind: 'empower' },
+    text: '이번 턴에 내는 다음 주문의 피해가 타격마다 +2.',
+    cast: (api) => api.empower(2),
+  },
+  {
+    id: 'e_bone_shield', name: '뼈 방패', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'none', icon: 'shield', ai: { kind: 'armor' },
+    text: '영웅에게 <b>보호막</b> +2.',
+    cast: (api) => api.armorHero(2),
+  },
+  {
+    id: 'e_grave_frost', name: '무덤 얼음벽', type: 'spell', cost: 3, rarity: 'rare', enemy: true, target: 'wallCell', icon: 'frost', ai: { kind: 'wall' },
+    text: '빈 칸 두 개(가로)에 0/5 <b>빙벽</b>을 세웁니다. 3턴 뒤 녹고, 부서지거나 녹은 칸은 <b>젖습니다</b>.',
+    cast: (api, t) => {
+      if (t.kind !== 'cell') return;
+      api.summonAt('ice_wall_token', t.lane, t.row, 3);
+      api.summonAt('ice_wall_token', t.lane + 1, t.row, 3);
+    },
+  },
+  {
+    id: 'sk_plague', name: '역병 해골', type: 'minion', cost: 5, rarity: 'rare', enemy: true, attack: 2, health: 3, model: 'Skeleton_Minion',
+    text: '<b>파괴 시</b>: 상하좌우 칸의 적을 2턴 동안 <b>중독</b>시킵니다.',
+    onDeath: (api, self) => { for (const u of api.unitsBeside(self.lane, self.row)) if (u.side !== api.side) api.poison(u.uid, 2); },
+  },
+  {
+    id: 'e_corpse_blast', name: '시체 폭발', type: 'spell', cost: 3, rarity: 'rare', enemy: true, target: 'ally', icon: 'skull', ai: { kind: 'decay' },
+    text: '아군 하나를 희생해, 그 체력만큼 상하좌우 칸의 모든 대상에게 피해를 줍니다.',
     cast: (api, t) => {
       if (t.kind !== 'unit') return;
       const u = api.allies().find((a) => a.uid === t.uid);

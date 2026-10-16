@@ -87,6 +87,8 @@ export interface Unit {
   frozen: boolean;
   /** Own turns a freeze still lasts (missing = 1). */
   frozenTurns?: number;
+  /** 독: takes 1 damage at the start of each of its side's turns, for this many turns. */
+  poison?: number;
   /** Structures that melt: own turns left before it disappears (빙벽). */
   lifetime?: number;
   /** Summoned this turn: does not act at the end of it unless `swift`. */
@@ -166,6 +168,8 @@ export type GameEvent =
   | { type: 'notice'; side: Side; text: string }
   | { type: 'choice'; side: Side; options: string[] }
   | { type: 'explosion'; lane: number; row: number }
+  /** A unit was poisoned (`turns` left). */
+  | { type: 'poison'; uid: number; turns: number }
   /** A frozen unit shrugs off a hit. */
   | { type: 'immune'; uid: number }
   /** Hero armor changed (`total` is the new value). */

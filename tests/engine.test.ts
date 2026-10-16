@@ -258,13 +258,15 @@ describe('new cards', () => {
     expect(g.side('enemy').hero.health).toBe(hp - 2);
   });
 
-  it('일제 사격 hits each lane front, or the hero for empty lanes', () => {
+  it('독화살 hits for 2 and poisons for three of the target\'s turns', () => {
     const g = withCard('volley');
-    const a = place(g, 'sk_warrior', 'enemy', 0, 3);
-    const hp = g.side('enemy').hero.health;
-    g.playCard(0, { kind: 'none' });
-    expect(a.health).toBe(3);
-    expect(g.side('enemy').hero.health).toBe(hp - 4);
+    const a = place(g, 'sk_brute', 'enemy', 0, 4);
+    g.playCard(0, { kind: 'unit', uid: a.uid });
+    expect(a.health).toBe(a.maxHealth - 2);
+    expect(a.poison).toBe(3);
+    for (let t = 0; t < 4; t++) passTurn(g);
+    expect(a.health).toBe(a.maxHealth - 2 - 3);
+    expect(a.poison).toBe(0);
   });
 
   it('처형 kills a damaged minion outright', () => {
