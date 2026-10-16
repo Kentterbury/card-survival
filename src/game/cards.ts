@@ -96,7 +96,7 @@ export interface EffectApi {
   modifyHandCosts(delta: number): void;
 }
 
-export type Rarity = 'basic' | 'common' | 'rare' | 'epic';
+export type Rarity = 'basic' | 'common' | 'rare' | 'epic' | 'legendary';
 export type SpellIcon =
   | 'bolt' | 'fire' | 'frost' | 'storm' | 'wave' | 'heart' | 'shield' | 'scroll' | 'meteor' | 'sword'
   | 'skull' | 'curse' | 'arrows' | 'potion';
@@ -598,11 +598,11 @@ const CARD_LIST: CardDef[] = [
   { id: 'sk_undying', name: '불사 해골', type: 'minion', cost: 4, rarity: 'basic', enemy: true, attack: 2, health: 2, model: 'Skeleton_Minion', keywords: ['undying'], text: '<b>불사</b>' },
   { id: 'sk_pikeman', name: '해골 창병', type: 'minion', cost: 6, rarity: 'common', enemy: true, attack: 2, health: 5, model: 'Skeleton_Warrior', keywords: ['pierce'], scale: 0.95, text: '<b>관통</b>' },
   { id: 'sk_phalanx', name: '해골 방진병', type: 'minion', cost: 3, rarity: 'basic', enemy: true, attack: 1, health: 3, model: 'Skeleton_Warrior', keywords: ['formation'], scale: 0.9, text: '<b>대열</b>' },
-  { id: 'sk_leech', name: '흡혈 주술사', type: 'minion', cost: 8, rarity: 'rare', enemy: true, attack: 2, health: 4, model: 'Skeleton_Mage', keywords: ['ranged', 'lifesteal'], text: '<b>사격</b>. <b>흡혈</b>' },
+  { id: 'sk_leech', name: '흡혈 주술사', type: 'minion', cost: 8, rarity: 'rare', enemy: true, attack: 3, health: 4, model: 'Skeleton_Mage', keywords: ['ranged', 'lifesteal'], text: '<b>사격</b>. <b>흡혈</b>' },
 
   { id: 'sk_captain', name: '해골 대장', type: 'minion', cost: 6, rarity: 'common', enemy: true, attack: 2, health: 5, model: 'Skeleton_Warrior', keywords: ['vanguard'], text: '<b>선봉</b>' },
   { id: 'sk_berserker', name: '해골 광전사', type: 'minion', cost: 6, rarity: 'common', enemy: true, attack: 2, health: 5, model: 'Skeleton_Minion', keywords: ['enrage'], scale: 1.1, text: '<b>분노</b>' },
-  { id: 'sk_shieldwall', name: '해골 방패수', type: 'minion', cost: 7, rarity: 'rare', enemy: true, attack: 1, health: 7, model: 'Skeleton_Warrior', keywords: ['cover'], scale: 1.1, text: '<b>엄호</b>' },
+  { id: 'sk_shieldwall', name: '해골 방패수', type: 'minion', cost: 7, rarity: 'rare', enemy: true, attack: 3, health: 6, model: 'Skeleton_Warrior', keywords: ['cover'], scale: 1.1, text: '<b>엄호</b>' },
   { id: 'sk_thorn', name: '뼈 가시벽', type: 'minion', cost: 6, rarity: 'common', enemy: true, attack: 1, health: 6, model: 'Skeleton_Warrior', keywords: ['thorns'], text: '<b>가시</b>' },
   { id: 'sk_regen', name: '되살아나는 해골', type: 'minion', cost: 6, rarity: 'common', enemy: true, attack: 3, health: 3, model: 'Skeleton_Minion', keywords: ['regenerate'], scale: 1.05, text: '<b>재생</b>' },
   { id: 'sk_reaper', name: '해골 수확자', type: 'minion', cost: 10, rarity: 'rare', enemy: true, attack: 4, health: 6, model: 'Skeleton_Rogue', keywords: ['cleave'], scale: 1.2, text: '<b>휩쓸기</b>' },
@@ -1108,6 +1108,38 @@ const CARD_LIST: CardDef[] = [
     id: 'sk_archlich', name: '해골 대마도사', type: 'minion', cost: 12, rarity: 'epic', enemy: true, attack: 4, health: 7, model: 'Skeleton_Mage', keywords: ['ranged'], scale: 1.3, elite: true,
     text: '<b>사격</b>. 내 턴이 끝날 때 무작위 적(영웅 포함)에게 피해를 2 줍니다.',
     onEndTurn: (api) => randomFoeOrHero(api, 2),
+  },
+  // 해골 군주: 지옥의 불
+  {
+    id: 'e_hellfire', name: '지옥불', type: 'spell', cost: 9, rarity: 'epic', enemy: true, target: 'lane', icon: 'meteor', ai: { kind: 'lane' },
+    text: '한 줄의 적 하수인 모두에게 피해를 5 줍니다. 그 줄이 비어 있으면 적 영웅에게 3.',
+    cast: (api, t) => {
+      if (t.kind !== 'lane') return;
+      const ms = api.foesInLane(t.lane);
+      if (ms.length === 0) api.damageFoeHero(3);
+      for (const m of ms) api.damage({ kind: 'unit', uid: m.uid }, 5);
+    },
+  },
+  {
+    id: 'e_inferno_orb', name: '업화구', type: 'spell', cost: 8, rarity: 'epic', enemy: true, target: 'foe', icon: 'fire', ai: { kind: 'damage', amount: 6 },
+    text: '적 하나(영웅 포함)에게 피해를 6 주고, 그 주변의 적 하수인에게 피해를 2 줍니다.',
+    cast: (api, t) => {
+      const u = t.kind === 'unit' ? api.foes().find((f) => f.uid === t.uid) : undefined;
+      const around = u ? api.unitsAround(u.lane, u.row).filter((m) => m.side === u.side) : [];
+      api.damage(t, 6);
+      for (const m of around) api.damage({ kind: 'unit', uid: m.uid }, 2);
+    },
+  },
+  {
+    id: 'e_lord_doom', name: '군주의 종언', type: 'spell', cost: 13, rarity: 'legendary', enemy: true, target: 'none', icon: 'meteor', ai: { kind: 'aoe' },
+    text: '모든 적 하수인에게 피해 5, 적 영웅에게 피해 4. 쓰러진 적마다 불사 해골을 일으킵니다.',
+    cast: (api) => {
+      const foes = api.foes();
+      for (const m of foes) api.damage({ kind: 'unit', uid: m.uid }, 5);
+      api.damageFoeHero(4);
+      const fallen = foes.filter((m) => m.health <= 0).length;
+      for (const lane of api.rng.shuffle(api.freeHomeLanes()).slice(0, fallen)) api.summon('sk_undying', lane);
+    },
   },
 ];
 

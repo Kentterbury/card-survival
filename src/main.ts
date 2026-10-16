@@ -7,7 +7,7 @@ import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE } from './game/shop';
 import { CHAPTERS, STAGES, stageLabel } from './game/stages';
 import { isCreature, isStructure, type ModelId, type TargetKind } from './game/types';
 import {
-  LAST_ROW, MANA_PER_TURN, MAX_MANA, other, RANGED_RANGE, ROWS,
+  LANES, LAST_ROW, MANA_PER_TURN, MAX_MANA, other, RANGED_RANGE, ROWS,
   type GameEvent, type HitTarget, type Side, type Target, type Unit,
 } from './game/types';
 import { CHARACTER_MODELS, preloadAll, useSynty } from './render/assets';
@@ -742,14 +742,16 @@ class App {
     if (side === 'player' && def.type !== 'spell') return;
     const holder = document.createElement('div');
     holder.id = side === 'player' ? 'played-card' : 'enemy-played';
-    if (side === 'enemy') holder.innerHTML = '<div class="label">상대가 사용</div>';
+    const legend = side === 'enemy' && def.rarity === 'legendary';
+    if (legend) holder.classList.add('legendary');
+    if (side === 'enemy') holder.innerHTML = `<div class="label">${legend ? '전설 주문!' : '상대가 사용'}</div>`;
     holder.appendChild(createCardElement(defId));
     document.body.appendChild(holder);
     if (side === 'enemy') {
       this.renderEnemyInfo();
       void this.enemyHero?.playOnce('Spellcast_Raise', 1);
     }
-    await wait(side === 'enemy' ? 0.9 : 0.55);
+    await wait(legend ? 1.8 : side === 'enemy' ? 0.9 : 0.55);
     holder.remove();
   }
 
@@ -776,6 +778,10 @@ class App {
         await this.fx.laneBlast(cellPos(target.lane, 0).x, def.icon);
         return;
       case 'none':
+        // A legendary spell rains fire on every lane before the shockwave.
+        if (def.rarity === 'legendary') {
+          await Promise.all(Array.from({ length: LANES }, (_, l) => wait(l * 0.12).then(() => this.fx.meteor(cellPos(l, LAST_ROW / 2).setY(0.5)))));
+        }
         await this.fx.nova(def.icon);
         return;
       case 'slot':

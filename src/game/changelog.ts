@@ -18,6 +18,15 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '해골 군주의 위엄 · 적 지휘관 카드 뽑기',
+    summary: '해골 군주에게 강력한 불 주문 지옥불·업화구와 새 전설 등급 주문 「군주의 종언」을 줬습니다. 전설 주문은 크게 보여 준 뒤 모든 줄에 불덩이가 떨어집니다. 모든 적 지휘관 덱에 카드 뽑기 카드를 넣었습니다.',
+    added: ['e_hellfire', 'e_inferno_orb', 'e_lord_doom'],
+    changed: [
+      { id: 'sk_shieldwall', note: '1/7 → 3/6' },
+      { id: 'sk_leech', note: '2/4 → 3/4' },
+    ],
+  },
+  {
     title: '영웅을 때리는 주문 비용 +1',
     summary: '주문으로 적 영웅을 너무 쉽게 잡아서, 적 영웅에게 피해를 줄 수 있는 주문의 비용을 모두 1 올렸습니다.',
     changed: [

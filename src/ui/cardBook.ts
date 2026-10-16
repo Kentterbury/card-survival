@@ -10,8 +10,8 @@ type Group = 'changes' | 'all' | 'common' | 'enemy' | string; // a hero id for h
 type TypeFilter = 'all' | 'minion' | 'spell';
 type Sort = 'cost' | 'rarity' | 'name';
 
-const RARITY_NAME = { basic: '기본', common: '일반', rare: '희귀', epic: '영웅' } as const;
-const RARITY_ORDER = { basic: 0, common: 1, rare: 2, epic: 3 } as const;
+const RARITY_NAME = { basic: '기본', common: '일반', rare: '희귀', epic: '영웅', legendary: '전설' } as const;
+const RARITY_ORDER = { basic: 0, common: 1, rare: 2, epic: 3, legendary: 4 } as const;
 /** NEW / 수정 badges for cards touched by the latest updates. */
 const BADGES = recentBadges(2);
 

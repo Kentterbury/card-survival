@@ -102,6 +102,13 @@ button { font-family: inherit; }
 .rarity-common .card-gem { background: #e8e8e8; }
 .rarity-rare .card-gem { background: #3a8aff; box-shadow: 0 0 6px #3a8aff; }
 .rarity-epic .card-gem { background: #b44aff; box-shadow: 0 0 8px #b44aff; }
+.rarity-legendary .card-gem { background: #ff9a1a; box-shadow: 0 0 10px #ffb03a, 0 0 18px #ff6a00; }
+.card.rarity-legendary .card-frame { box-shadow: inset 0 0 0 2px #2a1c0c, 0 0 0 2px #ffb43a, 0 0 18px #ff7a1a; }
+#enemy-played.legendary .card { --card-w: min(26vh, 270px); animation: legendIn .5s ease-out; }
+#enemy-played.legendary .card-frame { animation: legendGlow .7s ease-in-out infinite alternate; }
+#enemy-played.legendary .label { color: #ffcf5a; font-size: clamp(16px, 3vh, 30px); letter-spacing: .1em; }
+@keyframes legendIn { from { transform: scale(.4) rotate(-6deg); opacity: 0; } }
+@keyframes legendGlow { to { box-shadow: inset 0 0 0 2px #2a1c0c, 0 0 0 3px #ffd36a, 0 0 42px #ff6a00; } }
 
 .card.playable .card-frame { box-shadow: inset 0 0 0 2px #2a1c0c, 0 0 0 2px #6dff9a, 0 0 16px #3aff8a; }
 .card.unplayable { filter: brightness(.72) saturate(.7); }

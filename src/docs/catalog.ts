@@ -13,7 +13,7 @@ import { LOOKS } from '../render/syntySet';
  * `npm run docs` rewrites them; tests/docs.test.ts fails when they are out of date.
  */
 
-const RARITY = { basic: '기본', common: '일반', rare: '희귀', epic: '영웅' } as const;
+const RARITY = { basic: '기본', common: '일반', rare: '희귀', epic: '영웅', legendary: '전설' } as const;
 const TARGET: Record<TargetKind, string> = {
   none: '대상 없음', foe: '적 하나(영웅 포함)', foeUnit: '적 하수인', ally: '아군 하수인', lane: '줄 하나', slot: '내 진영 빈 칸',
   wallCell: '나란한 빈 칸 두 개', anyUnit: '하수인 하나(아군 포함)', allySlot: '아군 하나 + 빈 칸', move: '하수인 + 옆/뒤 칸', trapCell: '빈 칸',

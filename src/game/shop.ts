@@ -6,7 +6,7 @@ export function stageGold(stage: number, turns: number): number {
   return 15 + 3 * stage + 2 * Math.max(0, 10 - turns);
 }
 
-export const CARD_PRICE: Record<Rarity, number> = { basic: 10, common: 20, rare: 35, epic: 55 };
+export const CARD_PRICE: Record<Rarity, number> = { basic: 10, common: 20, rare: 35, epic: 55, legendary: 90 };
 /** Price of removing one card from the deck at the merchant. */
 export const REMOVE_PRICE = 25;
 /** Price and size of the merchant's healing draught (once per visit). */

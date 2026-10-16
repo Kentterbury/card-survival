@@ -46,7 +46,7 @@ export const STAGES: StageDef[] = [
     power: 'howl', startMana: 2,
     deck: [
       ...x('wolf_pup', 3), ...x('wolf', 2), ...x('wolf_hunter', 3), 'slime', 'sk_hunter',
-      'e_howl', 'e_gale', 'e_pack_ambush', 'e_instinct', 'war_drums',
+      'e_howl', 'e_gale', 'e_pack_ambush', 'e_instinct', 'war_drums', 'regroup',
     ],
   },
   {
@@ -55,7 +55,7 @@ export const STAGES: StageDef[] = [
     power: 'ooze', startMana: 2,
     deck: [
       ...x('slime', 4), ...x('slime_venom', 2), 'slime_acid', 'slime_big', 'wolf', 'sk_moss',
-      'e_merge', 'e_slime_coat', 'e_vines', 'e_spore', 'regroup', 'change_plans',
+      'e_merge', 'e_slime_coat', 'e_vines', 'e_spore', 'regroup', 'change_plans', 'supply_wagon',
     ],
   },
   {
@@ -64,7 +64,7 @@ export const STAGES: StageDef[] = [
     power: 'snare', startMana: 2,
     deck: [
       'sk_hunter', 'sk_moss', 'sk_trapper', 'sk_beastmaster', 'sk_barrow_knight', 'sk_rotwood', 'wolf', 'slime_venom',
-      'e_grave_moss', 'e_trap', 'e_grave_vines', 'e_wither', 'e_wisp', 'chains', 'salvage',
+      'e_grave_moss', 'e_trap', 'e_grave_vines', 'e_wither', 'e_wisp', 'chains', 'salvage', 'regroup',
     ],
   },
   // ── 2장 던전
@@ -74,7 +74,7 @@ export const STAGES: StageDef[] = [
     power: 'summon', startMana: 3,
     deck: [
       ...x('sk_minion', 5), ...x('sk_drummer', 2), ...x('e_bonearmor', 2), ...x('e_curse', 2), 'e_march',
-      ...x('sk_rogue', 2), 'sk_captain', 'sk_warrior',
+      ...x('sk_rogue', 2), 'sk_captain', 'sk_warrior', 'e_insight', 'oblivion',
     ],
   },
   {
@@ -83,7 +83,7 @@ export const STAGES: StageDef[] = [
     power: 'rush', startMana: 3,
     deck: [
       ...x('sk_minion', 2), ...x('sk_rogue', 2), ...x('sk_hunter', 2), 'e_bonearmor', 'e_march', 'e_poison_arrow',
-      ...x('sk_warrior', 2), 'sk_captain', 'sk_berserker', ...x('sk_crossbow', 2), 'sk_gladiator',
+      ...x('sk_warrior', 2), 'sk_captain', 'sk_berserker', ...x('sk_crossbow', 2), 'sk_gladiator', 'e_insight', 'supply_wagon',
     ],
   },
   {
@@ -92,7 +92,7 @@ export const STAGES: StageDef[] = [
     power: 'curse', startMana: 4,
     deck: [
       ...x('sk_hexling', 3), ...x('sk_acolyte', 2), 'e_coven', ...x('e_frostbolt', 2), 'e_chill', 'e_hex', 'e_insight', 'e_dark_power',
-      ...x('sk_mage', 2), ...x('e_darkwave', 2), 'e_drain', 'sk_shieldwall', 'sk_leech',
+      ...x('sk_mage', 2), ...x('e_darkwave', 2), 'e_drain', 'sk_shieldwall', 'sk_leech', 'blood_pact', 'oblivion',
     ],
   },
   // ── 3장 동굴
@@ -102,17 +102,17 @@ export const STAGES: StageDef[] = [
     power: 'bonewall', startMana: 3,
     deck: [
       'e_bonearmor', ...x('e_bone_shield', 2), ...x('sk_phalanx', 3), 'e_bonewall', 'sk_thorn', 'sk_regen', 'sk_pikeman', 'sk_warrior',
-      'sk_shieldwall', 'e_warcry', 'sk_guard', 'sk_gatekeeper', 'sk_brute',
+      'sk_shieldwall', 'e_warcry', 'sk_guard', 'sk_gatekeeper', 'sk_brute', 'e_insight', 'regroup',
     ],
   },
   {
-    chapter: 2, name: '군주의 왕좌', subtitle: '최종 결전', concept: '강력한 주문과 하수인: 죽음의 폭풍, 대마도사와 죽음의 기사',
+    chapter: 2, name: '군주의 왕좌', subtitle: '최종 결전', concept: '군주의 위엄: 지옥불과 업화구, 전설 주문 「군주의 종언」, 대마도사와 죽음의 기사',
     hero: { name: '해골 군주', model: 'Skeleton_Mage', scale: 1.9, health: 40 },
     power: 'legion', startMana: 4,
     deck: [
-      'sk_undying', 'e_grave_frost', ...x('sk_mage', 2), 'sk_plague', 'e_corpse_blast',
-      'e_darkwave', 'e_drain', 'e_warcry', 'sk_shieldwall', 'sk_leech',
+      'sk_undying', 'e_grave_frost', 'sk_mage', 'sk_plague', 'e_corpse_blast', 'e_drain', 'sk_shieldwall', 'sk_leech',
       'e_soul_mirror', 'e_mass_raise', 'e_death_storm', 'sk_reaper', 'e_soulfire', 'sk_deathknight', 'sk_archlich',
+      ...x('e_hellfire', 2), 'e_inferno_orb', 'e_lord_doom', 'e_insight', 'blood_pact', 'supply_wagon',
     ],
   },
 ];

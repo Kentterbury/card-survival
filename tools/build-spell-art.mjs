@@ -52,6 +52,7 @@ const ART = {
   c_raise_shields: 'shield-reflect', c_charge: 'charging-bull', c_counter: 'spiked-armor', c_last_stand: 'castle', c_bastion: 'stone-tower',
   w_bloodcry: 'bloody-sword', w_whirl: 'spinning-blades', w_victory: 'laurels-trophy', w_allout: 'sprint',
   e_coven: 'pentacle', e_death_storm: 'death-juice',
+  e_hellfire: 'fire-zone', e_inferno_orb: 'fire-spell-cast', e_lord_doom: 'crowned-skull',
   h_trap: 'box-trap', h_snare: 'lasso', h_disrupt: 'striking-arrows', h_retreat: 'run', h_weakspot: 'targeted', h_smoke: 'smoke-bomb', h_volley_trap: 'mantrap',
 };
 

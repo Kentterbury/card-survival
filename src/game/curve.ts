@@ -23,7 +23,7 @@ export const EFFECT_POINTS: Record<string, number> = {
 };
 
 /** How far above the curve a card may sit. */
-export const RARITY_ALLOWANCE: Record<Rarity, number> = { basic: 0, common: 0, rare: 1, epic: 2 };
+export const RARITY_ALLOWANCE: Record<Rarity, number> = { basic: 0, common: 0, rare: 1, epic: 2, legendary: 3 };
 /** Extra allowance for hero-exclusive cards (they carry the hero's identity). */
 export const HERO_ALLOWANCE = 1;
 

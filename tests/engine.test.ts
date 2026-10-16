@@ -458,7 +458,7 @@ describe('keywords (2nd batch)', () => {
     place(g, 'crossbowman', 'player', 1, 1);
     playerPhase(g);
     expect(mage.health).toBe(3);
-    expect(wall.health).toBe(7 - 2);
+    expect(wall.health).toBe(wall.maxHealth - 2);
   });
 
   it('재생 heals fully at the start of its side\'s turn', () => {
@@ -980,6 +980,34 @@ describe('enemy commanders', () => {
     g.playCardAs('enemy', 0, { kind: 'none' });
     expect(sk.health).toBe(sk.maxHealth);
     expect(sk.maxHealth).toBe((card('sk_minion') as MinionCard).health + 3);
+  });
+
+  it('업화구 deals 6 and splashes 2 on foes around; 지옥불 burns a lane for 5', () => {
+    const g = enemyGame(2, ['e_inferno_orb', 'e_hellfire']);
+    const t = place(g, 'veteran', 'player', 2, 2);
+    const side = place(g, 'veteran', 'player', 3, 2);
+    const far = place(g, 'veteran', 'player', 0, 0);
+    g.playCardAs('enemy', 0, { kind: 'unit', uid: t.uid });
+    expect(t.health).toBe(Math.max(0, t.maxHealth - 6));
+    expect(side.health).toBe(side.maxHealth - 2);
+    expect(far.health).toBe(far.maxHealth);
+    const hp = g.side('player').hero.health;
+    g.playCardAs('enemy', 0, { kind: 'lane', lane: 4 });
+    expect(g.side('player').hero.health).toBe(hp - 3);
+  });
+
+  it('군주의 종언 (legendary) hits every foe for 5, the hero for 4, and raises a 불사 해골 per kill', () => {
+    const g = enemyGame(2, ['e_lord_doom']);
+    expect(card('e_lord_doom').rarity).toBe('legendary');
+    place(g, 'squire', 'player', 0, 1);
+    place(g, 'squire', 'player', 1, 1);
+    const big = place(g, 'veteran', 'player', 2, 1);
+    big.health = big.maxHealth = 9;
+    const hp = g.side('player').hero.health;
+    g.playCardAs('enemy', 0, { kind: 'none' });
+    expect(g.side('player').hero.health).toBe(hp - 4);
+    expect(big.health).toBe(4);
+    expect(g.unitsOf('enemy').filter((u) => u.defId === 'sk_undying')).toHaveLength(2);
   });
 });
 
