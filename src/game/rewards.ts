@@ -54,8 +54,8 @@ const HERO_BUNDLES: (RewardBundle & { tier: number; hero: string })[] = [
   { id: 'arrowstorm', name: '척후대 총공세', theme: '척후대장 전용 · 전설', hero: 'hunter', tier: 3, cards: ['h_rain', 'h_trapper', 'glider'] },
 ];
 
-/** Every bundle, for data checks. */
-export const ALL_BUNDLES: RewardBundle[] = [...BUNDLES, ...HERO_BUNDLES];
+/** Every bundle with its tier (and hero, for hero bundles), for data checks and docs. */
+export const ALL_BUNDLES: (RewardBundle & { tier: number; hero?: string })[] = [...BUNDLES, ...HERO_BUNDLES];
 
 /**
  * `cleared` is how many stages have been beaten so far (1 after the first stage).

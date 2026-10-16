@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "assets": "node tools/optimize-assets.mjs",
-    "synty": "node tools/optimize-synty.mjs"
+    "synty": "node tools/optimize-synty.mjs",
+    "docs": "vite-node tools/build-card-docs.ts"
   },
   "dependencies": {
     "three": "0.186.1"

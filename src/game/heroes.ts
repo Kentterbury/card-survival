@@ -60,7 +60,7 @@ export const POWERS: Record<string, HeroPower> = {
   },
   howl: {
     id: 'howl', name: '무리 부르기', cost: 3, target: 'slot',
-    text: '새끼 늑대(1/1 <b>기습</b>)를 소환합니다.',
+    text: '새끼 늑대(1/2 <b>기습</b>)를 소환합니다.',
     cast: (api, t) => { if (t.kind === 'slot') api.summon('wolf_pup', t.lane); },
   },
   ooze: {
