@@ -302,6 +302,15 @@ button { font-family: inherit; }
 #audio-ctrl button.off { color: #8a7a66; border-color: #4a3a2a; }
 #audio-ctrl button.off .slash { display: inline; }
 @media (max-height: 520px) { #audio-ctrl { top: 12vh; } }
+#cam-menu { position: fixed; z-index: 121; left: calc(1.2vh + env(safe-area-inset-left)); top: calc(9.5vh + max(4.6vh, 30px) + 1vh); display: flex; flex-direction: column; gap: .6vh; padding: 1vh; border-radius: 1.2vh; border: 2px solid var(--gold-dim); background: #140e0ae6; min-width: 210px; }
+#cam-menu.hidden { display: none; }
+#cam-menu .cam-title { color: var(--gold); font-weight: 800; font-size: clamp(12px, 1.8vh, 16px); padding: 0 .4vh .2vh; }
+#cam-menu button { display: grid; grid-template-columns: auto 1fr; column-gap: .8vh; align-items: center; text-align: left; padding: .7vh 1vh; border-radius: .8vh; border: 1px solid #4a3a2a; background: #241a12; color: #f3e6c8; font: inherit; font-size: clamp(12px, 1.8vh, 16px); cursor: pointer; }
+#cam-menu button b { grid-row: span 2; display: grid; place-items: center; width: 2.6vh; min-width: 20px; aspect-ratio: 1; border-radius: 50%; background: #3a2c1c; color: var(--gold); }
+#cam-menu button small { color: #a8987e; font-size: .78em; }
+#cam-menu button:hover { border-color: var(--gold-dim); }
+#cam-menu button.on { border-color: var(--gold); background: #4a3a1c; }
+@media (max-height: 520px) { #cam-menu { top: calc(12vh + 30px + 1vh); } }
 
 /* ── Merchant ── */
 .gold { color: #ffd34d; font-weight: 700; white-space: nowrap; }

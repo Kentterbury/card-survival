@@ -5,6 +5,19 @@ import { groundTexture, naturePiece, type NatureKind } from './forest';
 
 export type EnvName = 'forest' | 'dungeon';
 
+/**
+ * Camera modes: `classic` looks down the lanes from behind the defenders, `side` watches the
+ * two armies face off left to right from the flank (strategy-RPG battle screen), `iso` is a
+ * near-orthographic three-quarter view from the defenders' right corner.
+ */
+export type CameraMode = 'classic' | 'side' | 'iso';
+export const CAMERA_MODES: CameraMode[] = ['classic', 'side', 'iso'];
+
+interface CamPose { pos: THREE.Vector3; target: THREE.Vector3; fov: number }
+
+/** Scenery past this x stands between the side / iso cameras and the board, so it is hidden. */
+const NEAR_SIDE_X = 6.2;
+
 /** Sky, fog and light colours per board. */
 const MOOD: Record<EnvName, { bg: number; fogNear: number; fogFar: number; sky: number; ground: number; hemi: number; moon: number; moonI: number }> = {
   dungeon: { bg: 0x0d0a10, fogNear: 18, fogFar: 38, sky: 0xb8c4ff, ground: 0x2a1a12, hemi: 0.85, moon: 0xffe2c0, moonI: 1.6 },
@@ -51,6 +64,13 @@ export class Board {
   private moon!: THREE.DirectionalLight;
   private shake = 0;
   private readonly camBase = new THREE.Vector3();
+  private readonly camLook = new THREE.Vector3(0, 0, -5.6);
+  private camMode: CameraMode = 'classic';
+  /** A running camera move between modes (eased over `dur` seconds). */
+  private camMove: { from: CamPose; t: number; dur: number } | null = null;
+  /** Scenery on the camera side of the board, per board (hidden in the side and iso views). */
+  private readonly nearSide = new Map<EnvName, THREE.Object3D[]>();
+  private fogBase = { near: 18, far: 38 };
 
   constructor(canvas: HTMLCanvasElement) {
     // Phones: fewer pixels and a smaller shadow map keep the frame rate up.
@@ -91,12 +111,77 @@ export class Board {
     const h = window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
-    // Pull the camera back on narrow screens so all five lanes stay visible.
-    const portrait = Math.max(0, 1.5 - this.camera.aspect);
-    this.camBase.set(0, 18.5 + portrait * 10, 10.5 + portrait * 6);
-    this.camera.position.copy(this.camBase);
-    this.camera.lookAt(0, 0, -5.6);
+    if (!this.camMove) this.applyPose(this.pose(this.camMode));
     this.camera.updateProjectionMatrix();
+  }
+
+  get cameraMode(): CameraMode {
+    return this.camMode;
+  }
+
+  /** Switches the camera mode; the camera glides there unless `instant`. */
+  setCameraMode(mode: CameraMode, instant = false) {
+    if (mode === this.camMode && !instant) return;
+    const from: CamPose = { pos: this.camBase.clone(), target: this.camLook.clone(), fov: this.camera.fov };
+    this.camMode = mode;
+    // Hide the near-side scenery before the camera swings past it, show it once back behind the lanes.
+    if (mode !== 'classic') this.showNearSide(false);
+    if (instant) {
+      this.camMove = null;
+      this.applyPose(this.pose(mode));
+      this.showNearSide(mode === 'classic');
+    } else {
+      this.camMove = { from, t: 0, dur: 1.1 };
+    }
+  }
+
+  /** Where each mode puts the camera for the current screen shape. */
+  private pose(mode: CameraMode): CamPose {
+    // Narrow (portrait) screens pull every camera back so the whole board stays in view.
+    const portrait = Math.max(0, 1.5 - this.camera.aspect);
+    switch (mode) {
+      case 'classic':
+        return { pos: new THREE.Vector3(0, 18.5 + portrait * 10, 10.5 + portrait * 6), target: new THREE.Vector3(0, 0, -5.6), fov: 42 };
+      case 'side': {
+        // From the right flank: the defenders on the left, the commander's gate on the right.
+        const k = 1 + portrait * 1.1;
+        return { pos: new THREE.Vector3(15 * k, 18 * k, -4.6), target: new THREE.Vector3(-0.4, -2.6, -6.6), fov: 42 };
+      }
+      case 'iso': {
+        // A long lens from far away flattens the perspective into an isometric look.
+        const yaw = Math.PI / 4;
+        const pitch = Math.atan(1 / Math.SQRT2);
+        const dist = 66 * (1 + portrait * 0.9);
+        const target = new THREE.Vector3(0, -1.4, -6.4);
+        const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+        return { pos: target.clone().addScaledVector(dir, dist), target, fov: 17 };
+      }
+    }
+  }
+
+  private applyPose(p: CamPose) {
+    this.camBase.copy(p.pos);
+    this.camLook.copy(p.target);
+    if (this.camera.fov !== p.fov) {
+      this.camera.fov = p.fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.camera.position.copy(this.camBase);
+    this.camera.lookAt(this.camLook);
+    // Far cameras push the fog back by how much further away they are than the classic one.
+    const fog = this.scene.fog as THREE.Fog;
+    const classic = this.pose('classic');
+    const extra = Math.max(0, this.camBase.distanceTo(this.camLook) - classic.pos.distanceTo(classic.target));
+    fog.near = this.fogBase.near + extra;
+    fog.far = this.fogBase.far + extra;
+  }
+
+  private showNearSide(show: boolean) {
+    for (const o of this.nearSide.get(this.env!) ?? []) {
+      o.traverse((c) => {
+        if ((c as THREE.Mesh).isMesh || (c as THREE.Sprite).isSprite) c.visible = show;
+      });
+    }
   }
 
   /** Shows a board, building it the first time, and sets its sky and light colours. */
@@ -110,15 +195,17 @@ export class Board {
       this.building = group;
       await (env === 'forest' ? this.buildForest() : this.buildDungeon());
       this.building = this.scene;
+      this.nearSide.set(env, group.children.filter((o) => o.position.x > NEAR_SIDE_X && o.position.z > -16.5 && !(o as THREE.Light).isLight));
     }
     for (const [name, g] of this.envs) g.visible = name === env;
     this.env = env;
+    this.showNearSide(this.camMode === 'classic' && !this.camMove);
     const m = MOOD[env];
     (this.scene.background as THREE.Color).setHex(m.bg);
     const fog = this.scene.fog as THREE.Fog;
     fog.color.setHex(m.bg);
-    fog.near = m.fogNear;
-    fog.far = m.fogFar;
+    this.fogBase = { near: m.fogNear, far: m.fogFar };
+    if (!this.camMove) this.applyPose(this.pose(this.camMode));
     this.hemi.color.setHex(m.sky);
     this.hemi.groundColor.setHex(m.ground);
     this.hemi.intensity = m.hemi;
@@ -543,6 +630,26 @@ export class Board {
         sp.userData.drift += dt;
         sp.position.y = 0.8 + Math.sin(sp.userData.drift * 0.7) * 0.5 + 0.6;
         (sp as THREE.Sprite).material.rotation += dt * 0.15;
+      }
+    }
+    if (this.camMove) {
+      const mv = this.camMove;
+      mv.t = Math.min(1, mv.t + dt / mv.dur);
+      const k = mv.t < 0.5 ? 4 * mv.t ** 3 : 1 - (-2 * mv.t + 2) ** 3 / 2;
+      const to = this.pose(this.camMode);
+      // Swing round the board's centre rather than cutting straight through it.
+      const centre = new THREE.Vector3(0, 0, -6);
+      const a = mv.from.pos.clone().sub(centre);
+      const b = to.pos.clone().sub(centre);
+      const pos = new THREE.Vector3().lerpVectors(a, b, k).setLength(THREE.MathUtils.lerp(a.length(), b.length(), k)).add(centre);
+      this.applyPose({
+        pos,
+        target: new THREE.Vector3().lerpVectors(mv.from.target, to.target, k),
+        fov: THREE.MathUtils.lerp(mv.from.fov, to.fov, k),
+      });
+      if (mv.t >= 1) {
+        this.camMove = null;
+        if (this.camMode === 'classic') this.showNearSide(true);
       }
     }
     if (this.shake > 0) {

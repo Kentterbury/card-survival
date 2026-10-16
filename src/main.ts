@@ -11,7 +11,7 @@ import {
   type GameEvent, type HitTarget, type Side, type Target, type Unit,
 } from './game/types';
 import { CHARACTER_MODELS, preloadAll, useSynty } from './render/assets';
-import { Board, cellPos, ENEMY_HERO_POS, HERO_POS } from './render/board';
+import { Board, CAMERA_MODES, cellPos, ENEMY_HERO_POS, HERO_POS, type CameraMode } from './render/board';
 import { Fx } from './render/fx';
 import { renderPortraits } from './render/portraits';
 import { updateTweens, wait } from './render/tween';
@@ -1113,6 +1113,42 @@ class App {
     $('book-btn').addEventListener('click', () => { sound.play('click'); this.cardBook.open(); });
     sfx.addEventListener('click', () => { sound.setSfx(!sound.sfxOn); sound.play('click'); render(); });
     render();
+    this.bindCamera();
+  }
+
+  /** The camera button opens the three camera modes; the choice is remembered. */
+  private bindCamera() {
+    const KEY = 'card-survival-camera';
+    const menu = $('cam-menu');
+    const buttons = [...menu.querySelectorAll<HTMLButtonElement>('button[data-mode]')];
+    const mark = () => buttons.forEach((b) => b.classList.toggle('on', b.dataset.mode === this.board.cameraMode));
+    try {
+      const saved = localStorage.getItem(KEY) as CameraMode | null;
+      if (saved && CAMERA_MODES.includes(saved)) this.board.setCameraMode(saved, true);
+    } catch { /* storage blocked: keep the default */ }
+    const choose = (mode: CameraMode) => {
+      this.board.setCameraMode(mode);
+      try { localStorage.setItem(KEY, mode); } catch { /* ignore */ }
+      mark();
+    };
+    $('cam-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      sound.play('click');
+      mark();
+      menu.classList.toggle('hidden');
+    });
+    for (const b of buttons) {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sound.play('click');
+        choose(b.dataset.mode as CameraMode);
+        menu.classList.add('hidden');
+      });
+    }
+    window.addEventListener('pointerdown', (e) => {
+      const t = e.target as Element;
+      if (!menu.contains(t) && !t.closest?.('#cam-btn')) menu.classList.add('hidden');
+    });
   }
 
   private async endTurn() {
