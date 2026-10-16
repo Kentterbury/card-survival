@@ -1,5 +1,6 @@
 import type { CharModel } from '../game/types';
 import type { AnimSet } from './assets';
+import GRIP_OVERRIDES from './gripOverrides.json';
 
 /**
  * The optional Synty asset set (licensed, kept in a private repository; see docs/SYNTY.md).
@@ -141,7 +142,44 @@ export const DEFAULT_LOOKS: Record<CharModel, Look> = {
   Skeleton_Mage: DG('Tormented_Soul', 1, 'SM_Wep_Staff_01'),
 };
 
-/** Grip of each held item in the hand bone's space (Euler XYZ, degrees), tuned by eye. */
+/**
+ * How a held item sits in the hand bone: offset (centimetres, the rig's unit), rotation (Euler XYZ,
+ * degrees) and a size multiplier. Tuned with the grip editor (grip.html); its saved values live in
+ * gripOverrides.json, by weapon file (`<file>|<hand>`, every character holding it) or by look
+ * (`<look key>|<hand>`, one character).
+ */
+export interface GripSpec {
+  pos: [number, number, number];
+  rot: [number, number, number];
+  scale: number;
+}
+
+type GripTable = { weapons: Record<string, Partial<GripSpec>>; looks: Record<string, Partial<GripSpec>> };
+
+/** The grip editor's unsaved tweaks, previewed in this browser only. */
+export const GRIP_PREVIEW_KEY = 'card-survival-grip-preview';
+
+function previewTable(): GripTable | null {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(GRIP_PREVIEW_KEY) : null;
+    return raw ? (JSON.parse(raw) as GripTable) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The full grip for a look's weapon: built-in default, then saved overrides, then the editor preview. */
+export function gripFor(key: string | undefined, file: string, hand: 'r' | 'l'): GripSpec {
+  const spec: GripSpec = { pos: [0, 0, 0], rot: grip(file, hand), scale: 1 };
+  for (const table of [GRIP_OVERRIDES as GripTable, previewTable()]) {
+    if (!table) continue;
+    Object.assign(spec, table.weapons?.[`${file}|${hand}`] ?? {});
+    if (key) Object.assign(spec, table.looks?.[`${key}|${hand}`] ?? {});
+  }
+  return spec;
+}
+
+/** Built-in grip rotation of each held item (Euler XYZ, degrees), before overrides. */
 export function grip(file: string, hand: 'r' | 'l'): [number, number, number] {
   if (file.includes('Crossbow')) return [0, -90, 0];
   if (file.includes('Bow')) return [0, 90, 0];

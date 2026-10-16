@@ -5,8 +5,8 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { isCreature, isStructure, type CharModel, type ModelId } from '../game/types';
 import { CREATURE_LOOKS, preloadCreatures } from './creatures';
 import {
-  DEFAULT_LOOKS, grip, KAYKIT_BOUNDS, LOOKS, SYNTY_ANIMS, SYNTY_CHAR_SCALE, SYNTY_PACKS, SYNTY_STATICS, SYNTY_TEXTURES,
-  SYNTY_WEAPON_FILES, type Look,
+  DEFAULT_LOOKS, gripFor, KAYKIT_BOUNDS, LOOKS, SYNTY_ANIMS, SYNTY_CHAR_SCALE, SYNTY_PACKS, SYNTY_STATICS, SYNTY_TEXTURES,
+  SYNTY_WEAPON_FILES, type GripSpec, type Look,
 } from './syntySet';
 
 const BASE = `${import.meta.env.BASE_URL}assets/`;
@@ -248,6 +248,13 @@ export function artKey(key: string | undefined, model: ModelId): string {
   return useSynty && key && LOOKS[key] ? key : model;
 }
 
+/** Puts a held item in its grip (weapons are in metres, the rig in centimetres: ×100). */
+export function applyGrip(weapon: THREE.Object3D, g: GripSpec) {
+  weapon.position.set(...g.pos);
+  weapon.rotation.set(...(g.rot.map((d) => THREE.MathUtils.degToRad(d)) as [number, number, number]));
+  weapon.scale.setScalar(100 * g.scale);
+}
+
 async function instantiateSyntyCharacter(model: CharModel, key?: string): Promise<CharacterInstance> {
   const look = lookFor(key, model);
   const gltf = await loadSynty(`characters/Pack_${look.pack}.glb`);
@@ -270,10 +277,10 @@ async function instantiateSyntyCharacter(model: CharModel, key?: string): Promis
     const bone = inner.getObjectByName(hand === 'r' ? 'Hand_R' : 'Hand_L');
     if (!bone) continue;
     const weapon = (await loadSynty(`weapons/${file}.glb`)).scene.clone(true);
-    weapon.rotation.set(...(grip(file, hand).map((d) => THREE.MathUtils.degToRad(d)) as [number, number, number]));
-    // Weapons are in metres; the rig is in centimetres.
-    weapon.scale.setScalar(100);
+    applyGrip(weapon, gripFor(key, file, hand));
     weapon.userData.heldWeapon = true;
+    weapon.userData.weaponFile = file;
+    weapon.userData.hand = hand;
     bone.add(weapon);
   }
   // Callers scale and turn the returned root, so keep the unit conversion one level down.

@@ -90,4 +90,4 @@ node tools/optimize-assets.mjs <KayKit 저장소들이 있는 폴더>
 - 변환본은 비공개 저장소 `Kentterbury/cardproject`에 있고, Pages 배포 때 `ASSET_TOKEN` 시크릿으로 받아 옵니다.
 - 토큰이 없으면 KayKit으로 배포됩니다.
 
-설정 방법과 변환 파이프라인은 [docs/SYNTY.md](docs/SYNTY.md)에 있습니다.
+설정 방법과 변환 파이프라인은 [docs/SYNTY.md](docs/SYNTY.md)에 있습니다. 손에 든 무기 위치는 무기 위치 편집기(`grip.html`, 타이틀 화면 아래 링크)로 고칠 수 있습니다.

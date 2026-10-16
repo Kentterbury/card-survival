@@ -119,3 +119,14 @@ rm -rf public/synty && cp -r ../cardproject/WebExport/card-survival/synty public
 | `Death_Undead.fbx` | Zombie Dying | 해골 졸개, 불사 해골, 되살아나는 해골, 해골 전사·대장 등 |
 
 매핑은 `syntySet.ts`의 `DEATHS`에서 바꿀 수 있습니다.
+
+## 무기 위치 편집기 (grip.html)
+
+손에 든 무기가 어색하면 `grip.html`(배포 사이트: `…/card-survival/grip.html`, 타이틀 화면 아래 링크)에서 고친다. Synty 에셋이 있어야 열린다.
+
+- 왼쪽 목록: 무기를 든 영웅·지휘관·카드 캐릭터(검색, 분류). 고친 캐릭터는 ● 표시.
+- 오른쪽: 오른손/왼손 무기 고르기 → 위치(cm)·회전(도)·크기를 슬라이더나 숫자로 고치거나, 화면의 기즈모 화살표(이동)·고리(회전)를 끌어서 고친다. 「원래대로」로 되돌린다.
+- 적용 범위: **이 무기 전체**(그 무기를 든 모든 캐릭터) 또는 **이 캐릭터만**(무기 전체 설정보다 우선).
+- 애니메이션: 모든 동작을 골라 재생·멈춤·0.25배속·시간 끌기. 카메라: 왼쪽 드래그 회전, 오른쪽 드래그 이동, 휠 확대, 버튼(전신·무기 확대·정면·게임 시점).
+- 저장: 고친 값은 그 브라우저의 localStorage(`card-survival-grip-preview`)에 바로 저장되고, 같은 브라우저로 게임을 열면 미리 적용되어 보인다. 모두에게 적용하려면 화면의 JSON을 복사(또는 파일로 받기)해서 `src/render/gripOverrides.json`에 넣는다.
+- 적용 순서: 기본 손잡이(`syntySet.ts`의 `grip()`) → `gripOverrides.json`(무기별, 캐릭터별) → 브라우저 미리보기. 값은 손 뼈 기준이며 위치 단위는 cm(리그 단위)다.
