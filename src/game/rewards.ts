@@ -62,7 +62,8 @@ export const ALL_BUNDLES: RewardBundle[] = [...BUNDLES, ...HERO_BUNDLES];
  * Offers one bundle of the hero's own cards (the best tier unlocked) and two general ones.
  */
 export function rollRewards(rng: Rng, cleared: number, hero = ''): RewardBundle[] {
-  const maxTier = cleared >= 3 ? 3 : cleared >= 2 ? 2 : 1;
+  // Better bundles by chapter: forest 1, dungeon 2 (from the third clear), cave 3 (from the sixth).
+  const maxTier = cleared >= 6 ? 3 : cleared >= 3 ? 2 : 1;
   const mine = rng.shuffle(HERO_BUNDLES.filter((b) => b.hero === hero && b.tier <= maxTier)).sort((a, b) => b.tier - a.tier);
   const newest = rng.shuffle(BUNDLES.filter((b) => b.tier === maxTier));
   const rest = rng.shuffle(BUNDLES.filter((b) => b.tier <= maxTier && b !== newest[0]));

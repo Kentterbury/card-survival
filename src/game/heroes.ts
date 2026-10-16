@@ -1,4 +1,4 @@
-import type { EffectApi } from './cards';
+import { rootFront, trapAhead, type EffectApi } from './cards';
 import type { ModelId, Target, TargetKind } from './types';
 
 /** A hero's 지휘술: once per turn, for its own mana cost. */
@@ -57,6 +57,21 @@ export const POWERS: Record<string, HeroPower> = {
     id: 'legion', name: '망자 군단', cost: 6, target: 'slot',
     text: '불사 해골을 소환합니다.',
     cast: (api, t) => { if (t.kind === 'slot') api.summon('sk_undying', t.lane); },
+  },
+  howl: {
+    id: 'howl', name: '무리 부르기', cost: 3, target: 'slot',
+    text: '새끼 늑대(1/1 <b>기습</b>)를 소환합니다.',
+    cast: (api, t) => { if (t.kind === 'slot') api.summon('wolf_pup', t.lane); },
+  },
+  ooze: {
+    id: 'ooze', name: '점액 분출', cost: 4, target: 'none',
+    text: '가장 앞선 적 하수인을 1턴 동안 <b>속박</b>합니다.',
+    cast: (api) => rootFront(api, 1),
+  },
+  snare: {
+    id: 'snare', name: '덫 놓기', cost: 5, target: 'none',
+    text: '가장 앞선 적 하수인이 밟을 칸에 <b>덫</b>을 놓습니다.',
+    cast: (api) => { trapAhead(api); },
   },
   curse: {
     id: 'curse', name: '저주의 손길', cost: 4, target: 'foe',

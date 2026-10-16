@@ -4,10 +4,10 @@ import { card, CARDS, type EffectApi, type MinionCard } from './cards';
 import { rollRewards } from './rewards';
 import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, rollShop, stageGold, type ShopState } from './shop';
 import { Rng } from './rng';
-import { STAGES, type EnemyPower } from './stages';
+import { OLD_SAVE_STAGE_SHIFT, shopAfter, STAGES, type EnemyPower } from './stages';
 import {
   FORMATION_BONUS, forward, homeRow, isStructure, LANES, LAST_ROW, MANA_PER_TURN, MAX_HAND, MAX_MANA, other, RANGED_RANGE,
-  THORNS_DAMAGE, VANGUARD_BONUS,
+  THORNS_DAMAGE, VANGUARD_BONUS, VENOM_TURNS,
   type CardInstance, type GameEvent, type HitTarget, type Keyword, type PendingChoice, type Phase, type RewardBundle, type Side, type SideState,
   type Target, type Unit,
 } from './types';
@@ -17,11 +17,14 @@ export const WET_TURNS = 3;
 /** Extra damage a unit standing on a wet cell takes from every hit. */
 export const WET_BONUS = 1;
 /** Keywords an illusion does not copy: it has no real body to shield, heal or hit back with. */
-const ILLUSION_DROPS: Keyword[] = ['ward', 'undying', 'regenerate', 'thorns', 'enrage', 'lifesteal', 'cleave', 'pierce', 'knockback'];
+const ILLUSION_DROPS: Keyword[] = ['ward', 'undying', 'regenerate', 'thorns', 'enrage', 'lifesteal', 'cleave', 'pierce', 'knockback', 'split', 'venom'];
+/** Damage a sprung trap deals; it also roots the unit for TRAP_ROOT turns. */
+export const TRAP_DAMAGE = 1;
+export const TRAP_ROOT = 1;
 
 export const HERO_MAX_HEALTH = 30;
 /** Health restored by resting at the camp between stages. */
-export const CAMP_HEAL = 12;
+export const CAMP_HEAL = 14;
 
 /** Where a saved run resumes: the start of `stage`, with this deck and health. */
 export interface RunSave {
@@ -32,6 +35,14 @@ export interface RunSave {
   health: number;
   /** Missing in saves from before gold existed. */
   gold?: number;
+  /** 2 since the forest chapter put three stages in front; missing in older saves. */
+  v?: number;
+}
+
+/** Brings an older save's stage numbers in line with the current stage list. */
+export function migrateSave(save: RunSave): RunSave {
+  if ((save.v ?? 1) >= 2) return save;
+  return { ...save, v: 2, stage: save.stage + OLD_SAVE_STAGE_SHIFT, stagesCleared: save.stagesCleared + OLD_SAVE_STAGE_SHIFT };
 }
 
 export interface GameState {
@@ -55,6 +66,8 @@ export interface GameState {
   shop: ShopState | null;
   /** 젖은 칸: left by a broken or melted 빙벽; units there take +1 from every hit. */
   wet: { lane: number; row: number; turns: number }[];
+  /** 덫: set by `side`; the first foe to step in takes damage and is rooted. */
+  traps: { lane: number; row: number; side: Side }[];
 }
 
 export class Game {
@@ -78,6 +91,7 @@ export class Game {
    * continues a saved run at the start of its stage.
    */
   startRun(deck?: string[], heroId = 'captain', resume?: RunSave): GameEvent[] {
+    if (resume) resume = migrateSave(resume);
     const hero = heroDef(resume?.hero ?? heroId);
     const maxHealth = hero.health;
     this.state = {
@@ -90,7 +104,7 @@ export class Game {
         player: this.emptySide({ name: hero.name, model: hero.model, scale: 1.3, health: resume?.health ?? maxHealth, maxHealth }),
         enemy: this.emptySide({ name: '', model: 'Skeleton_Minion', scale: 1, health: 1, maxHealth: 1 }),
       },
-      units: [], rewards: [], choice: null, wet: [],
+      units: [], rewards: [], choice: null, wet: [], traps: [],
     };
     return this.collect(() => this.beginStage());
   }
@@ -100,7 +114,7 @@ export class Game {
     const s = this.state;
     // At the camp the reward is already in the deck, so resume at the next stage.
     const stage = s.phase === 'camp' ? s.stage + 1 : s.stage;
-    return { hero: s.heroId, deck: [...s.deckList], stage, stagesCleared: s.stagesCleared, health: s.sides.player.hero.health, gold: s.gold };
+    return { hero: s.heroId, deck: [...s.deckList], stage, stagesCleared: s.stagesCleared, health: s.sides.player.hero.health, gold: s.gold, v: 2 };
   }
 
   /** The 지휘술 a side uses. */
@@ -116,7 +130,8 @@ export class Game {
     s.deckList.push(...bundle.cards);
     s.rewards = [];
     s.phase = 'camp';
-    s.shop = rollShop(this.rng, s.heroId);
+    // The merchant only turns up once a chapter.
+    s.shop = shopAfter(s.stage) ? rollShop(this.rng, s.heroId) : null;
     return [];
   }
 
@@ -208,6 +223,7 @@ export class Game {
     s.sides.enemy.drawPile = this.makePile(st.deck);
     s.units = [];
     s.wet = [];
+    s.traps = [];
     s.turn = 0;
     s.choice = null;
     // Hero armor does not carry over between stages.
@@ -396,6 +412,15 @@ export class Game {
         }
         return out;
       }
+      case 'trapCell': {
+        const out: Target[] = [];
+        for (let row = 0; row <= LAST_ROW; row++) {
+          for (let lane = 0; lane < LANES; lane++) {
+            if (!this.unitAt(lane, row) && !this.trapAt(lane, row)) out.push({ kind: 'cell', lane, row });
+          }
+        }
+        return out;
+      }
       default: return [];
     }
   }
@@ -463,6 +488,7 @@ export class Game {
     const order = this.unitsOf(side).sort((a, b) => (b.row - a.row) * dir || a.lane - b.lane);
     for (const u of order) {
       if (u.health <= 0) continue;
+      const rooted = this.tickRoot(u);
       if (u.frozen) {
         u.frozenTurns = (u.frozenTurns ?? 1) - 1;
         if (u.frozenTurns <= 0) {
@@ -482,12 +508,13 @@ export class Game {
         if (this.checkOutcome()) return;
         // 돌파: a melee kill lets the attacker step into the cell it cleared,
         // so a stream of cheap blockers cannot stall a lane forever.
-        if (cell && victim!.health <= 0 && target.dist === 1 && u.health > 0 && u.speed > 0 && !this.unitAt(cell.lane, cell.row)) {
+        if (cell && victim!.health <= 0 && target.dist === 1 && u.health > 0 && u.speed > 0 && !rooted && !this.unitAt(cell.lane, cell.row)) {
           const from = u.row;
           u.row = cell.row;
           this.emit({ type: 'move', uid: u.uid, lane: u.lane, from, to: u.row });
+          this.springTrap(u);
         }
-      } else {
+      } else if (!rooted) {
         this.advance(u);
       }
       this.resolveDeaths();
@@ -555,7 +582,9 @@ export class Game {
     if (typeof hit === 'string') {
       dealt += this.damageHero(hit, atk);
     } else {
-      dealt += this.damageUnit(hit, atk);
+      const first = this.damageUnit(hit, atk);
+      dealt += first;
+      if (first > 0 && u.keywords.has('venom')) this.poisonUnit(hit, VENOM_TURNS);
       if (u.keywords.has('cleave')) {
         for (const l of [hit.lane - 1, hit.lane + 1]) {
           const n = this.unitAt(l, hit.row);
@@ -577,6 +606,7 @@ export class Game {
       if (!ranged && hit.attack > 0 && !hit.frozen && !hit.keywords.has('illusion')) {
         const back = this.damageUnit(u, this.attackOf(hit));
         if (back > 0 && hit.keywords.has('lifesteal')) this.healHero(hit.side, back);
+        if (back > 0 && hit.keywords.has('venom')) this.poisonUnit(u, VENOM_TURNS);
       }
       if (u.keywords.has('knockback') && hit.health > 0) this.shove(hit.uid, 1, dir);
     }
@@ -592,8 +622,76 @@ export class Game {
       if (u.keywords.has('flying')) while (next >= 0 && next <= LAST_ROW && this.unitAt(u.lane, next)) next += dir;
       if (next < 0 || next > LAST_ROW || this.unitAt(u.lane, next)) break;
       u.row = next;
+      // A trap stops the march on its cell.
+      if (this.trapFor(u)) break;
     }
     if (u.row !== from) this.emit({ type: 'move', uid: u.uid, lane: u.lane, from, to: u.row });
+    this.springTrap(u);
+  }
+
+  /** 속박: counts down one of the unit's own phases; true while it still cannot move this phase. */
+  private tickRoot(u: Unit): boolean {
+    if (!u.rootedTurns) return false;
+    u.rootedTurns--;
+    if (u.rootedTurns <= 0) {
+      u.rootedTurns = undefined;
+      // Freed after this phase: it still stands still this time.
+      this.emit({ type: 'root', uid: u.uid, turns: 0 });
+    }
+    return true;
+  }
+
+  private root(u: Unit, turns: number) {
+    if (u.health <= 0 || isStructure(u.model)) return;
+    u.rootedTurns = Math.max(u.rootedTurns ?? 0, turns);
+    this.emit({ type: 'root', uid: u.uid, turns: u.rootedTurns });
+  }
+
+  trapAt(lane: number, row: number) {
+    return this.state.traps.find((t) => t.lane === lane && t.row === row);
+  }
+
+  /** The trap under a unit that would catch it (set by its foes; flyers pass over). */
+  private trapFor(u: Unit) {
+    const t = this.trapAt(u.lane, u.row);
+    return t && t.side !== u.side && !u.keywords.has('flying') && !isStructure(u.model) ? t : undefined;
+  }
+
+  private springTrap(u: Unit) {
+    const t = this.trapFor(u);
+    if (!t || u.health <= 0) return;
+    this.state.traps = this.state.traps.filter((x) => x !== t);
+    this.emit({ type: 'trap', lane: t.lane, row: t.row, on: false });
+    this.emit({ type: 'trapSprung', uid: u.uid, lane: t.lane, row: t.row });
+    this.damageUnit(u, TRAP_DAMAGE);
+    this.root(u, TRAP_ROOT);
+  }
+
+  private placeTrap(side: Side, lane: number, row: number): boolean {
+    if (lane < 0 || lane >= LANES || row < 0 || row > LAST_ROW || this.unitAt(lane, row) || this.trapAt(lane, row)) return false;
+    this.state.traps.push({ lane, row, side });
+    this.emit({ type: 'trap', lane, row, on: true });
+    return true;
+  }
+
+  private poisonUnit(u: Unit, turns: number) {
+    if (u.health <= 0 || isStructure(u.model)) return;
+    u.poison = Math.max(u.poison ?? 0, turns);
+    this.emit({ type: 'poison', uid: u.uid, turns: u.poison });
+  }
+
+  /** 분열: the pieces land on the cell it died on and the free cell beside (or behind) it. */
+  private split(u: Unit) {
+    const into = (card(u.defId) as MinionCard).splitInto ?? 'slime_small_token';
+    const back = u.row - forward(u.side);
+    const sides = this.rng.shuffle([[u.lane - 1, u.row], [u.lane + 1, u.row]]);
+    const cells = [[u.lane, u.row], ...sides, [u.lane, back]];
+    this.emit({ type: 'split', lane: u.lane, row: u.row });
+    let made = 0;
+    for (const [lane, row] of cells) {
+      if (made >= 2) break;
+      if (this.summonUnit(u.side, into, lane, row)) made++;
+    }
   }
 
   // ── Shared mechanics ─────────────────────────────────────────
@@ -637,6 +735,7 @@ export class Game {
       u.lane = lane;
       u.row = row;
       this.emit({ type: 'shift', uid, lane, row });
+      this.springTrap(u);
       return;
     }
     const hit = Math.ceil(u.health / 2);
@@ -743,6 +842,7 @@ export class Game {
       // A broken or melted 빙벽 leaves its cell wet.
       for (const u of dead) if (u.model === 'ice_wall') this.soak(u.lane, u.row);
       for (const u of dead) if (!u.keywords.has('illusion')) (card(u.defId) as MinionCard).onDeath?.(this.apis[u.side], u);
+      for (const u of dead) if (u.keywords.has('split')) this.split(u);
     }
   }
 
@@ -840,8 +940,10 @@ export class Game {
       const next = u.row + dir;
       if (next < 0 || next > LAST_ROW || this.unitAt(u.lane, next)) break;
       u.row = next;
+      if (this.trapFor(u)) break;
     }
     if (u.row !== from) this.emit({ type: 'push', uid, lane: u.lane, from, to: u.row });
+    this.springTrap(u);
   }
 
   private emit(e: GameEvent) {
@@ -897,9 +999,20 @@ export class Game {
       telekinesis: (uid, lane, row) => this.telekinesis(uid, lane, row),
       poison: (uid, turns) => {
         const u = this.unit(uid);
-        if (!u || u.health <= 0 || isStructure(u.model)) return;
-        u.poison = Math.max(u.poison ?? 0, turns);
-        this.emit({ type: 'poison', uid, turns: u.poison });
+        if (u) this.poisonUnit(u, turns);
+      },
+      root: (uid, turns) => {
+        const u = this.unit(uid);
+        if (u) this.root(u, turns);
+      },
+      placeTrap: (lane, row) => this.placeTrap(side, lane, row),
+      weaken: (uid, amount) => {
+        const u = this.unit(uid);
+        if (!u || u.health <= 0) return;
+        const cut = Math.min(u.attack, amount);
+        if (cut <= 0) return;
+        u.attack -= cut;
+        this.emit({ type: 'buff', uid, attack: -cut, health: 0 });
       },
       sacrifice: (uid) => {
         const u = this.unit(uid);
@@ -923,6 +1036,11 @@ export class Game {
         const u = this.unit(uid);
         if (!u || u.health <= 0 || u.keywords.has(keyword)) return;
         u.keywords.add(keyword);
+        // Movement keywords (질주, 고정, 사격) change how it moves and reaches.
+        if (!isStructure(u.model)) {
+          u.speed = unitSpeed(u.attack, u.keywords);
+          u.range = u.keywords.has('ranged') ? RANGED_RANGE : 1;
+        }
         this.emit({ type: 'keywordGained', uid, keyword });
       },
       gainMana: (amount) => {

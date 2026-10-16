@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { isStructure, type ModelId, type Side, type Unit } from '../game/types';
+import { isCreature, isStructure, type ModelId, type Side, type Unit } from '../game/types';
+import { makeCreature, type CreatureRig } from './creatures';
 import { makeIceWall } from './iceWall';
 import { animsFor, instantiateCharacter, instantiateStatic, useSynty, type AnimSet } from './assets';
 import { deathClipsFor } from './syntySet';
@@ -24,6 +25,10 @@ export class UnitView {
   private current: THREE.AnimationAction | null = null;
   private ward: THREE.Mesh | null = null;
   private ice: THREE.Mesh | null = null;
+  private vines: THREE.Group | null = null;
+  /** 이글이글: the burning aura of elite units. */
+  private aura: { sprites: THREE.Sprite[]; glow: THREE.Mesh; t: number } | null = null;
+  private creature: CreatureRig | null = null;
   private flashMats: THREE.MeshStandardMaterial[] = [];
   dead = false;
   /** Flyers hover above the floor and bob gently. */
@@ -57,6 +62,11 @@ export class UnitView {
       this.model.scale.setScalar(0.58);
     } else if (this.modelId === 'ice_wall') {
       this.model = makeIceWall();
+    } else if (isCreature(this.modelId)) {
+      this.creature = makeCreature(this.modelId, this.look);
+      this.model = this.creature.root;
+      this.model.scale.setScalar(UNIT_SCALE * this.scale);
+      this.flashMats.push(...this.creature.mats);
     } else {
       const inst = await instantiateCharacter(this.modelId, this.look);
       this.model = inst.root;
@@ -131,15 +141,74 @@ export class UnitView {
       this.ice.position.y = 1.25 * this.scale;
       this.group.add(this.ice);
       if (this.current) this.current.timeScale = 0;
+      this.creature?.setPaused(true);
     } else if (!on && this.ice) {
       this.group.remove(this.ice);
       this.ice = null;
       if (this.current) this.current.timeScale = 1;
+      this.creature?.setPaused(false);
     }
   }
 
   get frozen() {
     return this.ice !== null;
+  }
+
+  /** 속박: vines coiled round the feet. */
+  setRooted(on: boolean) {
+    if (on && !this.vines) {
+      const g = new THREE.Group();
+      const vine = new THREE.MeshStandardMaterial({ color: 0x3f7a2a, roughness: 0.8, flatShading: true });
+      const leaf = new THREE.MeshStandardMaterial({ color: 0x6fc24a, roughness: 0.7, flatShading: true, side: THREE.DoubleSide });
+      for (let i = 0; i < 3; i++) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55 + i * 0.06, 0.07, 5, 14), vine);
+        ring.rotation.x = Math.PI / 2 + (i - 1) * 0.25;
+        ring.rotation.y = i * 0.9;
+        ring.position.y = 0.2 + i * 0.22;
+        g.add(ring);
+      }
+      for (let i = 0; i < 6; i++) {
+        const l = new THREE.Mesh(new THREE.CircleGeometry(0.13, 5), leaf);
+        const a = (i / 6) * Math.PI * 2;
+        l.position.set(Math.sin(a) * 0.6, 0.3 + (i % 3) * 0.2, Math.cos(a) * 0.6);
+        l.lookAt(l.position.clone().multiplyScalar(2));
+        g.add(l);
+      }
+      g.scale.setScalar(Math.min(1.6, this.scale));
+      this.vines = g;
+      this.group.add(g);
+      void tween(0.3, (k) => g.scale.setScalar(Math.min(1.6, this.scale) * ease.outBack(k)));
+    } else if (!on && this.vines) {
+      const g = this.vines;
+      this.vines = null;
+      void tween(0.3, (k) => g.scale.setScalar(Math.min(1.6, this.scale) * (1 - k))).then(() => this.group.remove(g));
+    }
+  }
+
+  /**
+   * Elites burn with a flickering aura: tongues of flame rising round the body. Sprites only, no
+   * light, so summoning one never changes the scene's light count (that would recompile shaders).
+   */
+  setElite(on: boolean) {
+    if (!on || this.aura) return;
+    const sprites: THREE.Sprite[] = [];
+    const n = 14;
+    for (let i = 0; i < n; i++) {
+      const sp = new THREE.Sprite(auraMaterial());
+      sp.userData.phase = (i / n) * 1.4 + Math.random() * 0.2;
+      sp.userData.angle = (i / n) * Math.PI * 2;
+      sp.renderOrder = 3;
+      this.group.add(sp);
+      sprites.push(sp);
+    }
+    // A hot glow on the ground under it.
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(1.1 * this.scale, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
+      map: glowTexture(), color: 0xff7a2a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    glow.position.y = 0.08;
+    glow.renderOrder = 2;
+    this.group.add(glow);
+    this.aura = { sprites, glow, t: 0 };
   }
 
   private clip(name: string) {
@@ -179,23 +248,32 @@ export class UnitView {
   }
 
   attackAnim(): Promise<void> {
+    if (this.creature) return this.creature.attack();
     if (!this.anims) return this.bump();
     return this.playOnce(this.anims.attack, 0.45);
   }
 
   hitAnim() {
     this.flash(0xff3b30);
-    if (this.anims && !this.frozen) void this.playOnce(this.anims.hit, 1);
+    if (this.creature) this.creature.hit();
+    else if (this.anims && !this.frozen) void this.playOnce(this.anims.hit, 1);
     else void this.bump();
   }
 
   flash(color: number) {
-    for (const m of this.flashMats) {
-      if (!('emissive' in m)) continue;
+    const mats = this.flashMats.filter((m) => 'emissive' in m);
+    // Remember each material's own glow (slime jelly, glowing eyes) to fade back to it.
+    for (const m of mats) {
+      m.userData.glow ??= { color: m.emissive.getHex(), intensity: m.emissiveIntensity };
       m.emissive.setHex(color);
     }
     void tween(0.3, (k) => {
-      for (const m of this.flashMats) if ('emissiveIntensity' in m) m.emissiveIntensity = 1.2 * (1 - k);
+      for (const m of mats) m.emissiveIntensity = 1.2 * (1 - k);
+    }).then(() => {
+      for (const m of mats) {
+        m.emissive.setHex(m.userData.glow.color);
+        m.emissiveIntensity = m.userData.glow.intensity;
+      }
     });
   }
 
@@ -205,7 +283,9 @@ export class UnitView {
   }
 
   async spawnAnim() {
-    if (this.anims?.spawn) {
+    if (this.creature) {
+      await this.creature.spawn();
+    } else if (this.anims?.spawn) {
       // Skeletons climbing out of the ground, played 1.5x faster than authored.
       await this.playOnce(this.anims.spawn, 0.85, true, 1.5);
     } else if (this.anims && this.modelId.startsWith('Skeleton')) {
@@ -223,8 +303,10 @@ export class UnitView {
   async moveTo(target: THREE.Vector3, duration: number, walk = true) {
     const from = this.group.position.clone();
     if (walk && this.anims) this.loop(this.anims.walk, 0.15);
+    if (walk) this.creature?.setWalking(true);
     await tween(duration, (k) => this.group.position.lerpVectors(from, target, ease.inOutSine(k)));
     if (walk && this.anims && !this.frozen) this.loop(this.anims.idle, 0.2);
+    this.creature?.setWalking(false);
   }
 
   /** Melee strike: step toward the target, swing, step back. */
@@ -242,7 +324,15 @@ export class UnitView {
     this.dead = true;
     this.badge.remove();
     this.setFrozen(false);
-    if (this.anims?.death) {
+    this.setRooted(false);
+    if (this.aura) {
+      for (const sp of this.aura.sprites) sp.removeFromParent();
+      this.aura.glow.removeFromParent();
+      this.aura = null;
+    }
+    if (this.creature) {
+      await this.creature.die();
+    } else if (this.anims?.death) {
       // Mixamo deaths run 2–5 s; keep every death to about 1.6 s of game time.
       const len = this.clip(this.anims.death)?.duration ?? 1;
       await this.playOnce(this.anims.death, 0.92, false, Math.max(1, len / 1.6));
@@ -266,6 +356,23 @@ export class UnitView {
 
   update(dt: number) {
     this.mixer?.update(dt);
+    this.creature?.update(dt);
+    if (this.aura) {
+      const a = this.aura;
+      a.t += dt;
+      const s = this.scale;
+      for (const sp of a.sprites) {
+        // Each flame licks upward from the feet and fades, then starts again.
+        const k = ((a.t * 1.1 + sp.userData.phase) % 1.4) / 1.4;
+        const ang = sp.userData.angle + a.t * 0.7;
+        const r = (0.7 - k * 0.35) * s;
+        sp.position.set(Math.sin(ang) * r, (0.15 + k * 2.6) * s, Math.cos(ang) * r * 0.85);
+        const size = (1.5 - k * 1.0) * s * (0.85 + 0.3 * Math.sin(a.t * 14 + sp.userData.phase * 5));
+        sp.scale.set(size * 0.75, size * 1.25, 1);
+        sp.material.opacity = Math.min(1, Math.sin(k * Math.PI) * 1.3);
+      }
+      (a.glow.material as THREE.MeshBasicMaterial).opacity = 0.55 + 0.25 * Math.sin(a.t * 9) * Math.sin(a.t * 3.3);
+    }
     if (this.hover && this.model && !this.dead) {
       this.bobT += dt * 2.2;
       this.model.position.y = this.hover + Math.sin(this.bobT) * 0.15;
@@ -281,4 +388,48 @@ export class UnitView {
     this.badge.remove();
     this.group.removeFromParent();
   }
+}
+
+let auraTex: THREE.CanvasTexture | null = null;
+
+/** A tongue of flame: hot white core, orange body, red edge (one per sprite, so each fades alone). */
+function auraMaterial(): THREE.SpriteMaterial {
+  if (!auraTex) {
+    const c = document.createElement('canvas');
+    c.width = 48;
+    c.height = 64;
+    const g = c.getContext('2d')!;
+    const grad = g.createRadialGradient(24, 44, 0, 24, 36, 30);
+    grad.addColorStop(0, 'rgba(255,245,200,1)');
+    grad.addColorStop(0.3, 'rgba(255,170,60,.9)');
+    grad.addColorStop(0.65, 'rgba(255,70,20,.45)');
+    grad.addColorStop(1, 'rgba(200,20,0,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(24, 0);
+    g.quadraticCurveTo(46, 34, 38, 54);
+    g.quadraticCurveTo(24, 66, 10, 54);
+    g.quadraticCurveTo(2, 34, 24, 0);
+    g.fill();
+    auraTex = new THREE.CanvasTexture(c);
+    auraTex.colorSpace = THREE.SRGBColorSpace;
+  }
+  return new THREE.SpriteMaterial({ map: auraTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+}
+
+let glowTex: THREE.CanvasTexture | null = null;
+function glowTexture(): THREE.CanvasTexture {
+  if (!glowTex) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,.5)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    glowTex = new THREE.CanvasTexture(c);
+  }
+  return glowTex;
 }

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { isStructure, type CharModel, type ModelId } from '../game/types';
+import { isCreature, isStructure, type CharModel, type ModelId } from '../game/types';
+import { CREATURE_LOOKS } from './creatures';
 import {
   DEFAULT_LOOKS, grip, KAYKIT_BOUNDS, LOOKS, SYNTY_ANIMS, SYNTY_CHAR_SCALE, SYNTY_PACKS, SYNTY_STATICS, SYNTY_TEXTURES,
   SYNTY_WEAPON_FILES, type Look,
@@ -100,7 +101,7 @@ export const ANIMS: Partial<Record<ModelId, AnimSet>> = {
  * hands) swings, so a dagger scout or a staff-wielding shaman never plays a bow draw.
  */
 export function animsFor(model: ModelId, key?: string): AnimSet | undefined {
-  if (isStructure(model)) return undefined;
+  if (isStructure(model) || isCreature(model)) return undefined;
   if (!useSynty) return ANIMS[model];
   const base = SYNTY_ANIMS[model];
   const look = lookFor(key, model);
@@ -214,15 +215,18 @@ function loadTexture(name: string): Promise<THREE.Texture> {
 
 /** One material per texture variant, shared by every unit wearing it. */
 const variantMats = new Map<string, Promise<THREE.Material>>();
-function variantMaterial(base: THREE.MeshStandardMaterial, tex: string): Promise<THREE.Material> {
-  let m = variantMats.get(tex);
+function variantMaterial(base: THREE.MeshStandardMaterial, tex?: string, tint?: number): Promise<THREE.Material> {
+  const key = `${base.uuid}|${tex ?? ''}|${tint ?? ''}`;
+  let m = variantMats.get(key);
   if (!m) {
-    m = loadTexture(tex).then((map) => {
+    m = (tex ? loadTexture(tex) : Promise.resolve(base.map)).then((map) => {
       const mat = base.clone();
       mat.map = map;
+      // A colour wash over the atlas (moss-green bones for the forest dead).
+      if (tint !== undefined) mat.color.setHex(tint);
       return mat;
     });
-    variantMats.set(tex, m);
+    variantMats.set(key, m);
   }
   return m;
 }
@@ -237,6 +241,8 @@ export function lookFor(key: string | undefined, model: CharModel): Look {
  * picture), the ModelId with KayKit (one picture per model).
  */
 export function artKey(key: string | undefined, model: ModelId): string {
+  // Forest beasts are drawn in code in both sets, each look with its own picture.
+  if (isCreature(model)) return key && CREATURE_LOOKS[key] ? key : model;
   return useSynty && key && LOOKS[key] ? key : model;
 }
 
@@ -254,8 +260,8 @@ async function instantiateSyntyCharacter(model: CharModel, key?: string): Promis
     else drop.push(o);
   });
   for (const o of drop) o.removeFromParent();
-  if (look.tex) {
-    for (const m of mats) m.material = await variantMaterial(m.material as THREE.MeshStandardMaterial, look.tex);
+  if (look.tex || look.tint !== undefined) {
+    for (const m of mats) m.material = await variantMaterial(m.material as THREE.MeshStandardMaterial, look.tex, look.tint);
   }
   for (const [file, hand] of [[look.r, 'r'], [look.l, 'l']] as const) {
     if (!file) continue;
@@ -278,6 +284,7 @@ async function instantiateSyntyCharacter(model: CharModel, key?: string): Promis
 
 /** `look` is a card id, `hero:<id>` or `boss:<name>`; only the Synty set tells them apart. */
 export async function instantiateCharacter(model: ModelId, look?: string): Promise<CharacterInstance> {
+  if (isCreature(model)) throw new Error(`${model} is built by makeCreature`);
   if (useSynty && !isStructure(model)) return instantiateSyntyCharacter(model, look);
   const gltf = await loadGltf(`characters/${model}.glb`);
   const root = SkeletonUtils.clone(gltf.scene);

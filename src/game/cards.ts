@@ -1,5 +1,5 @@
 import type { Rng } from './rng';
-import { forward, LAST_ROW, type Keyword, type ModelId, type Side, type Target, type TargetKind, type Unit } from './types';
+import { forward, homeRow, LAST_ROW, type Keyword, type ModelId, type Side, type Target, type TargetKind, type Unit } from './types';
 
 /** What card effects may do. Everything is relative to the side that plays the card. */
 export interface EffectApi {
@@ -39,6 +39,12 @@ export interface EffectApi {
   telekinesis(uid: number, lane: number, row: number): void;
   /** 독: 1 damage at the start of each of the unit's turns, for `turns` turns (structures are immune). */
   poison(uid: number, turns: number): void;
+  /** 속박: the unit cannot move for `turns` of its own turns (it still attacks). */
+  root(uid: number, turns: number): void;
+  /** 덫 on an empty cell: the first of our foes to step in takes damage and is rooted. */
+  placeTrap(lane: number, row: number): boolean;
+  /** Lower a unit's attack (never below 0). */
+  weaken(uid: number, amount: number): void;
   /** Kill an ally outright; returns the health it had. */
   sacrifice(uid: number): number;
   /** Units in the four cells next to a cell (north, south, east, west). */
@@ -101,6 +107,12 @@ export interface MinionCard extends BaseCard {
   model: ModelId;
   keywords?: Keyword[];
   scale?: number;
+  /** 분열: what it splits into (two of them) when it dies. */
+  splitInto?: string;
+  /** Stronger elites: drawn with a burning aura and a star on the card. */
+  elite?: boolean;
+  /** What its ranged attack looks like (default: by model). */
+  missile?: 'arrow' | 'curse' | 'storm';
   onSummon?: (api: EffectApi, self: Unit) => void;
   onDeath?: (api: EffectApi, self: Unit) => void;
   onEndTurn?: (api: EffectApi, self: Unit) => void;
@@ -110,7 +122,8 @@ export interface MinionCard extends BaseCard {
 export type SpellAi =
   | { kind: 'damage'; amount: number }
   | { kind: 'aoe' }
-  | { kind: 'buff' }
+  /** `grants`: skip allies that already have it. */
+  | { kind: 'buff'; grants?: Keyword }
   | { kind: 'buffAll' }
   | { kind: 'lane' }
   | { kind: 'summon' }
@@ -131,6 +144,9 @@ export type SpellAi =
   | { kind: 'empower' }
   | { kind: 'telekinesis' }
   | { kind: 'decay' }
+  | { kind: 'trap' }
+  | { kind: 'root' }
+  | { kind: 'weaken' }
   /** Cards the AI leaves alone. */
   | { kind: 'skip' };
 
@@ -151,6 +167,27 @@ const hitLaneFront = (api: EffectApi, lane: number, amount: number) => {
   const m = api.frontFoe(lane);
   if (m) api.damage({ kind: 'unit', uid: m.uid }, amount);
   else api.damageFoeHero(amount);
+};
+
+/** Foes nearest the caster's home row first (the ones about to break through). */
+const foesByDanger = (api: EffectApi) => {
+  const home = homeRow(api.side);
+  return [...api.foes()].sort((a, b) => Math.abs(a.row - home) - Math.abs(b.row - home));
+};
+
+/** 덫 on the cell a foe is about to step into; the most advanced foe first. */
+export const trapAhead = (api: EffectApi): boolean => {
+  for (const f of foesByDanger(api)) {
+    if (f.keywords.has('flying') || f.attack <= 0) continue;
+    if (api.placeTrap(f.lane, f.row + forward(f.side))) return true;
+  }
+  return false;
+};
+
+/** 속박: the foe closest to breaking through. */
+export const rootFront = (api: EffectApi, turns: number) => {
+  const f = foesByDanger(api).find((u) => u.attack > 0 && !u.rootedTurns);
+  if (f) api.root(f.uid, turns);
 };
 
 const randomFoeOrHero = (api: EffectApi, amount: number) => {
@@ -759,6 +796,128 @@ const CARD_LIST: CardDef[] = [
       for (const n of api.unitsBeside(lane, row)) api.damage({ kind: 'unit', uid: n.uid }, hp);
     },
   },
+  // ══ 1장 숲 ═════════════════════════════════════════════════
+  // 늑대 우두머리: 속도
+  { id: 'wolf_pup', name: '새끼 늑대', type: 'minion', cost: 1, rarity: 'basic', enemy: true, attack: 1, health: 1, model: 'wolf', keywords: ['swift'], scale: 0.62, text: '<b>기습</b>' },
+  { id: 'wolf', name: '회색 늑대', type: 'minion', cost: 3, rarity: 'basic', enemy: true, attack: 2, health: 2, model: 'wolf', keywords: ['dash'], scale: 0.85, text: '<b>질주</b>' },
+  { id: 'wolf_hunter', name: '사냥 늑대', type: 'minion', cost: 4, rarity: 'common', enemy: true, attack: 2, health: 3, model: 'wolf', keywords: ['formation'], scale: 0.92, text: '<b>대열</b>' },
+  { id: 'wolf_dire', name: '다이어울프', type: 'minion', cost: 6, rarity: 'rare', enemy: true, attack: 4, health: 4, model: 'wolf', keywords: ['dash'], scale: 1.2, text: '<b>질주</b>' },
+  {
+    id: 'e_howl', name: '울부짖음', type: 'spell', cost: 3, rarity: 'common', enemy: true, target: 'none', icon: 'skull', ai: { kind: 'buffAll' },
+    text: '내 늑대 모두에게 공격력 +1을 부여합니다.',
+    cast: (api) => { for (const m of api.allies()) if (m.model === 'wolf') api.buff(m.uid, 1, 0); },
+  },
+  {
+    id: 'e_gale', name: '질풍', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'ally', icon: 'wave', ai: { kind: 'buff', grants: 'dash' },
+    text: '아군 하수인 하나에게 <b>질주</b>를 부여하고 한 칸 전진시킵니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.grantKeyword(t.uid, 'dash'); api.advance(t.uid, 1); } },
+  },
+  {
+    id: 'e_pack_ambush', name: '포위 사냥', type: 'spell', cost: 4, rarity: 'common', enemy: true, target: 'none', icon: 'skull', ai: { kind: 'summon' },
+    text: '빈 칸 두 곳에 새끼 늑대를 소환합니다.',
+    cast: (api) => { for (const lane of api.rng.shuffle(api.freeHomeLanes()).slice(0, 2)) api.summon('wolf_pup', lane); },
+  },
+  {
+    id: 'e_instinct', name: '사냥 본능', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'none', icon: 'scroll', ai: { kind: 'draw' },
+    text: '카드를 1장 뽑고, 가장 약한 아군 하수인에게 +1/+1을 부여합니다.',
+    cast: (api) => {
+      api.draw(1);
+      const weak = api.allies().filter((m) => m.attack > 0).sort((a, b) => a.attack + a.health - b.attack - b.health)[0];
+      if (weak) api.buff(weak.uid, 1, 1);
+    },
+  },
+  // 슬라임 왕: 분열
+  {
+    id: 'slime', name: '초록 슬라임', type: 'minion', cost: 3, rarity: 'basic', enemy: true, attack: 2, health: 2, model: 'slime', keywords: ['split'], splitInto: 'slime_small_token',
+    text: '<b>분열</b>: 죽으면 작은 슬라임(1/1) 둘로 나뉩니다.',
+  },
+  { id: 'slime_venom', name: '독 슬라임', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 1, health: 3, model: 'slime', keywords: ['venom'], text: '<b>맹독</b>' },
+  { id: 'slime_acid', name: '산성 슬라임', type: 'minion', cost: 4, rarity: 'common', enemy: true, attack: 1, health: 4, model: 'slime', keywords: ['thorns'], text: '<b>가시</b>' },
+  {
+    id: 'slime_big', name: '거대 슬라임', type: 'minion', cost: 8, rarity: 'rare', enemy: true, attack: 2, health: 6, model: 'slime', keywords: ['split'], splitInto: 'slime_mid_token', scale: 1.45,
+    text: '<b>분열</b>: 죽으면 중간 슬라임(1/2) 둘로 나뉩니다.',
+  },
+  { id: 'slime_small_token', name: '작은 슬라임', type: 'minion', cost: 1, rarity: 'basic', enemy: true, attack: 1, health: 1, model: 'slime', scale: 0.6, text: '분열로 생겨납니다.' },
+  { id: 'slime_mid_token', name: '중간 슬라임', type: 'minion', cost: 3, rarity: 'basic', enemy: true, attack: 1, health: 2, model: 'slime', scale: 0.95, text: '분열로 생겨납니다.' },
+  {
+    id: 'e_merge', name: '점액 융합', type: 'spell', cost: 5, rarity: 'rare', enemy: true, target: 'ally', icon: 'potion', ai: { kind: 'buff', grants: 'split' },
+    text: '아군 하수인 하나에게 +1/+2와 <b>분열</b>을 부여합니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 1, 2); api.grantKeyword(t.uid, 'split'); } },
+  },
+  {
+    id: 'e_slime_coat', name: '끈적한 껍질', type: 'spell', cost: 3, rarity: 'common', enemy: true, target: 'ally', icon: 'shield', ai: { kind: 'buff', grants: 'ward' },
+    text: '아군 하수인 하나에게 +0/+3과 <b>보호막</b>을 부여합니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 0, 3); api.grantKeyword(t.uid, 'ward'); } },
+  },
+  {
+    id: 'e_vines', name: '휘감는 덩굴', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'foeUnit', icon: 'curse', ai: { kind: 'root' },
+    text: '적 하수인 하나를 2턴 동안 <b>속박</b>합니다.',
+    cast: (api, t) => { if (t.kind === 'unit') api.root(t.uid, 2); },
+  },
+  {
+    id: 'e_spore', name: '독 포자', type: 'spell', cost: 3, rarity: 'common', enemy: true, target: 'lane', icon: 'curse', ai: { kind: 'lane' },
+    text: '한 줄의 적 하수인 모두를 2턴 동안 <b>중독</b>시킵니다.',
+    cast: (api, t) => { if (t.kind === 'lane') for (const m of api.foesInLane(t.lane)) api.poison(m.uid, 2); },
+  },
+  // 해골 사냥꾼장: 불사와 덫
+  {
+    id: 'sk_hunter', name: '해골 사냥꾼', type: 'minion', cost: 4, rarity: 'basic', enemy: true, attack: 2, health: 2, model: 'Skeleton_Rogue', keywords: ['ranged'], missile: 'arrow',
+    text: '<b>사격</b>',
+  },
+  { id: 'sk_moss', name: '이끼 해골', type: 'minion', cost: 4, rarity: 'basic', enemy: true, attack: 2, health: 3, model: 'Skeleton_Minion', keywords: ['undying'], text: '<b>불사</b>' },
+  {
+    id: 'sk_trapper', name: '덫꾼 해골', type: 'minion', cost: 3, rarity: 'common', enemy: true, attack: 1, health: 3, model: 'Skeleton_Rogue', scale: 0.9,
+    text: '<b>등장 시:</b> 가장 앞선 적이 밟을 칸에 <b>덫</b>을 놓습니다.',
+    onSummon: (api) => { trapAhead(api); },
+  },
+  {
+    id: 'sk_beastmaster', name: '해골 조련사', type: 'minion', cost: 5, rarity: 'common', enemy: true, attack: 2, health: 4, model: 'Skeleton_Warrior',
+    text: '<b>등장 시:</b> 양옆에 새끼 늑대를 소환합니다.',
+    onSummon: (api, self) => { api.summon('wolf_pup', self.lane - 1); api.summon('wolf_pup', self.lane + 1); },
+  },
+  {
+    id: 'sk_barrow_knight', name: '고분 기사', type: 'minion', cost: 8, rarity: 'rare', enemy: true, attack: 3, health: 5, model: 'Skeleton_Warrior', keywords: ['undying', 'cleave'], scale: 1.3, elite: true,
+    text: '<b>불사</b>. <b>휩쓸기</b>',
+  },
+  {
+    id: 'sk_rotwood', name: '고목 망자', type: 'minion', cost: 10, rarity: 'epic', enemy: true, attack: 3, health: 6, model: 'Skeleton_Warrior', keywords: ['undying'], scale: 1.45, elite: true,
+    text: '<b>불사</b>. <b>등장 시:</b> 같은 줄의 적 하수인 모두를 2턴 동안 <b>속박</b>합니다.',
+    onSummon: (api, self) => { for (const m of api.foesInLane(self.lane)) api.root(m.uid, 2); },
+  },
+  {
+    id: 'e_grave_moss', name: '무덤 이끼', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'ally', icon: 'skull', ai: { kind: 'buff', grants: 'undying' },
+    text: '아군 하수인 하나에게 생명력 +1과 <b>불사</b>를 부여합니다.',
+    cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 0, 1); api.grantKeyword(t.uid, 'undying'); } },
+  },
+  {
+    id: 'e_trap', name: '곰 덫', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'trapCell', icon: 'sword', ai: { kind: 'trap' },
+    text: '빈 칸 하나에 <b>덫</b>을 놓습니다.',
+    cast: (api, t) => { if (t.kind === 'cell') api.placeTrap(t.lane, t.row); },
+  },
+  {
+    id: 'e_grave_vines', name: '무덤 덩굴', type: 'spell', cost: 4, rarity: 'common', enemy: true, target: 'lane', icon: 'curse', ai: { kind: 'lane' },
+    text: '한 줄의 적 하수인 모두에게 피해를 1 주고 1턴 동안 <b>속박</b>합니다.',
+    cast: (api, t) => {
+      if (t.kind !== 'lane') return;
+      for (const m of api.foesInLane(t.lane)) { api.damage({ kind: 'unit', uid: m.uid }, 1); api.root(m.uid, 1); }
+    },
+  },
+  {
+    id: 'e_wither', name: '시듦', type: 'spell', cost: 2, rarity: 'common', enemy: true, target: 'foeUnit', icon: 'curse', ai: { kind: 'weaken' },
+    text: '적 하수인 하나의 공격력을 2 깎습니다.',
+    cast: (api, t) => { if (t.kind === 'unit') api.weaken(t.uid, 2); },
+  },
+  {
+    id: 'e_wisp', name: '도깨비불', type: 'spell', cost: 3, rarity: 'rare', enemy: true, target: 'foeUnit', icon: 'fire', ai: { kind: 'damage', amount: 2 },
+    text: '적 하수인 하나에게 피해를 2 줍니다. 그 하수인이 죽으면 그 자리에서 해골 졸개가 일어납니다.',
+    cast: (api, t) => {
+      if (t.kind !== 'unit') return;
+      const u = api.foes().find((f) => f.uid === t.uid);
+      if (!u) return;
+      api.damage(t, 2);
+      if (u.health <= 0 && !u.keywords.has('undying')) api.summonAt('sk_minion', u.lane, u.row);
+    },
+  },
 ];
 
 export const CARDS: Record<string, CardDef> = Object.fromEntries(CARD_LIST.map((c) => [c.id, c]));
@@ -776,6 +935,8 @@ export const STARTER_DECK = [
 ];
 
 export const KEYWORD_INFO: Record<Keyword, { name: string; text: string }> = {
+  split: { name: '분열', text: '죽으면 더 작은 슬라임 둘로 나뉩니다(그 칸과 옆 빈 칸).' },
+  venom: { name: '맹독', text: '이 하수인에게 맞은 적은 2턴 동안 중독됩니다.' },
   illusion: { name: '환영', text: '똑같이 생겼지만 피해를 주지 못하고, 피해를 받으면 체력과 상관없이 사라집니다.' },
   swift: { name: '기습', text: '소환된 턴에도 바로 전진하거나 공격합니다.' },
   ranged: { name: '사격', text: '자기 줄 앞쪽 3칸 안의 첫 번째 적을 쏩니다(아군 너머로도). 적이 없으면 전진하고, 적 영웅이 사거리 안이면 영웅을 쏩니다.' },

@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import './style.css';
 import { card, CARDS, KEYWORD_INFO, type MinionCard, type SpellIcon } from './game/cards';
-import { CAMP_HEAL, Game, HERO_MAX_HEALTH, sameTarget, type RunSave } from './game/engine';
+import { CAMP_HEAL, Game, HERO_MAX_HEALTH, migrateSave, sameTarget, type RunSave } from './game/engine';
 import { heroDef, HEROES, POWERS } from './game/heroes';
 import { HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE } from './game/shop';
-import { STAGES } from './game/stages';
-import { isStructure, type ModelId, type TargetKind } from './game/types';
+import { CHAPTERS, STAGES, stageLabel } from './game/stages';
+import { isCreature, isStructure, type ModelId, type TargetKind } from './game/types';
 import {
   LAST_ROW, MANA_PER_TURN, MAX_MANA, other, RANGED_RANGE, ROWS,
   type GameEvent, type HitTarget, type Side, type Target, type Unit,
@@ -23,11 +23,20 @@ import { CardBook } from './ui/cardBook';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
+/** Shown under each chapter's title card. */
+const CHAPTER_LINES = [
+  '해골 군단의 선발대가 숲의 짐승들을 오염시켰다',
+  '무너진 성문 너머, 해골 군단의 본진',
+  '던전 아래 깊은 동굴, 군주가 기다린다',
+];
+const st0 = (i: number) => STAGES[i];
+
 /** The sound each spell icon makes when cast. */
 /** What each target kind asks the player to pick. */
 const TARGET_WORDS: Record<TargetKind, string> = {
   foe: '적 하수인이나 적 영웅', foeUnit: '적 하수인', ally: '아군 하수인', lane: '줄', slot: '내 진영 빈 칸', none: '',
   wallCell: '나란한 빈 칸 두 개', anyUnit: '하수인(아군도 가능)', allySlot: '아군 하수인', move: '하수인이나 구조물',
+  trapCell: '빈 칸',
 };
 
 /** Two-step cards: the prompt for picking the unit, then the cell. */
@@ -80,11 +89,14 @@ class App {
     });
     $('loading-text').textContent = '초상화 그리는 중…';
     const subjects = [...CHARACTER_MODELS, 'barrier' as ModelId, 'ice_wall' as ModelId].map((m) => ({ key: m as string, model: m }));
+    // Forest beasts are drawn in code: every look gets its own picture in either set.
+    for (const c of Object.values(CARDS)) if (c.type === 'minion' && isCreature(c.model)) subjects.push({ key: c.id, model: c.model });
+    for (const st of STAGES) if (isCreature(st.hero.model)) subjects.push({ key: `boss:${st.hero.name}`, model: st.hero.model });
     if (useSynty) {
       // The Synty set gives every card, hero and commander its own look, so each gets a picture.
-      for (const c of Object.values(CARDS)) if (c.type === 'minion' && !isStructure(c.model)) subjects.push({ key: c.id, model: c.model });
+      for (const c of Object.values(CARDS)) if (c.type === 'minion' && !isStructure(c.model) && !isCreature(c.model)) subjects.push({ key: c.id, model: c.model });
       for (const h of HEROES) subjects.push({ key: `hero:${h.id}`, model: h.model });
-      for (const st of STAGES) subjects.push({ key: `boss:${st.hero.name}`, model: st.hero.model });
+      for (const st of STAGES) if (!isCreature(st.hero.model)) subjects.push({ key: `boss:${st.hero.name}`, model: st.hero.model });
     }
     setPortraits(await renderPortraits(subjects));
     await this.board.buildEnvironment();
@@ -224,6 +236,7 @@ class App {
     v.setStats({ attack: def.attack, health: def.health, maxHealth: def.health });
     v.setWard(def.keywords?.includes('ward') ?? false);
     v.setFlying(def.keywords?.includes('flying') ?? false);
+    v.setElite(!!def.elite);
     this.board.scene.add(v.group);
     return v;
   }
@@ -253,12 +266,19 @@ class App {
         for (const v of this.views.values()) v.dispose();
         this.views.clear();
         $('history').innerHTML = '';
+        const chapter = STAGES[e.stage].chapter;
+        this.board.syncTraps([]);
+        await this.board.setEnvironment(CHAPTERS[chapter].env);
         await this.setupEnemyHero();
         this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };
         this.writeSave();
         const st = STAGES[e.stage];
         this.renderHud();
-        await this.banner(`스테이지 ${e.stage + 1} · ${st.hero.name}`, `${st.name} — ${st.subtitle}`, 1.8);
+        // A new chapter gets its own title card first.
+        if (e.stage === 0 || STAGES[e.stage - 1].chapter !== chapter) {
+          await this.banner(`${chapter + 1}장 · ${CHAPTERS[chapter].name}`, CHAPTER_LINES[chapter] ?? '', 2.2, 'chapter');
+        }
+        await this.banner(`${stageLabel(e.stage)} · ${st.hero.name}`, `${st.name} — ${st.subtitle}`, 1.8);
         return;
       }
       case 'turnStart':
@@ -342,7 +362,9 @@ class App {
         const targetPos = this.hitPos(e.target, lane);
         if (e.ranged) {
           await a.attackAnim();
-          const kind = a.modelId === 'Rogue' ? 'arrow' : a.side === 'enemy' ? 'curse' : 'storm';
+          const own = this.game.unit(e.attacker);
+          const missile = own ? (card(own.defId) as MinionCard).missile : undefined;
+          const kind = missile ?? (a.modelId === 'Rogue' ? 'arrow' : a.side === 'enemy' ? 'curse' : 'storm');
           sound.play(kind === 'arrow' ? 'shoot' : kind === 'curse' ? 'curse' : 'magic');
           await this.fx.projectile(a.group.position.clone().setY(1.3 * a.scale), targetPos, kind);
         } else {
@@ -546,6 +568,44 @@ class App {
         await wait(0.3);
         return;
       }
+      case 'root': {
+        const v = this.views.get(e.uid);
+        if (!v) return;
+        v.setRooted(e.turns > 0);
+        if (e.turns > 0) {
+          sound.play('curse');
+          this.fx.floatText(v.headPosition(), `속박 ${e.turns}`, 'info');
+          this.fx.burst(v.group.position.clone().setY(0.4), 0x6fc24a, 14, 1.6);
+          await wait(0.15);
+        }
+        return;
+      }
+      case 'trap':
+        this.board.setTrap(e.lane, e.row, e.on);
+        if (e.on) {
+          sound.play('buff');
+          this.fx.burst(cellPos(e.lane, e.row).setY(0.3), 0xc9b48a, 12, 1.4);
+          await wait(0.12);
+        }
+        return;
+      case 'trapSprung': {
+        sound.play('swing');
+        const at = cellPos(e.lane, e.row).setY(0.5);
+        this.fx.burst(at, 0xe0e0e0, 18, 2.2);
+        this.board.addShake(0.2);
+        const v = this.views.get(e.uid);
+        if (v) this.fx.floatText(v.headPosition(), '덫!', 'dmg');
+        await wait(0.2);
+        return;
+      }
+      case 'split': {
+        const at = cellPos(e.lane, e.row).setY(0.5);
+        sound.play('hit');
+        this.fx.burst(at, 0x7dff6a, 30, 3);
+        this.fx.floatText(at.clone().setY(2), '분열!', 'info');
+        await wait(0.2);
+        return;
+      }
       case 'freeze':
         sound.play('frost');
         this.views.get(e.uid)?.setFrozen(true);
@@ -594,7 +654,7 @@ class App {
         sound.play('stageClear');
         for (const v of this.views.values()) if (v.side === 'player') void v.playOnce('Cheer', 1);
         if (this.enemyHero) await this.enemyHero.die();
-        await this.banner('승리!', `${STAGES[e.stage].hero.name} 처치 · 보수 금화 +${e.gold}`, 1.8);
+        await this.banner('승리!', `${stageLabel(e.stage)} ${STAGES[e.stage].hero.name} 처치 · 보수 금화 +${e.gold}`, 1.8);
         return;
       case 'defeat':
         sound.play('defeat');
@@ -665,6 +725,7 @@ class App {
       case 'slot':
         return;
       case 'cell':
+        if (def.target === 'trapCell') return;
         for (const lane of [target.lane, target.lane + 1]) this.fx.burst(cellPos(lane, target.row).setY(0.8), 0xbff0ff, 20, 2.5);
         await wait(0.15);
         return;
@@ -688,6 +749,7 @@ class App {
       v.setStats(u);
       v.setWard(u.keywords.has('ward'));
       v.setFrozen(u.frozen);
+      v.setRooted(!!u.rootedTurns);
       v.group.position.copy(cellPos(u.lane, u.row));
     }
     for (const [uid, v] of this.views) {
@@ -699,6 +761,7 @@ class App {
     this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };
     this.heroArmor = { player: s.sides.player.hero.armor ?? 0, enemy: s.sides.enemy.hero.armor ?? 0 };
     this.board.syncWet(s.wet);
+    this.board.syncTraps(s.traps);
     this.renderHud();
     this.renderEmpower();
   }
@@ -710,7 +773,7 @@ class App {
     if (!s) return;
     const st = STAGES[s.stage];
     const me = s.sides.player;
-    $('stage-title').textContent = `스테이지 ${s.stage + 1}/${STAGES.length} · ${st.name}`;
+    $('stage-title').textContent = `${stageLabel(s.stage)} ${CHAPTERS[st.chapter].name} · ${st.name}`;
     $('stage-sub').innerHTML = `${s.turn}턴 · <span class="gold">${s.gold}</span>`;
     this.renderHeroHp();
     this.renderEnemyInfo();
@@ -805,7 +868,8 @@ class App {
       v.setStats({ ...u, attack: this.game.attackOf(u) });
       const mark = next && u.side === 'enemy' ? '<span class="threat" title="다음 턴에 공격">!</span>' : '';
       v.renderBadge(mark + (u.frozen ? `<span class="frozen-tag">❄${(u.frozenTurns ?? 1) > 1 ? u.frozenTurns : ''}</span>` : '')
-        + (u.poison ? `<span class="poison-tag" title="중독: 턴마다 피해 1">☠${u.poison}</span>` : ''));
+        + (u.poison ? `<span class="poison-tag" title="중독: 턴마다 피해 1">☠${u.poison}</span>` : '')
+        + (u.rootedTurns ? `<span class="root-tag" title="속박: 이동 못 함">🌿${u.rootedTurns}</span>` : ''));
     }
   }
 
@@ -1160,6 +1224,7 @@ class App {
         return cell.lane > 0 ? at(cell.lane - 1) : at(cell.lane);
       }
       case 'anyUnit': return p.unit ? { kind: 'unit', uid: p.unit.uid } : null;
+      case 'trapCell': return cell ? { kind: 'cell', lane: cell.lane, row: cell.row } : null;
       case 'allySlot':
       case 'move': {
         if (aim.kind !== 'card') return null;
@@ -1322,6 +1387,7 @@ class App {
       unit.frozen ? `빙결: 행동하지 못하고 피해를 받지 않음 (${unit.frozenTurns ?? 1}턴)` : '',
       this.game.state.wet.some((w) => w.lane === unit.lane && w.row === unit.row) ? '젖은 칸: 받는 피해 +1' : '',
       unit.poison ? `중독: 자기 턴 시작마다 피해 1 (${unit.poison}턴)` : '',
+      unit.rootedTurns ? `속박: 움직이지 못하지만 공격은 함 (${unit.rootedTurns}턴)` : '',
       unit.fresh && !unit.keywords.has('swift') ? '이번 턴에 소환됨' : '',
     ].filter(Boolean).join('<br>');
     inspect.insertAdjacentHTML('beforeend', `<div class="notes"><div class="kw-note">${status}</div>${keywordNotes(unit.defId)}</div>`);
@@ -1427,7 +1493,7 @@ class App {
   private showTitle() {
     const m = this.openModal(`
       <h1>카드 서바이벌</h1>
-      <p>해골 군단이 왕국을 덮쳤습니다. 왕국은 금화를 걸고 용병을 모집했고, 당신은 그 계약을 받아들인 용병대장입니다. 다섯 해골 지휘관과 1:1로 맞붙어 쓰러뜨리고 보수를 받으세요.</p>
+      <p>해골 군단이 왕국을 덮쳤습니다. 왕국은 금화를 걸고 용병을 모집했고, 당신은 그 계약을 받아들인 용병대장입니다. 오염된 숲을 지나 던전과 그 아래 동굴까지, 여덟 지휘관과 1:1로 맞붙어 쓰러뜨리고 보수를 받으세요.</p>
       <div class="rules">
         <div><b>승리</b> 상대 영웅의 생명력을 0으로 만들면 이깁니다. 내 영웅이 쓰러지면 패배합니다.</div>
         <div><b>마나</b> 첫 턴 마나는 영웅마다 다르고(상대 지휘관은 스테이지마다 ${STAGES[0].startMana}~${STAGES[STAGES.length - 1].startMana}), 이후 매 턴 최대 마나가 ${MANA_PER_TURN}씩 늘어납니다(최대 ${MAX_MANA}). 쓰지 않은 마나는 <b>다음 턴으로 넘어가지 않습니다</b>.</div>
@@ -1440,11 +1506,12 @@ class App {
       <button class="btn secondary" id="book-open">카드북</button>
       <p class="credits">주문 그림: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (Lorc, Delapouite 외, CC BY 3.0)</p>`);
     m.querySelector('#book-open')!.addEventListener('click', () => this.cardBook.open());
-    const save = this.readSave();
-    if (save) {
+    const raw = this.readSave();
+    const save = raw && migrateSave(raw);
+    if (save && STAGES[save.stage]) {
       const h = heroDef(save.hero);
       m.querySelector('#start-btn')!.insertAdjacentHTML('beforebegin',
-        `<button class="btn" id="resume-btn">이어하기 · ${h.name} · 스테이지 ${save.stage + 1} · 생명력 ${save.health} · 금화 ${save.gold ?? 0}</button><br>`);
+        `<button class="btn" id="resume-btn">이어하기 · ${h.name} · ${stageLabel(save.stage)} ${STAGES[save.stage].name} · 생명력 ${save.health} · 금화 ${save.gold ?? 0}</button><br>`);
       m.querySelector('#start-btn')!.textContent = '새로 시작';
       m.querySelector('#start-btn')!.classList.add('secondary');
       m.querySelector('#resume-btn')!.addEventListener('click', () => void this.startRun(save.hero, save));
@@ -1484,8 +1551,10 @@ class App {
         <div class="bundle" id="camp-rest"><h3>휴식</h3><div class="theme">생명력 ${CAMP_HEAL} 회복</div></div>
         <div class="bundle" id="camp-trim"><h3>정비</h3><div class="theme">덱에서 카드 1장 제거</div></div>
       </div>
-      <button class="btn secondary" id="camp-shop">왕국 보급관 찾아가기 (선택과 별개)</button>`);
-    m.querySelector('#camp-shop')!.addEventListener('click', () => this.showShop());
+      ${s.shop
+        ? '<button class="btn secondary" id="camp-shop">왕국 보급관 찾아가기 (선택과 별개)</button>'
+        : '<p class="dim">왕국 보급관은 챕터를 마칠 때마다(그리고 최종 결전 직전에) 찾아옵니다.</p>'}`);
+    m.querySelector('#camp-shop')?.addEventListener('click', () => this.showShop());
     m.querySelector('#camp-rest')!.addEventListener('click', () => {
       this.closeModal();
       void this.play(this.game.campRest());
@@ -1594,7 +1663,7 @@ class App {
         <div class="mini-cards" data-cards="${b.cards.join(',')}"></div>
       </div>`).join('');
     const m = this.openModal(`
-      <h2>스테이지 ${s.stage + 1} 완수!</h2>
+      <h2>${stageLabel(s.stage)} ${st0(s.stage).name} 완수!</h2>
       <p>왕국이 지원 물자를 보냈습니다. 꾸러미 하나를 골라 덱에 추가하세요. 생명력 ${hero.health}/${hero.maxHealth} · 덱 ${s.deckList.length}장 · <span class="gold">${s.gold}</span></p>
       <div class="bundles rewards">${bundles}</div>
       <button class="btn secondary" id="view-deck">현재 덱 보기</button>`);
@@ -1626,7 +1695,7 @@ class App {
     const st = STAGES[s.stage];
     const m = this.openModal(`
       <h1>${won ? '계약 완수!' : '패배'}</h1>
-      <p>${won ? '해골 군주가 무너지고 왕국에 새벽이 찾아왔습니다. 왕국은 약속한 보수를 지급했고, 당신의 용병단은 전설이 되었습니다.' : `스테이지 ${s.stage + 1}에서 ${st.hero.name}에게 쓰러졌습니다. 계약은 여기서 끝났습니다.`}</p>
+      <p>${won ? '해골 군주가 무너지고 왕국에 새벽이 찾아왔습니다. 왕국은 약속한 보수를 지급했고, 당신의 용병단은 전설이 되었습니다.' : `${stageLabel(s.stage)} ${st.name}에서 ${st.hero.name}에게 쓰러졌습니다. 계약은 여기서 끝났습니다.`}</p>
       <p>클리어한 스테이지 ${s.stagesCleared}/${STAGES.length} · 최종 덱 ${s.deckList.length}장</p>
       <button class="btn" id="again">새 계약 맺기</button>`);
     this.clearSave();

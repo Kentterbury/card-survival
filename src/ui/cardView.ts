@@ -18,7 +18,8 @@ export function portrait(model: ModelId, look?: string): string {
 export function createCardElement(defId: string, opts: { attack?: number; health?: number } = {}): HTMLDivElement {
   const def = card(defId);
   const el = document.createElement('div');
-  el.className = `card ${def.type} rarity-${def.rarity}${def.enemy ? ' enemy-card' : ''}${def.hero ? ' hero-card' : ''}`;
+  const elite = def.type === 'minion' && def.elite;
+  el.className = `card ${def.type} rarity-${def.rarity}${def.enemy ? ' enemy-card' : ''}${def.hero ? ' hero-card' : ''}${elite ? ' elite' : ''}`;
   el.dataset.defId = defId;
   el.innerHTML = cardInner(def, opts);
   return el;
@@ -36,7 +37,7 @@ function cardInner(def: CardDef, opts: { attack?: number; health?: number }): st
     <div class="card-frame">
       ${art}
       <div class="card-cost">${def.type === 'spell' && def.xCost ? 'X' : def.cost}</div>
-      <div class="card-name"><span>${def.name}</span></div>
+      <div class="card-name"><span>${def.type === 'minion' && def.elite ? '<i class="elite-star">★</i>' : ''}${def.name}</span></div>
       <div class="card-type">${def.hero ? `<b>${heroDef(def.hero).name}</b> · ` : ''}${typeLabel}</div>
       <div class="card-text"><span>${def.text}</span></div>
       <div class="card-gem"></div>
@@ -61,6 +62,9 @@ export function keywordNotes(defId: string): string {
   if (text.includes('<b>빙벽</b>')) extra.push('<b>빙벽</b>: 0/5 구조물. 아무도 지나가지 못하고 3턴 뒤 녹습니다.');
   if (text.includes('탐색')) extra.push('<b>탐색</b>: 무작위 카드 3장 중 하나를 골라 손으로 가져옵니다.');
   if (text.includes('봉인')) extra.push('<b>봉인</b>: 봉인된 카드는 그 주인의 다음 턴 동안 낼 수 없습니다.');
+  if (text.includes('속박')) extra.push('<b>속박</b>: 그 턴 수만큼 앞으로 나아가지 못합니다. 앞의 적을 공격하거나 쏘는 것은 그대로 합니다.');
+  if (text.includes('<b>덫</b>')) extra.push('<b>덫</b>: 상대 하수인이 그 칸에 들어서면 멈춰 서서 피해 1을 입고 1턴 동안 <b>속박</b>됩니다. 비행하는 하수인은 걸리지 않습니다.');
+  if (def.type === 'minion' && def.elite) extra.push('<b>★ 정예</b>: 한층 강한 적. 불꽃에 휩싸여 있습니다.');
   return [...kws.map((k) => `<b>${KEYWORD_INFO[k].name}</b>: ${KEYWORD_INFO[k].text}`), ...extra]
     .map((t) => `<div class="kw-note">${t}</div>`).join('');
 }

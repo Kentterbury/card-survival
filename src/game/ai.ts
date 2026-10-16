@@ -85,7 +85,9 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
       return { target: { kind: 'none' }, score: base + foes.length * 6 - 8 };
     }
     case 'buff': {
-      const allies = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : []));
+      const grants = ai.grants;
+      const allies = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : []))
+        .filter((u) => !grants || !u.keywords.has(grants)).filter((u) => u.attack > 0 || !grants);
       if (allies.length === 0) return null;
       const front = allies.sort((a, b) => b.attack - a.attack || b.health - a.health)[0];
       return { target: { kind: 'unit', uid: front.uid }, score: base + 4 };
@@ -209,6 +211,31 @@ function evaluate(g: Game, side: Side, def: CardDef, targets: Target[]): { targe
       }
       return best ? { target: best.target, score: base + best.score } : null;
     }
+    case 'trap': {
+      // Right where an advancing foe steps next.
+      let best: { target: Target; score: number } | null = null;
+      for (const t of targets) {
+        if (t.kind !== 'cell') continue;
+        const coming = foes.filter((f) => f.lane === t.lane && f.row + forward(f.side) === t.row && f.attack > 0 && !f.keywords.has('flying') && !f.rootedTurns);
+        const score = coming.reduce((v, f) => v + threat(f, side), 0);
+        if (score > 0 && (!best || score > best.score)) best = { target: t, score };
+      }
+      return best ? { target: best.target, score: base + best.score / 2 } : null;
+    }
+    case 'root': {
+      const units = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : []))
+        .filter((u) => u.side !== side && !u.frozen && !u.rootedTurns && u.speed > 0 && u.attack > 0);
+      if (units.length === 0) return null;
+      const worst = units.sort((a, b) => threat(b, side) - threat(a, side))[0];
+      return threat(worst, side) > 9 ? { target: { kind: 'unit', uid: worst.uid }, score: base + 5 } : null;
+    }
+    case 'weaken': {
+      const units = targets.flatMap((t) => (t.kind === 'unit' ? [g.unit(t.uid)!] : []))
+        .filter((u) => u.side !== side && u.attack >= 2 && !u.keywords.has('illusion'));
+      if (units.length === 0) return null;
+      const worst = units.sort((a, b) => b.attack - a.attack || threat(b, side) - threat(a, side))[0];
+      return worst.attack >= 3 || threat(worst, side) > 12 ? { target: { kind: 'unit', uid: worst.uid }, score: base + worst.attack * 2 } : null;
+    }
     case 'skip':
       return null;
     case 'ramp': {
@@ -234,6 +261,9 @@ function pickPowerTarget(g: Game, side: Side): Target | null {
   const targets = g.heroPowerTargets(side);
   if (targets.length === 0) return null;
   const kind = g.powerOf(side).target;
+  const id = g.powerOf(side).id;
+  // 점액 분출 / 덫 놓기 aim at advancing foes; pointless with none on the board.
+  if (id === 'ooze' || id === 'snare') return g.unitsOf(other(side)).some((u) => u.attack > 0 && !u.rootedTurns) ? targets[0] : null;
   if (kind === 'none') return g.side(side).hand.length < 7 ? targets[0] : null;
   if (kind === 'ally' && g.powerOf(side).id === 'guard') {
     // 방패 명령: shield the unshielded ally closest to the enemy (it takes the next hit).

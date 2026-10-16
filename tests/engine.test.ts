@@ -5,7 +5,7 @@ import { heroDef, POWERS } from '../src/game/heroes';
 import { CARD_PRICE, HEAL_AMOUNT, HEAL_PRICE, REMOVE_PRICE, stageGold } from '../src/game/shop';
 import { ALL_BUNDLES, rollRewards } from '../src/game/rewards';
 import { Rng } from '../src/game/rng';
-import { STAGES } from '../src/game/stages';
+import { shopAfter, STAGES } from '../src/game/stages';
 import { LAST_ROW, MANA_PER_TURN, MAX_MANA, RANGED_RANGE, type Side, type Unit } from '../src/game/types';
 import { playRun } from '../src/sim/bot';
 import { aiTakeTurn } from '../src/game/ai';
@@ -79,10 +79,10 @@ describe('turn structure', () => {
   it('the enemy plays cards on its turn', () => {
     const g = new Game(7);
     g.startRun();
-    const before = g.side('enemy').hand.length;
-    g.endTurn();
-    const s = g.state;
-    expect(s.units.filter((u) => u.side === 'enemy').length + (before + 1 - g.side('enemy').hand.length)).toBeGreaterThan(0);
+    let played = 0;
+    // The wolf pack starts on 2 mana, so it may pass its first turn.
+    for (let t = 0; t < 3; t++) played += g.endTurn().filter((e) => e.type === 'cardPlayed' && e.side === 'enemy').length;
+    expect(played).toBeGreaterThan(0);
   });
 });
 
@@ -335,7 +335,7 @@ describe('new cards', () => {
     const seen = new Set<string>(STARTER_DECK);
     const rng = new Rng(1);
     const heroes = ['captain', 'arcanist', 'warchief', 'hunter'];
-    for (let i = 0; i < 800; i++) for (const b of rollRewards(rng, 1 + (i % 4), heroes[Math.floor(i / 4) % 4])) for (const id of b.cards) { expect(CARDS[id]).toBeDefined(); seen.add(id); }
+    for (let i = 0; i < 1400; i++) for (const b of rollRewards(rng, 1 + (i % 7), heroes[Math.floor(i / 4) % 4])) for (const id of b.cards) { expect(CARDS[id]).toBeDefined(); seen.add(id); }
     const obtainable = Object.values(CARDS).filter((c) => !c.enemy && !c.id.endsWith('_token')).map((c) => c.id);
     expect(obtainable.filter((id) => !seen.has(id))).toEqual([]);
   });
@@ -724,12 +724,25 @@ describe('heroes, camp and saves', () => {
 describe('gold and the merchant', () => {
   const atCamp = () => {
     const g = freshGame(Array(10).fill('pyroblast'));
+    // The merchant only comes after a chapter's last stage (1-3).
+    g.state.stage = 2;
     g.side('player').mana = 20;
     g.side('enemy').hero.health = 1;
     g.playCard(0, { kind: 'hero', side: 'enemy' });
     g.chooseReward(0);
     return g;
   };
+
+  it('the merchant comes once a chapter: after 1-3, 2-3 and before the final battle', () => {
+    expect(STAGES.map((_, i) => shopAfter(i))).toEqual([false, false, true, false, false, true, true, false]);
+    const g = freshGame(Array(10).fill('pyroblast'));
+    g.side('player').mana = 20;
+    g.side('enemy').hero.health = 1;
+    g.playCard(0, { kind: 'hero', side: 'enemy' });
+    g.chooseReward(0);
+    expect(g.state.phase).toBe('camp');
+    expect(g.state.shop).toBeNull();
+  });
 
   it('clearing a stage pays gold, more for a quick win', () => {
     const g = freshGame(Array(10).fill('pyroblast'));
@@ -742,11 +755,11 @@ describe('gold and the merchant', () => {
     expect(stageGold(0, 1)).toBeGreaterThan(stageGold(0, 15));
   });
 
-  it('the merchant offers six different cards at rarity prices, one of them for our hero', () => {
+  it('the merchant offers seven different cards at rarity prices, one of them for our hero', () => {
     const g = atCamp();
     const offers = g.state.shop!.offers;
-    expect(offers).toHaveLength(6);
-    expect(new Set(offers.map((o) => o.defId)).size).toBe(6);
+    expect(offers).toHaveLength(7);
+    expect(new Set(offers.map((o) => o.defId)).size).toBe(7);
     for (const o of offers) {
       const c = card(o.defId);
       expect(c.enemy).toBeFalsy();
@@ -925,8 +938,10 @@ describe('enemy commanders', () => {
   };
 
   it('each commander has a concept, its own 지휘술 and a starting mana; mages start with more', () => {
-    expect(STAGES.map((s) => s.power)).toEqual(['summon', 'rush', 'curse', 'bonewall', 'legion']);
-    expect(STAGES.map((s) => s.startMana)).toEqual([3, 3, 4, 3, 4]);
+    expect(STAGES.map((s) => s.power)).toEqual(['howl', 'ooze', 'snare', 'summon', 'rush', 'curse', 'bonewall', 'legion']);
+    expect(STAGES.map((s) => s.startMana)).toEqual([2, 2, 2, 4, 4, 4, 3, 4]);
+    expect(STAGES.map((s) => s.chapter)).toEqual([0, 0, 0, 1, 1, 1, 2, 2]);
+    expect(STAGES.slice(0, 3).map((s) => s.hero.health)).toEqual([14, 16, 20]);
     for (const s of STAGES) expect(s.concept.length).toBeGreaterThan(0);
     const g = new Game(1);
     g.startRun(undefined, 'captain', { hero: 'captain', deck: Array(10).fill('squire'), stage: 2, stagesCleared: 2, health: 30 });

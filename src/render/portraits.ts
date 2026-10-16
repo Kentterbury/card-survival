@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import type { ModelId } from '../game/types';
+import { isCreature, type ModelId } from '../game/types';
 import { animsFor, instantiateCharacter, instantiateStatic, useSynty } from './assets';
+import { makeCreature } from './creatures';
 import { makeIceWall } from './iceWall';
 
 /**
@@ -35,6 +36,17 @@ export async function renderPortraits(subjects: { key: string; model: ModelId }[
       obj = id === 'barrier' ? await instantiateStatic('barrier') : makeIceWall();
       camera.position.set(0, 1.6, 5.5);
       camera.lookAt(0, 0.5, 0);
+    } else if (isCreature(id)) {
+      obj = makeCreature(id, key).root;
+      obj.rotation.y = 0.5;
+      // Slimes face the camera low and round; wolves are framed on the head.
+      if (id === 'slime') {
+        camera.position.set(0.4, 1.5, 3.1);
+        camera.lookAt(0, 0.75, 0);
+      } else {
+        camera.position.set(1.1, 1.75, 2.6);
+        camera.lookAt(0.25, 1.15, 0.6);
+      }
     } else {
       const inst = await instantiateCharacter(id, key);
       obj = inst.root;

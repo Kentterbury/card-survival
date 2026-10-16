@@ -44,6 +44,10 @@ const ART = {
   // new enemy spells
   e_poison_arrow: 'broadhead-arrow', e_soul_mirror: 'shadow-follower', e_dark_power: 'book-aura',
   e_bone_shield: 'backbone-shell', e_grave_frost: 'icebergs', e_corpse_blast: 'death-zone',
+  // 1장 숲: wolves, slimes and the forest dead
+  e_howl: 'wolf-howl', e_gale: 'whirlwind', e_pack_ambush: 'paw-print', e_instinct: 'sniffing-dog',
+  e_merge: 'gooey-molecule', e_slime_coat: 'transparent-slime', e_vines: 'vine-whip', e_spore: 'mushroom-cloud',
+  e_grave_moss: 'grave-flowers', e_trap: 'wolf-trap', e_grave_vines: 'curling-vines', e_wither: 'dead-wood', e_wisp: 'floating-ghost',
 };
 
 const missing = Object.entries(ART).filter(([, n]) => !icons[n]);

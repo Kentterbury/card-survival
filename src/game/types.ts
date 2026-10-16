@@ -20,7 +20,11 @@ export type Keyword =
   | 'dash' | 'anchored' | 'knockback' | 'pierce' | 'flying' | 'formation' | 'lifesteal' | 'undying'
   | 'cleave' | 'thorns' | 'cover' | 'regenerate' | 'enrage' | 'vanguard'
   /** 환영: a copy that deals no damage and vanishes when hit. */
-  | 'illusion';
+  | 'illusion'
+  /** 분열: splits into two smaller units when it dies. */
+  | 'split'
+  /** 맹독: whatever it hits is poisoned. */
+  | 'venom';
 
 /** Attack bonus a `formation` unit gets with an ally beside it. */
 export const FORMATION_BONUS = 2;
@@ -28,16 +32,22 @@ export const FORMATION_BONUS = 2;
 export const VANGUARD_BONUS = 2;
 /** Damage a `thorns` unit deals back to melee attackers. */
 export const THORNS_DAMAGE = 2;
+/** Turns of 중독 a `venom` unit's hits inflict. */
+export const VENOM_TURNS = 2;
 
 export type ModelId =
   | 'Knight' | 'Barbarian' | 'Mage' | 'Rogue' | 'Rogue_Hooded'
   | 'Skeleton_Minion' | 'Skeleton_Warrior' | 'Skeleton_Rogue' | 'Skeleton_Mage'
-  | 'barrier' | 'ice_wall';
+  | 'barrier' | 'ice_wall'
+  | 'wolf' | 'slime';
 
 /** Structures: walls with no character model (바리케이드, 빙벽). */
 export type StructureModel = 'barrier' | 'ice_wall';
-export type CharModel = Exclude<ModelId, StructureModel>;
+/** Forest beasts: built in code (src/render/creatures.ts), not from the character packs. */
+export type CreatureModel = 'wolf' | 'slime';
+export type CharModel = Exclude<ModelId, StructureModel | CreatureModel>;
 export const isStructure = (m: ModelId): m is StructureModel => m === 'barrier' || m === 'ice_wall';
+export const isCreature = (m: ModelId): m is CreatureModel => m === 'wolf' || m === 'slime';
 
 export type Target =
   | { kind: 'none' }
@@ -63,7 +73,9 @@ export type TargetKind = 'none' | 'foe' | 'foeUnit' | 'ally' | 'lane' | 'slot'
   /** 환영: an ally, then an empty cell on the own home row. */
   | 'allySlot'
   /** 염력: any unit, then the cell behind it or beside it. */
-  | 'move';
+  | 'move'
+  /** 곰 덫: any empty cell without a trap. */
+  | 'trapCell';
 
 export interface Unit {
   uid: number;
@@ -91,6 +103,8 @@ export interface Unit {
   poison?: number;
   /** Structures that melt: own turns left before it disappears (빙벽). */
   lifetime?: number;
+  /** 속박: own unit phases left in which it cannot move (it still attacks and shoots). */
+  rootedTurns?: number;
   /** Summoned this turn: does not act at the end of it unless `swift`. */
   fresh: boolean;
 }
@@ -187,6 +201,14 @@ export type GameEvent =
   /** Visual sweeps: 눈보라 over the board, 부패 around a cell. */
   | { type: 'blizzard' }
   | { type: 'decay'; lane: number; row: number }
+  /** 속박 set (`turns` > 0) or worn off (0). */
+  | { type: 'root'; uid: number; turns: number }
+  /** A trap was set (`on`) or sprung / cleared. */
+  | { type: 'trap'; lane: number; row: number; on: boolean }
+  /** A unit stepped into a trap (damage and 속박 follow). */
+  | { type: 'trapSprung'; uid: number; lane: number; row: number }
+  /** A 분열 unit burst; its pieces follow as summons. */
+  | { type: 'split'; lane: number; row: number }
   | { type: 'revive'; uid: number }
   | { type: 'buff'; uid: number; attack: number; health: number }
   | { type: 'freeze'; uid: number }

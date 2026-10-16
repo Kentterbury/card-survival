@@ -26,6 +26,8 @@ export interface Look {
   r?: string;
   l?: string;
   scale?: number;
+  /** Multiplies the atlas colour (e.g. moss green). */
+  tint?: number;
 }
 
 const look = (pack: Pack, mesh: string, tex?: string, r?: string, l?: string, scale?: number): Look =>
@@ -34,6 +36,9 @@ const KN = (mesh: string, tex: string, r?: string, l?: string, scale?: number) =
 const KG = (mesh: string, r?: string, l?: string, scale?: number) => look('Kingdom', `SM_Chr_${mesh}_01`, undefined, r, l, scale);
 const DG = (mesh: string, tex: number, r?: string, l?: string, scale?: number) => look('Dungeon', `Character_${mesh}`, `Dungeon_${tex}`, r, l, scale);
 const FC = (mesh: string, tex: string, r?: string, l?: string, scale?: number) => look('Fantasy', `Character_${mesh}`, `Fantasy_${tex}`, r, l, scale);
+/** Forest dead: Dungeon skeletons washed moss green. */
+const MOSS = 0xa8d48a;
+const FD = (mesh: string, tex: number, r?: string, l?: string, tint = MOSS) => ({ ...DG(mesh, tex, r, l), tint });
 
 /**
  * Looks by card id, `hero:<heroId>` and `boss:<commander name>`, so every unit and hero
@@ -107,9 +112,17 @@ export const LOOKS: Record<string, Look> = {
   sk_acolyte: DG('Ghost_02', 1, 'SM_Wep_Staff_03'),
   sk_deathknight: DG('Skeleton_Knight', 1, 'SM_Wep_Greatsword_Straight_01'),
   sk_plague: DG('Goblin_Shaman', 1, 'SM_Wep_Bone_01'),
+  // ── 1장 숲: the forest dead, moss on old bones
+  sk_hunter: FD('Skeleton_Soldier_02', 2, undefined, 'SM_Prop_Bow_01'),
+  sk_moss: FD('Skeleton_Slave_01', 3, 'SM_Wep_Bone_01'),
+  sk_trapper: FD('Skeleton_Soldier_02', 1, 'SM_Wep_Dagger_05'),
+  sk_beastmaster: FD('Skeleton_Soldier_01', 4, 'SM_Wep_Spear_02'),
+  sk_barrow_knight: FD('Skeleton_Knight', 2, 'SM_Wep_Greatsword_Straight_01', undefined, 0xc8e0a8),
+  sk_rotwood: FD('Skeleton_Knight', 4, 'SM_Wep_Hammer_Large_Metal_01', 'SM_Wep_Shield_Gravestone_01', 0x8fbf6a),
   // ── Commanders
   'boss:해골 하사': DG('Skeleton_Knight', 1, 'SM_Wep_Sword_05', 'SM_Wep_Shield_Skull_01'),
-  'boss:추적자 대장': DG('Skeleton_Soldier_02', 1, 'SM_Wep_Cutlass_01'),
+  'boss:해골 대장': DG('Skeleton_Soldier_02', 1, 'SM_Wep_Cutlass_01', 'SM_Wep_Shield_Skull_01'),
+  'boss:해골 사냥꾼장': FD('Skeleton_Knight', 2, undefined, 'SM_Prop_Bow_01', 0xb8dc98),
   'boss:서고의 주술사': DG('Tormented_Soul', 4, 'SM_Wep_Staff_Gem_01'),
   'boss:납골당 수호자': DG('Skeleton_Knight', 4, 'SM_Wep_Hammer_Large_Metal_01', 'SM_Wep_Shield_Gravestone_01'),
   'boss:해골 군주': DG('Skeleton_Knight', 3, 'SM_Wep_Staff_Gem_01', 'SM_Wep_Shield_Skull_01'),
@@ -233,17 +246,19 @@ const DEATHS: Record<string, string[]> = {
   Death_Shield: ['hero:captain', 'shieldbearer', 'fortress', 'warden', 'thornguard', 'cover_knight', 'phalanx', 'vanguard_captain',
     'sk_guard', 'sk_shieldwall', 'sk_phalanx', 'sk_thorn', 'boss:해골 하사', 'boss:납골당 수호자'],
   // "Two Handed Sword Death": heavy two-handers.
-  Death_Heavy: ['hero:warchief', 'greatsword', 'warlord', 'w_axelord', 'c_commander', 'stalwart', 'sk_brute', 'sk_deathknight', 'sk_reaper'],
+  Death_Heavy: ['hero:warchief', 'greatsword', 'warlord', 'w_axelord', 'c_commander', 'stalwart', 'sk_brute', 'sk_deathknight', 'sk_reaper',
+    'sk_barrow_knight', 'sk_rotwood'],
   // "Falling Forward Death": fast skirmishers pitch forward.
-  Death_Forward: ['shadowblade', 'w_rider', 'glider', 'berserker', 'sk_rogue', 'sk_assassin', 'sk_berserker', 'boss:추적자 대장'],
+  Death_Forward: ['shadowblade', 'w_rider', 'glider', 'berserker', 'sk_rogue', 'sk_assassin', 'sk_berserker', 'boss:해골 대장', 'sk_trapper'],
   // "Death From Front Headshot": archers snap back.
-  Death_Shot: ['hero:hunter', 'crossbowman', 'longbow', 'h_trapper', 'h_sniper'],
+  Death_Shot: ['hero:hunter', 'crossbowman', 'longbow', 'h_trapper', 'h_sniper', 'sk_hunter', 'boss:해골 사냥꾼장'],
   // "Dying": casters and priests sink to their knees.
   Death_Kneel: ['hero:arcanist', 'apprentice', 'medic', 'stormcaller', 'priest', 'monk', 'a_scholar', 'bomber'],
   // "Dying Backwards": dark casters stagger back.
   Death_Caster: ['archmage', 'siege_mage', 'sk_mage', 'sk_leech', 'sk_acolyte', 'boss:서고의 주술사', 'boss:해골 군주'],
   // "Zombie Dying": the rank-and-file dead collapse.
-  Death_Undead: ['sk_minion', 'sk_undying', 'sk_regen', 'sk_drummer', 'sk_wraith', 'sk_warrior', 'sk_captain', 'sk_pikeman'],
+  Death_Undead: ['sk_minion', 'sk_undying', 'sk_regen', 'sk_drummer', 'sk_wraith', 'sk_warrior', 'sk_captain', 'sk_pikeman',
+    'sk_moss', 'sk_beastmaster'],
 };
 const DEATH_OF = new Map(Object.entries(DEATHS).flatMap(([clip, keys]) => keys.map((k) => [k, clip] as const)));
 

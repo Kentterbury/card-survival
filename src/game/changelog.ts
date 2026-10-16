@@ -18,6 +18,16 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '1장 숲 · 챕터와 스테이지 8개',
+    summary: '런이 3챕터 8스테이지가 됐습니다: 1장 숲(늑대 우두머리 · 슬라임 왕 · 해골 사냥꾼장) → 2장 던전(해골 하사 · 해골 대장 · 서고의 주술사) → 3장 동굴(납골당 수호자 · 해골 군주). 새 개념: 속박(전진 못 함, 공격은 함), 덫(밟으면 피해 1 + 1턴 속박), 분열(죽으면 작은 슬라임 둘), 맹독(맞은 적 2턴 중독), ★정예(불꽃에 휩싸인 강한 적). 숲의 적은 플레이어 유틸 카드(진격의 북소리, 재정비, 작전 변경, 봉인의 사슬, 재활용)도 씁니다. 왕국 보급관은 챕터마다 한 번(1-3 뒤, 2-3 뒤, 최종 결전 직전) 오고 물건이 7장으로 늘었습니다. 야영지 휴식 12 → 14. 던전 지휘관 생명력 22~32로 상향.',
+    added: [
+      'wolf_pup', 'wolf', 'wolf_hunter', 'wolf_dire', 'e_howl', 'e_gale', 'e_pack_ambush', 'e_instinct',
+      'slime', 'slime_venom', 'slime_acid', 'slime_big', 'slime_small_token', 'slime_mid_token', 'e_merge', 'e_slime_coat', 'e_vines', 'e_spore',
+      'sk_hunter', 'sk_moss', 'sk_trapper', 'sk_beastmaster', 'sk_barrow_knight', 'sk_rotwood',
+      'e_grave_moss', 'e_trap', 'e_grave_vines', 'e_wither', 'e_wisp',
+    ],
+  },
+  {
     title: '독화살 · 새 적 카드',
     summary: '일제 사격(줄마다 맨 앞 적에게 1)이 척후대장의 화살비와 같은 방식이라 독화살로 바꿨습니다. 새 상태 중독: 자기 턴 시작마다 피해 1. 적 지휘관마다 새 개념을 쓰는 카드를 넣었습니다(추적자 대장: 독·분신, 서고의 주술사: 금지된 주문, 납골당 수호자: 뼈 방패·얼음벽, 해골 군주: 역병 해골·시체 폭발).',
     added: ['e_poison_arrow', 'e_soul_mirror', 'e_dark_power', 'e_bone_shield', 'e_grave_frost', 'sk_plague', 'e_corpse_blast'],
