@@ -49,7 +49,7 @@ export const POWERS: Record<string, HeroPower> = {
     cast: (api, t) => { if (t.kind === 'unit') api.advance(t.uid, 1); },
   },
   bonewall: {
-    id: 'bonewall', name: '뼈 덧씌우기', cost: 5, target: 'ally',
+    id: 'bonewall', name: '뼈 덧씌우기', cost: 3, target: 'ally',
     text: '아군 하수인 하나에게 +0/+3을 부여합니다.',
     cast: (api, t) => { if (t.kind === 'unit') api.buff(t.uid, 0, 3); },
   },
@@ -59,7 +59,7 @@ export const POWERS: Record<string, HeroPower> = {
     cast: (api, t) => { if (t.kind === 'slot') api.summon('sk_undying', t.lane); },
   },
   howl: {
-    id: 'howl', name: '무리 부르기', cost: 4, target: 'slot',
+    id: 'howl', name: '무리 부르기', cost: 3, target: 'slot',
     text: '새끼 늑대(1/1 <b>기습</b>)를 소환합니다.',
     cast: (api, t) => { if (t.kind === 'slot') api.summon('wolf_pup', t.lane); },
   },
@@ -95,7 +95,7 @@ export interface HeroDef {
 
 export const HEROES: HeroDef[] = [
   {
-    id: 'captain', name: '수비대장', title: '방어', model: 'Knight', health: 38, startMana: 2, power: 'guard',
+    id: 'captain', name: '수비대장', title: '방어', model: 'Knight', health: 30, startMana: 2, power: 'guard',
     blurb: '성문 수비를 도맡아 온 방패 용병단장. 전열을 세우고 버티며 반격한다.',
     deck: ['squire', 'phalanx', 'phalanx', 'shieldbearer', 'crossbowman', 'crossbowman', 'veteran', 'mace_knight', 'firebolt', 'frostring'],
   },
@@ -105,7 +105,7 @@ export const HEROES: HeroDef[] = [
     deck: ['apprentice', 'apprentice', 'shieldbearer', 'firebolt', 'firebolt', 'frostring', 'shockwave', 'thunderbolt', 'war_library', 'a_scholar'],
   },
   {
-    id: 'warchief', name: '전쟁 족장', title: '돌격', model: 'Barbarian', health: 34, startMana: 4, power: 'charge',
+    id: 'warchief', name: '전쟁 족장', title: '돌격', model: 'Barbarian', health: 28, startMana: 4, power: 'charge',
     blurb: '북방에서 건너온 도끼 용병단의 족장. 하수인을 쏟아내 밀어붙인다.',
     deck: ['squire', 'crossbowman', 'phalanx', 'phalanx', 'brawler', 'berserker', 'war_drums', 'firebolt', 'firebolt', 'shockwave'],
   },
