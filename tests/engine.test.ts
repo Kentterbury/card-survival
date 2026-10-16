@@ -102,6 +102,7 @@ describe('lane combat', () => {
     const g = freshGame(Array(10).fill('squire'));
     const mine = place(g, 'berserker', 'player', 1, 3);
     const foe = place(g, 'sk_warrior', 'enemy', 1, 4);
+    foe.health = foe.maxHealth = 4;
     passTurn(g);
     // berserker hits for 4 (kills the 3/4), takes 3 back; then enemy has nothing left to swing.
     expect(foe.health).toBe(0);
@@ -124,7 +125,7 @@ describe('lane combat', () => {
     g.side('enemy').hand = [];
     g.side('enemy').drawPile = [];
     g.endTurn();
-    expect(foe.health).toBeLessThanOrEqual(4 - 2);
+    expect(foe.health).toBeLessThanOrEqual(foe.maxHealth - 2);
     expect(xbow.health).toBe(2);
   });
 
@@ -222,15 +223,16 @@ describe('new cards', () => {
     bomber.health = 1;
     const front = place(g, 'sk_warrior', 'enemy', 2, 3);
     const diag = place(g, 'sk_minion', 'enemy', 3, 3);
+    diag.health = 2;
     const ally = place(g, 'shieldbearer', 'player', 1, 2);
     const far = place(g, 'sk_minion', 'enemy', 2, 5);
     const hp = g.side('enemy').hero.health;
     g.side('enemy').hand = [];
     g.endTurn();
     expect(diag.health).toBeLessThanOrEqual(0);
-    expect(front.health).toBeLessThan(4);
+    expect(front.health).toBeLessThan(front.maxHealth);
     expect(ally.keywords.has('ward')).toBe(false); // ally caught in the blast (ward soaked it)
-    expect(far.health).toBe(2);
+    expect(far.health).toBe(far.maxHealth);
     expect(g.side('enemy').hero.health).toBe(hp);
   });
 
@@ -272,12 +274,12 @@ describe('new cards', () => {
   it('처형 kills a damaged minion outright', () => {
     const g = withCard('execute');
     const a = place(g, 'sk_brute', 'enemy', 1, 4);
-    a.health = 9;
+    a.health = a.maxHealth - 1;
     g.playCard(0, { kind: 'unit', uid: a.uid });
     expect(g.unit(a.uid)?.health ?? 0).toBeLessThanOrEqual(0);
     const b = place(g, 'sk_brute', 'enemy', 2, 4);
     g.playCard(0, { kind: 'unit', uid: b.uid });
-    expect(b.health).toBe(8);
+    expect(b.health).toBe(b.maxHealth - 2);
   });
 
   it('진격의 북소리 moves allies forward and adds attack', () => {
@@ -362,8 +364,8 @@ describe('keywords', () => {
     const a = place(g, 'sk_warrior', 'enemy', 1, 2);
     const b = place(g, 'sk_warrior', 'enemy', 1, 3);
     passTurn(g);
-    expect(a.health).toBe(2);
-    expect(b.health).toBe(2);
+    expect(a.health).toBe(a.maxHealth - 2);
+    expect(b.health).toBe(b.maxHealth - 2);
   });
 
   it('관통 from the last row reaches the enemy hero behind', () => {
@@ -382,7 +384,7 @@ describe('keywords', () => {
     passTurn(g);
     expect(flyer.row).toBe(3); // jumped over the warrior
     expect(flyer.health).toBe(1);
-    expect(wall.health).toBe(4);
+    expect(wall.health).toBe(wall.maxHealth);
     expect(g.targetAhead(wall)).toBeNull();
   });
 
@@ -431,9 +433,9 @@ describe('keywords (2nd batch)', () => {
     const b = place(g, 'sk_warrior', 'enemy', 1, 3);
     const c = place(g, 'sk_warrior', 'enemy', 3, 4);
     playerPhase(g);
-    expect(a.health).toBe(1);
-    expect(b.health).toBe(1);
-    expect(c.health).toBe(4); // different row
+    expect(a.health).toBe(a.maxHealth - 3);
+    expect(b.health).toBe(b.maxHealth - 3);
+    expect(c.health).toBe(c.maxHealth); // different row
   });
 
   it('가시 hurts melee attackers but not ranged ones', () => {
@@ -683,6 +685,7 @@ describe('heroes, camp and saves', () => {
     g.side('player').hand = [];
     const big = place(g, 'sk_warrior', 'enemy', 0, 4);
     const weak = place(g, 'sk_minion', 'enemy', 3, 4);
+    weak.health = 2;
     g.side('player').mana = POWERS.aim.cost;
     aiTakeTurn(g, 'player');
     expect(g.unit(weak.uid)).toBeUndefined();
@@ -939,7 +942,7 @@ describe('enemy commanders', () => {
 
   it('each commander has a concept, its own 지휘술 and a starting mana; mages start with more', () => {
     expect(STAGES.map((s) => s.power)).toEqual(['howl', 'ooze', 'snare', 'summon', 'rush', 'curse', 'bonewall', 'legion']);
-    expect(STAGES.map((s) => s.startMana)).toEqual([2, 2, 2, 4, 4, 4, 3, 4]);
+    expect(STAGES.map((s) => s.startMana)).toEqual([2, 2, 2, 3, 3, 4, 3, 4]);
     expect(STAGES.map((s) => s.chapter)).toEqual([0, 0, 0, 1, 1, 1, 2, 2]);
     expect(STAGES.slice(0, 3).map((s) => s.hero.health)).toEqual([14, 16, 20]);
     for (const s of STAGES) expect(s.concept.length).toBeGreaterThan(0);
@@ -975,7 +978,8 @@ describe('enemy commanders', () => {
     expect(mine.frozen).toBe(true);
     const sk = place(g, 'sk_minion', 'enemy', 3, LAST_ROW);
     g.playCardAs('enemy', 0, { kind: 'none' });
-    expect(sk.health).toBe(5);
+    expect(sk.health).toBe(sk.maxHealth);
+    expect(sk.maxHealth).toBe((card('sk_minion') as MinionCard).health + 3);
   });
 });
 

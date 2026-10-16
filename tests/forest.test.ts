@@ -242,8 +242,9 @@ describe('forest cards', () => {
     g.side('enemy').drawPile = [{ iid: 1, defId: 'wolf' }];
     enemyPlay(g, 'e_instinct');
     expect(g.side('enemy').hand.map((c) => c.defId)).toEqual(['wolf']);
-    expect(w.attack + w.health).toBe(3 + 2 + 2);
-    expect(s.attack + s.health).toBe(3 + 4);
+    // The wolf (3/3 after the howl) is weaker than the 3/5 warrior, so it gets the +1/+1.
+    expect(w.attack + w.health).toBe(3 + 3 + 2);
+    expect(s.attack + s.health).toBe(3 + 5);
   });
 
   it('무덤 이끼 gives 불사; 끈적한 껍질 gives a ward and health', () => {
@@ -251,10 +252,11 @@ describe('forest cards', () => {
     const sk = place(g, 'sk_minion', 'enemy', 2, 5);
     enemyPlay(g, 'e_grave_moss', { kind: 'unit', uid: sk.uid });
     expect(sk.keywords.has('undying')).toBe(true);
-    expect(sk.maxHealth).toBe(3);
+    const base = (card('sk_minion') as MinionCard).health;
+    expect(sk.maxHealth).toBe(base + 1);
     enemyPlay(g, 'e_slime_coat', { kind: 'unit', uid: sk.uid });
     expect(sk.keywords.has('ward')).toBe(true);
-    expect(sk.maxHealth).toBe(6);
+    expect(sk.maxHealth).toBe(base + 4);
   });
 
   it('the enemy AI plays a whole forest stage without errors', async () => {

@@ -18,6 +18,19 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '하수인 비용 곡선 정리',
+    summary: '모든 하수인을 같은 기준으로 맞췄습니다: 공격력 + 체력 + 키워드·효과 점수 = 비용 + 2(희귀 +1, 영웅 등급 +2, 영웅 전용 +1까지 허용, ±1). 늑대는 체력을 올려 곡선 위쪽으로, 곡선보다 낮던 해골들은 체력 +1, 높던 카드는 조금 낮췄습니다. 대신 영웅 생명력 +2(비전술사 +4), 야영지 휴식 14 → 16, 던전·동굴 지휘관 생명력을 낮췄습니다.',
+    changed: [
+      { id: 'wolf_pup', note: '1/1 → 1/2' }, { id: 'wolf', note: '2/2 → 2/3' }, { id: 'wolf_hunter', note: '2/3 → 3/3' }, { id: 'wolf_dire', note: '4/4 → 4/5' },
+      { id: 'a_scholar', note: '2/3 → 1/3' }, { id: 'c_standard', note: '2/6 → 2/5' }, { id: 'warden', note: '6마나 2/6 → 7마나 2/4' },
+      { id: 'c_commander', note: '5/7 → 4/6' }, { id: 'stalwart', note: '3/3 → 3/4' }, { id: 'shadowblade', note: '3/2 → 3/3' }, { id: 'vanguard_captain', note: '2/4 → 2/5' },
+      { id: 'sk_rogue', note: '2/2 → 2/3' }, { id: 'sk_undying', note: '2/1 → 2/2' }, { id: 'sk_wraith', note: '2/2 → 2/3' },
+      { id: 'sk_warrior', note: '3/4 → 3/5' }, { id: 'sk_pikeman', note: '2/4 → 2/5' }, { id: 'sk_captain', note: '2/4 → 2/5' }, { id: 'sk_berserker', note: '2/4 → 2/5' },
+      { id: 'sk_plague', note: '2/3 → 2/4' }, { id: 'sk_leech', note: '2/3 → 2/4' }, { id: 'sk_reaper', note: '4/5 → 4/6' },
+      { id: 'sk_beastmaster', note: '2/4 → 1/3' }, { id: 'sk_deathknight', note: '5/8 → 5/7' }, { id: 'sk_brute', note: '6/10 → 6/9' },
+    ],
+  },
+  {
     title: '1장 숲 · 챕터와 스테이지 8개',
     summary: '런이 3챕터 8스테이지가 됐습니다: 1장 숲(늑대 우두머리 · 슬라임 왕 · 해골 사냥꾼장) → 2장 던전(해골 하사 · 해골 대장 · 서고의 주술사) → 3장 동굴(납골당 수호자 · 해골 군주). 새 개념: 속박(전진 못 함, 공격은 함), 덫(밟으면 피해 1 + 1턴 속박), 분열(죽으면 작은 슬라임 둘), 맹독(맞은 적 2턴 중독), ★정예(불꽃에 휩싸인 강한 적). 숲의 적은 플레이어 유틸 카드(진격의 북소리, 재정비, 작전 변경, 봉인의 사슬, 재활용)도 씁니다. 왕국 보급관은 챕터마다 한 번(1-3 뒤, 2-3 뒤, 최종 결전 직전) 오고 물건이 7장으로 늘었습니다. 야영지 휴식 12 → 14. 던전 지휘관 생명력 22~32로 상향.',
     added: [

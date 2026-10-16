@@ -24,7 +24,7 @@ export const TRAP_ROOT = 1;
 
 export const HERO_MAX_HEALTH = 30;
 /** Health restored by resting at the camp between stages. */
-export const CAMP_HEAL = 14;
+export const CAMP_HEAL = 16;
 
 /** Where a saved run resumes: the start of `stage`, with this deck and health. */
 export interface RunSave {

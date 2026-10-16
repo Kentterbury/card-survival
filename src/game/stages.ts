@@ -45,7 +45,7 @@ export const STAGES: StageDef[] = [
     hero: { name: '늑대 우두머리', model: 'wolf', scale: 1.9, health: 14 },
     power: 'howl', startMana: 2,
     deck: [
-      ...x('wolf_pup', 2), ...x('wolf', 3), ...x('wolf_hunter', 2), 'wolf_dire', 'slime', 'sk_hunter',
+      ...x('wolf_pup', 3), ...x('wolf', 2), ...x('wolf_hunter', 3), 'slime', 'sk_hunter',
       'e_howl', 'e_gale', 'e_pack_ambush', 'e_instinct', 'war_drums',
     ],
   },
@@ -70,8 +70,8 @@ export const STAGES: StageDef[] = [
   // ── 2장 던전
   {
     chapter: 1, name: '무너진 성문', subtitle: '해골 하사가 길을 막는다', concept: '졸개 물량과 진군',
-    hero: { name: '해골 하사', model: 'Skeleton_Warrior', scale: 1.5, health: 22 },
-    power: 'summon', startMana: 4,
+    hero: { name: '해골 하사', model: 'Skeleton_Warrior', scale: 1.5, health: 20 },
+    power: 'summon', startMana: 3,
     deck: [
       ...x('sk_minion', 5), ...x('sk_drummer', 2), ...x('e_bonearmor', 2), ...x('e_curse', 2), 'e_march',
       ...x('sk_rogue', 2), 'sk_captain', 'sk_warrior',
@@ -79,8 +79,8 @@ export const STAGES: StageDef[] = [
   },
   {
     chapter: 1, name: '횃불의 회랑', subtitle: '해골 대장의 기습대', concept: '졸개 물량과 빠른 기습, 매복과 독',
-    hero: { name: '해골 대장', model: 'Skeleton_Rogue', scale: 1.55, health: 24 },
-    power: 'rush', startMana: 4,
+    hero: { name: '해골 대장', model: 'Skeleton_Rogue', scale: 1.55, health: 22 },
+    power: 'rush', startMana: 3,
     deck: [
       ...x('sk_minion', 2), 'sk_drummer', 'e_march', 'e_curse', ...x('e_poison_arrow', 2), 'e_soul_mirror',
       ...x('sk_rogue', 3), ...x('sk_undying', 2), 'e_ambush', 'sk_captain',
@@ -89,7 +89,7 @@ export const STAGES: StageDef[] = [
   },
   {
     chapter: 1, name: '주술사의 서고', subtitle: '멀리서 날아오는 저주', concept: '원거리 저주, 빙결과 금지된 주문',
-    hero: { name: '서고의 주술사', model: 'Skeleton_Mage', scale: 1.5, health: 26 },
+    hero: { name: '서고의 주술사', model: 'Skeleton_Mage', scale: 1.5, health: 24 },
     power: 'curse', startMana: 4,
     deck: [
       ...x('sk_acolyte', 2), ...x('e_frostbolt', 2), ...x('e_chill', 2), 'e_hex', 'e_insight', 'e_dark_power',
@@ -99,16 +99,16 @@ export const STAGES: StageDef[] = [
   // ── 3장 동굴
   {
     chapter: 2, name: '뼈의 납골당', subtitle: '거대한 것이 깨어난다', concept: '뼈 장벽, 뼈 방패와 거인',
-    hero: { name: '납골당 수호자', model: 'Skeleton_Warrior', scale: 1.7, health: 28 },
+    hero: { name: '납골당 수호자', model: 'Skeleton_Warrior', scale: 1.7, health: 22 },
     power: 'bonewall', startMana: 3,
     deck: [
-      'e_bonearmor', 'e_bone_shield', ...x('sk_phalanx', 3), 'e_bonewall', 'sk_thorn', 'sk_regen', ...x('sk_pikeman', 2), 'sk_warrior',
+      'e_bonearmor', 'e_bone_shield', ...x('sk_phalanx', 3), 'e_bonewall', 'sk_thorn', 'sk_regen', 'sk_pikeman', 'sk_warrior',
       'e_warcry', 'sk_guard', 'sk_brute',
     ],
   },
   {
     chapter: 2, name: '군주의 왕좌', subtitle: '최종 결전', concept: '사령술, 역병, 얼음벽과 불사의 군단',
-    hero: { name: '해골 군주', model: 'Skeleton_Mage', scale: 1.9, health: 32 },
+    hero: { name: '해골 군주', model: 'Skeleton_Mage', scale: 1.9, health: 28 },
     power: 'legion', startMana: 4,
     deck: [
       ...x('sk_undying', 2), 'e_grave_frost', 'sk_wraith', ...x('sk_mage', 2), ...x('sk_plague', 2), 'e_corpse_blast',
