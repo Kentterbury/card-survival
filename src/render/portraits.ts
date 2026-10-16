@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { isCreature, type ModelId } from '../game/types';
 import { animsFor, instantiateCharacter, instantiateStatic, useSynty } from './assets';
-import { makeCreature } from './creatures';
+import { creatureAnims, instantiateCreature } from './creatures';
 import { makeIceWall } from './iceWall';
 
 /**
@@ -37,12 +37,19 @@ export async function renderPortraits(subjects: { key: string; model: ModelId }[
       camera.position.set(0, 1.6, 5.5);
       camera.lookAt(0, 0.5, 0);
     } else if (isCreature(id)) {
-      obj = makeCreature(id, key).root;
+      const inst = await instantiateCreature(id, key);
+      obj = inst.root;
+      const idle = inst.clips.find((c) => c.name === creatureAnims(id).idle);
+      if (idle) {
+        inst.mixer.clipAction(idle).play();
+        inst.mixer.update(0.4);
+      }
       obj.rotation.y = 0.5;
       // Slimes face the camera low and round; wolves are framed on the head.
       if (id === 'slime') {
-        camera.position.set(0.4, 1.5, 3.1);
-        camera.lookAt(0, 0.75, 0);
+        obj.rotation.y = 0.25;
+        camera.position.set(0.3, 1.25, 3.0);
+        camera.lookAt(0, 0.62, 0);
       } else {
         camera.position.set(1.1, 1.75, 2.6);
         camera.lookAt(0.25, 1.15, 0.6);

@@ -3,7 +3,7 @@ import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { isCreature, isStructure, type CharModel, type ModelId } from '../game/types';
-import { CREATURE_LOOKS } from './creatures';
+import { CREATURE_LOOKS, preloadCreatures } from './creatures';
 import {
   DEFAULT_LOOKS, grip, KAYKIT_BOUNDS, LOOKS, SYNTY_ANIMS, SYNTY_CHAR_SCALE, SYNTY_PACKS, SYNTY_STATICS, SYNTY_TEXTURES,
   SYNTY_WEAPON_FILES, type Look,
@@ -116,6 +116,7 @@ export async function preloadAll(onProgress?: (done: number, total: number) => v
   useSynty = await detectSynty();
   if (useSynty) return preloadSynty(onProgress);
   const jobs: Promise<unknown>[] = [
+    ...preloadCreatures(),
     ...CHARACTER_MODELS.map((m) => loadGltf(`characters/${m}.glb`)),
     loadGltf('characters/anims_adventurer.glb'),
     loadGltf('characters/anims_skeleton.glb'),
@@ -141,6 +142,7 @@ function prepareShadows(obj: THREE.Object3D) {
 async function preloadSynty(onProgress?: (done: number, total: number) => void) {
   const statics = [...new Set(Object.values(SYNTY_STATICS).map((s) => s.file))];
   const jobs: Promise<unknown>[] = [
+    ...preloadCreatures(),
     ...SYNTY_PACKS.map((p) => loadSynty(`characters/Pack_${p}.glb`)),
     loadSynty('characters/anims.glb'),
     ...statics.map((f) => loadSynty(`dungeon/${f}.glb`)),
@@ -284,7 +286,7 @@ async function instantiateSyntyCharacter(model: CharModel, key?: string): Promis
 
 /** `look` is a card id, `hero:<id>` or `boss:<name>`; only the Synty set tells them apart. */
 export async function instantiateCharacter(model: ModelId, look?: string): Promise<CharacterInstance> {
-  if (isCreature(model)) throw new Error(`${model} is built by makeCreature`);
+  if (isCreature(model)) throw new Error(`${model} is built by instantiateCreature`);
   if (useSynty && !isStructure(model)) return instantiateSyntyCharacter(model, look);
   const gltf = await loadGltf(`characters/${model}.glb`);
   const root = SkeletonUtils.clone(gltf.scene);

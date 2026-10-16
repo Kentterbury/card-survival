@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { isCreature, isStructure, type ModelId, type Side, type Unit } from '../game/types';
-import { makeCreature, type CreatureRig } from './creatures';
+import { creatureAnims, instantiateCreature } from './creatures';
 import { makeIceWall } from './iceWall';
 import { animsFor, instantiateCharacter, instantiateStatic, useSynty, type AnimSet } from './assets';
 import { deathClipsFor } from './syntySet';
@@ -28,7 +28,6 @@ export class UnitView {
   private vines: THREE.Group | null = null;
   /** 이글이글: the burning aura of elite units. */
   private aura: { sprites: THREE.Sprite[]; glow: THREE.Mesh; t: number } | null = null;
-  private creature: CreatureRig | null = null;
   private flashMats: THREE.MeshStandardMaterial[] = [];
   dead = false;
   /** Flyers hover above the floor and bob gently. */
@@ -62,19 +61,16 @@ export class UnitView {
       this.model.scale.setScalar(0.58);
     } else if (this.modelId === 'ice_wall') {
       this.model = makeIceWall();
-    } else if (isCreature(this.modelId)) {
-      this.creature = makeCreature(this.modelId, this.look);
-      this.model = this.creature.root;
-      this.model.scale.setScalar(UNIT_SCALE * this.scale);
-      this.flashMats.push(...this.creature.mats);
     } else {
-      const inst = await instantiateCharacter(this.modelId, this.look);
+      // Characters (KayKit or Synty) and forest beasts (Quaternius) share one animation path.
+      const creature = isCreature(this.modelId);
+      const inst = creature ? await instantiateCreature(this.modelId as 'wolf' | 'slime', this.look) : await instantiateCharacter(this.modelId, this.look);
       this.model = inst.root;
       this.mixer = inst.mixer;
       this.clips = inst.clips;
-      this.anims = animsFor(this.modelId, this.look);
+      this.anims = creature ? creatureAnims(this.modelId as 'wolf' | 'slime') : animsFor(this.modelId, this.look);
       // Synty: a per-concept death clip when the library has it (else die() topples the unit).
-      const death = useSynty ? deathClipsFor(this.look).find((d) => this.clips.some((c) => c.name === d)) : undefined;
+      const death = useSynty && !creature ? deathClipsFor(this.look).find((d) => this.clips.some((c) => c.name === d)) : undefined;
       if (this.anims && death) this.anims = { ...this.anims, death };
       this.model.scale.setScalar(UNIT_SCALE * this.scale);
       // Wide-brimmed mage hats read as a big disc from the top-down camera.
@@ -141,12 +137,10 @@ export class UnitView {
       this.ice.position.y = 1.25 * this.scale;
       this.group.add(this.ice);
       if (this.current) this.current.timeScale = 0;
-      this.creature?.setPaused(true);
     } else if (!on && this.ice) {
       this.group.remove(this.ice);
       this.ice = null;
       if (this.current) this.current.timeScale = 1;
-      this.creature?.setPaused(false);
     }
   }
 
@@ -248,15 +242,13 @@ export class UnitView {
   }
 
   attackAnim(): Promise<void> {
-    if (this.creature) return this.creature.attack();
     if (!this.anims) return this.bump();
     return this.playOnce(this.anims.attack, 0.45);
   }
 
   hitAnim() {
     this.flash(0xff3b30);
-    if (this.creature) this.creature.hit();
-    else if (this.anims && !this.frozen) void this.playOnce(this.anims.hit, 1);
+    if (this.anims && !this.frozen) void this.playOnce(this.anims.hit, 1);
     else void this.bump();
   }
 
@@ -283,9 +275,7 @@ export class UnitView {
   }
 
   async spawnAnim() {
-    if (this.creature) {
-      await this.creature.spawn();
-    } else if (this.anims?.spawn) {
+    if (this.anims?.spawn) {
       // Skeletons climbing out of the ground, played 1.5x faster than authored.
       await this.playOnce(this.anims.spawn, 0.85, true, 1.5);
     } else if (this.anims && this.modelId.startsWith('Skeleton')) {
@@ -303,10 +293,8 @@ export class UnitView {
   async moveTo(target: THREE.Vector3, duration: number, walk = true) {
     const from = this.group.position.clone();
     if (walk && this.anims) this.loop(this.anims.walk, 0.15);
-    if (walk) this.creature?.setWalking(true);
     await tween(duration, (k) => this.group.position.lerpVectors(from, target, ease.inOutSine(k)));
     if (walk && this.anims && !this.frozen) this.loop(this.anims.idle, 0.2);
-    this.creature?.setWalking(false);
   }
 
   /** Melee strike: step toward the target, swing, step back. */
@@ -330,9 +318,7 @@ export class UnitView {
       this.aura.glow.removeFromParent();
       this.aura = null;
     }
-    if (this.creature) {
-      await this.creature.die();
-    } else if (this.anims?.death) {
+    if (this.anims?.death) {
       // Mixamo deaths run 2–5 s; keep every death to about 1.6 s of game time.
       const len = this.clip(this.anims.death)?.duration ?? 1;
       await this.playOnce(this.anims.death, 0.92, false, Math.max(1, len / 1.6));
@@ -356,7 +342,6 @@ export class UnitView {
 
   update(dt: number) {
     this.mixer?.update(dt);
-    this.creature?.update(dt);
     if (this.aura) {
       const a = this.aura;
       a.t += dt;

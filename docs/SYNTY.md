@@ -86,7 +86,7 @@ rm -rf public/synty && cp -r ../cardproject/WebExport/card-survival/synty public
 - 새 무기나 클립을 추가하려면 `build_card_survival.sh`를 고친 뒤 위 1~3단계를 다시 실행합니다.
 - 배경 조각을 바꾸려면 `syntySet.ts`의 `SYNTY_STATICS`도 함께 고칩니다.
 - 숲 보드(1장)는 POLYGON Nature의 단색 아틀라스 조각(`forest/*.glb`, `PolygonNature_01.png`)을 씁니다. 잎 카드(알파 텍스처)를 쓰는 나무는 빼고, 목록은 `build_card_survival.sh`의 `forest()`와 `src/render/forest.ts`의 `SYNTY_NATURE`에 있습니다. 숲 조각만 다시 뽑으려면 `ONLY=forest WebExport/tools/build_card_survival.sh`(나머지 `assets-raw`는 그대로 둡니다).
-- 숲의 해골은 Dungeon 해골에 `tint`(이끼색)를 곱한 생김새입니다(`syntySet.ts`의 `FD`). 늑대와 슬라임은 Synty 모델이 아니라 코드로 만듭니다(`creatures.ts`).
+- 숲의 해골은 Dungeon 해골에 `tint`(이끼색)를 곱한 생김새입니다(`syntySet.ts`의 `FD`). 늑대와 슬라임은 Synty가 아니라 공개 저장소의 Quaternius 모델(CC0, `public/assets/creatures/`)입니다.
 - 결과물(`WebExport/card-survival/synty/`)은 `cardproject`에 커밋하고 푸시합니다. 그다음 card-survival 배포를 다시 실행하면 반영됩니다.
 
 ## Mixamo 사망 동작 넣기
