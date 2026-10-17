@@ -21,7 +21,7 @@ const NEAR_SIDE_X = 6.2;
 
 /** Sky, fog and light colours per board. */
 const MOOD: Record<EnvName, { bg: number; fogNear: number; fogFar: number; sky: number; ground: number; hemi: number; moon: number; moonI: number }> = {
-  dungeon: { bg: 0x141018, fogNear: 22, fogFar: 46, sky: 0xc8d2ff, ground: 0x4a3424, hemi: 1.45, moon: 0xffe8cc, moonI: 2.3 },
+  dungeon: { bg: 0x110d14, fogNear: 20, fogFar: 42, sky: 0xbcc8ff, ground: 0x3a2a1e, hemi: 1.1, moon: 0xffe4c4, moonI: 1.9 },
   forest: { bg: 0x101c16, fogNear: 24, fogFar: 50, sky: 0xbcd6ff, ground: 0x34482a, hemi: 1.6, moon: 0xe4eeff, moonI: 2.4 },
 };
 
