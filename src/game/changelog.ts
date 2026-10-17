@@ -18,6 +18,10 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '방패벽 너프',
+    changed: [{ id: 'c_shieldwall', note: '아군 모두 +1/+3 → +0/+2' }],
+  },
+  {
     title: '지휘술 비용 조정',
     summary: '수비대장의 방패 명령 1 → 4마나, 전쟁 족장의 돌격 명령 8 → 4마나.',
   },

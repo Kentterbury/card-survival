@@ -491,8 +491,8 @@ const CARD_LIST: CardDef[] = [
   // ── 수비대장 전용: 보호막과 단단한 전열 ─────────────────────
   {
     id: 'c_shieldwall', name: '방패벽', type: 'spell', cost: 4, rarity: 'common', hero: 'captain', target: 'none', icon: 'shield', ai: { kind: 'buffAll' },
-    text: '아군 하수인 모두에게 +1/+3을 부여합니다.',
-    cast: (api) => { for (const u of api.allies()) api.buff(u.uid, 1, 3); },
+    text: '아군 하수인 모두에게 +0/+2를 부여합니다.',
+    cast: (api) => { for (const u of api.allies()) api.buff(u.uid, 0, 2); },
   },
   {
     id: 'c_shield_bash', name: '방패 강타', type: 'spell', cost: 3, rarity: 'common', hero: 'captain', target: 'foeUnit', icon: 'sword', ai: { kind: 'damage', amount: 3 },
