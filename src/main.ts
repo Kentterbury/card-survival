@@ -14,7 +14,7 @@ import { CHARACTER_MODELS, preloadAll, useSynty } from './render/assets';
 import { Board, CAMERA_MODES, cellPos, ENEMY_HERO_POS, HERO_POS, type CameraMode } from './render/board';
 import { Fx } from './render/fx';
 import { renderPortraits } from './render/portraits';
-import { updateTweens, wait } from './render/tween';
+import { ease, tween, updateTweens, wait } from './render/tween';
 import { UnitView } from './render/unitView';
 import { createCardElement, keywordNotes, portrait, setPortraits } from './ui/cardView';
 import { spellArtSvg, spellIconSvg } from './ui/icons';
@@ -279,6 +279,40 @@ class App {
     this.playerHero = v;
   }
 
+  /** 덱 다시 섞기: the spent cards fan out over the table and sweep back into the deck, which glows and riffles. */
+  private async shuffleFx(count: number) {
+    const deck = $('deck-btn');
+    const to = deck.getBoundingClientRect();
+    const n = Math.max(4, Math.min(9, count));
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const flights: Promise<void>[] = [];
+    for (let i = 0; i < n; i++) {
+      const el = document.createElement('div');
+      el.className = 'shuffle-card';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      // A fan across the middle of the table, then an arc up and into the deck.
+      const x0 = w * 0.5 + (i - (n - 1) / 2) * to.width * 0.9 - to.width / 2;
+      const y0 = h * 0.5 + Math.abs(i - (n - 1) / 2) * 6;
+      const r0 = (i - (n - 1) / 2) * 8;
+      const dx = to.left - x0;
+      const dy = to.top - y0;
+      const lift = 90 + Math.random() * 40;
+      flights.push(wait(i * 0.06).then(() => tween(0.75, (k) => {
+        const appear = Math.min(1, k / 0.2);
+        const m = ease.inOutSine(Math.max(0, (k - 0.25) / 0.75));
+        el.style.transform = `translate(${x0 + dx * m}px, ${y0 + dy * m - lift * Math.sin(Math.PI * m)}px) rotate(${r0 * (1 - m)}deg) scale(${0.6 + 0.4 * appear - 0.25 * m})`;
+        el.style.opacity = String(k < 0.9 ? appear : (1 - k) / 0.1);
+      })).then(() => el.remove()));
+    }
+    await Promise.all(flights);
+    deck.classList.remove('shuffled');
+    void deck.offsetWidth;
+    deck.classList.add('shuffled');
+    await wait(0.25);
+  }
+
   private heroFrameHit(side: Side) {
     const frame = $(side === 'player' ? 'hero-frame' : 'enemy-frame');
     frame.classList.remove('hit');
@@ -325,6 +359,7 @@ class App {
         if (e.side === 'player') {
           this.fx.floatText(HERO_POS.clone().setY(2), '덱을 다시 섞음', 'info');
           sound.play('shuffle');
+          await this.shuffleFx(e.count);
         }
         return;
       case 'burn':

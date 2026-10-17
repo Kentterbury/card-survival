@@ -44,7 +44,7 @@ const SAMPLES: Partial<Record<SfxName, { count: number; vol: number; vary?: bool
   click: { count: 3, vol: 0.35 },
   card: { count: 3, vol: 0.6, vary: true },
   draw: { count: 3, vol: 0.4, vary: true },
-  shuffle: { count: 1, vol: 0.45 },
+  shuffle: { count: 1, vol: 0.75 },
   summon: { count: 3, vol: 0.6, vary: true },
   swing: { count: 3, vol: 0.5, vary: true },
   hit: { count: 3, vol: 0.55, vary: true },

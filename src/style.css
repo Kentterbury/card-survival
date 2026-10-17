@@ -63,6 +63,15 @@ button { font-family: inherit; }
 #deck-info { position: absolute; right: calc(1.6vh + env(safe-area-inset-right)); top: 60vh; display: flex; flex-direction: column; align-items: center; gap: .6vh; }
 #deck-btn { width: 6.5vh; height: 9vh; border-radius: 6px; border: 2px solid var(--gold-dim); background: repeating-linear-gradient(45deg, #3a2414 0 6px, #2a1a0e 6px 12px); color: var(--ink); font-weight: 900; font-size: 2.2vh; cursor: pointer; box-shadow: 3px 3px 0 #1a0e06, 6px 6px 0 #120a04; }
 #discard-count { font-size: 1.5vh; opacity: .8; }
+.shuffle-card { position: fixed; left: 0; top: 0; z-index: 70; width: 6.5vh; height: 9vh; border-radius: 6px; border: 2px solid var(--gold); pointer-events: none; background: repeating-linear-gradient(45deg, #5a3a1c 0 6px, #3a2414 6px 12px); box-shadow: 0 0 10px #ffcf5a88; }
+#deck-btn.shuffled { animation: deckShuffle .7s ease-out; }
+@keyframes deckShuffle {
+  0% { box-shadow: 3px 3px 0 #1a0e06, 6px 6px 0 #120a04, 0 0 0 0 #ffd36a; transform: scale(1); }
+  25% { transform: scale(1.12) rotate(-4deg); box-shadow: 3px 3px 0 #1a0e06, 6px 6px 0 #120a04, 0 0 28px 8px #ffd36a; }
+  50% { transform: scale(1.06) rotate(4deg); }
+  75% { transform: scale(1.03) rotate(-2deg); }
+  100% { box-shadow: 3px 3px 0 #1a0e06, 6px 6px 0 #120a04, 0 0 0 0 #ffd36a00; transform: none; }
+}
 
 #end-turn { position: absolute; right: calc(1.6vh + env(safe-area-inset-right)); bottom: 15vh; width: 14vh; height: 6.5vh; border: 3px solid var(--gold-dim); clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%); background: linear-gradient(#5a4020, #2a1c0c); color: var(--ink); font-weight: 900; font-size: 2.2vh; cursor: pointer; }
 #end-turn.done { background: linear-gradient(#ffd75a, #c88a1a); color: #2a1a06; animation: glow 1.2s ease-in-out infinite; }
