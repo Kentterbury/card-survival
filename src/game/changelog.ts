@@ -19,7 +19,7 @@ export interface ChangeEntry {
 export const CARD_CHANGES: ChangeEntry[] = [
   {
     title: '지휘술 비용 조정',
-    summary: '수비대장의 방패 명령 1 → 6마나, 전쟁 족장의 돌격 명령 8 → 6마나.',
+    summary: '수비대장의 방패 명령 1 → 4마나, 전쟁 족장의 돌격 명령 8 → 4마나.',
   },
   {
     title: '해골 군주의 위엄 · 적 지휘관 카드 뽑기',
