@@ -30,3 +30,8 @@ All released under CC0 1.0 (public domain); picked and converted to MP3 with `to
   "3 Dark Magic Spells" (qubodup), "Fireball" (Julien Matthey).
 - OpenGameArt.org music: "Medieval: The Bard's Tale" (RandomMind, title), "Dark Forest Theme" (cynicmusic, chapter 1),
   "Dungeon Theme" (Katana, chapter 2), "Going Deep" (section31, chapter 3), "Epic Boss Battle" (Juhani Junkala, final battle).
+
+## Effect textures (`fx/`)
+
+Kenney Particle Pack (https://kenney.nl/assets/particle-pack), released under CC0 1.0 (public domain).
+Picked, resized and turned into white-with-alpha PNGs with `tools/build-fx.py`.

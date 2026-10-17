@@ -436,6 +436,8 @@ class App {
           await this.fx.projectile(a.group.position.clone().setY(1.3 * a.scale), targetPos, kind);
         } else {
           sound.play('swing');
+          // The stroke lands as the lunge reaches the target.
+          void wait(0.28).then(() => this.fx.slash(targetPos, a.side === 'enemy' ? 0xffb8a8 : 0xfff1c8));
           await a.lunge(targetPos.clone().setY(0));
         }
         return;
@@ -1684,7 +1686,7 @@ class App {
       </div>
       <button class="btn" id="start-btn">출정</button>
       <button class="btn secondary" id="book-open">카드북</button>
-      <p class="credits"><a href="grip.html" target="_blank" rel="noopener">무기 위치 편집기</a> · 주문 그림: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (Lorc, Delapouite 외, CC BY 3.0) · 소리·음악: <a href="https://kenney.nl" target="_blank" rel="noopener">Kenney</a>, <a href="https://opengameart.org" target="_blank" rel="noopener">OpenGameArt</a> 작가들 (CC0)</p>`);
+      <p class="credits"><a href="grip.html" target="_blank" rel="noopener">무기 위치 편집기</a> · 주문 그림: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (Lorc, Delapouite 외, CC BY 3.0) · 소리·음악·이펙트: <a href="https://kenney.nl" target="_blank" rel="noopener">Kenney</a>, <a href="https://opengameart.org" target="_blank" rel="noopener">OpenGameArt</a> 작가들 (CC0)</p>`);
     m.querySelector('#book-open')!.addEventListener('click', () => this.cardBook.open());
     const raw = this.readSave();
     const save = raw && migrateSave(raw);
