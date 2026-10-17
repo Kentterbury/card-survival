@@ -331,6 +331,7 @@ class App {
         this.board.syncTraps([]);
         this.board.syncZones([]);
         await this.board.setEnvironment(CHAPTERS[chapter].env);
+        await this.board.setStageScenery(e.stage);
         sound.setTrack(e.stage === STAGES.length - 1 ? 'boss' : (['forest', 'dungeon', 'cave'] as const)[chapter]);
         await this.setupEnemyHero();
         this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };

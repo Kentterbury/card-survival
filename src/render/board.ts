@@ -72,6 +72,9 @@ export class Board {
   /** Scenery on the camera side of the board, per board (hidden in the side and iso views). */
   private readonly nearSide = new Map<EnvName, THREE.Object3D[]>();
   private fogBase = { near: 18, far: 38 };
+  /** Scenery behind the defenders, one group per stage (built on first use). */
+  private readonly sceneries = new Map<number, THREE.Group>();
+  private sceneryStage: number | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     // Phones: fewer pixels and a smaller shadow map keep the frame rate up.
@@ -342,12 +345,12 @@ export class Board {
       this.addTorchLight(new THREE.Vector3(x, 3, -15.9), 0xff9a3c, 18);
     }
     this.addTorchLight(new THREE.Vector3(0, 2.9, -16.2), 0x7cff9a, 8);
-    // The defenders' camp: fences, logs, stumps and a campfire.
+    // The defenders' line: fences, logs, stumps and a torch on a pole.
     put('fence', 2.9, -6.6, 1.7, 0.1, 0, 'width');
     put('fence', 2.9, 6.6, 1.7, -0.1, 0, 'width');
-    put('campfire', 1.6, -7.3, 4.4, 0, 0, 'width');
-    this.addFlame(new THREE.Vector3(-7.3, 0.7, 4.4), 1.6);
-    this.addTorchLight(new THREE.Vector3(-7.3, 1.6, 4.0), 0xff8a2c, 16);
+    put('torchStick', 2.4, -7.3, 4.4);
+    this.addFlame(new THREE.Vector3(-7.3, 2.5, 4.4), 1.0);
+    this.addTorchLight(new THREE.Vector3(-7.3, 2.9, 4.0), 0xff8a2c, 16);
     put('log', 3, -5.6, 5.4, 1.4, 0, 'width');
     put('stump', 0.8, 7.4, 4.6, 0.3);
     put('stump', 0.6, 6.4, 5.6, 1.1);
@@ -356,7 +359,7 @@ export class Board {
     for (const [x, z] of [[-8.1, -3.2], [8.0, -7.4], [-8.2, -11.5], [7.9, 0.4], [-7.9, 1.3]] as const) put('mushrooms', 0.55, x, z, rnd() * 6);
     for (const [x, z] of [[-8.3, -6.8], [8.4, -12.6], [8.2, -3.5], [-8.6, -14.2]] as const) put('rock', 0.7 + rnd() * 0.4, x, z, rnd() * 6, Math.floor(rnd() * 2));
     put('stump', 0.7, -8.4, -9.4, 2);
-    // Deep woods behind the mercenaries' camp.
+    // Deep woods behind the defenders (each stage dresses the ground in between, see buildScenery).
     for (let x = -14; x <= 8; x += 2.8) {
       put(rnd() > 0.5 ? 'pine' : 'round', 7 + rnd() * 3, x + rnd(), 17.5 + rnd() * 1.5, rnd() * 6, Math.floor(rnd() * 3));
     }
@@ -386,7 +389,7 @@ export class Board {
     }));
   }
 
-  /** Dungeon dressing: bones, candles and a statue along the far wall, a camp, a crypt at the gate. */
+  /** Dungeon dressing: bones, candles and a statue along the far wall, a crypt at the gate. */
   private dungeonDecor(jobs: Promise<unknown>[]) {
     const E = Math.PI / 2; // facing +x, away from the far wall
     // Far wall.
@@ -401,31 +404,7 @@ export class Board {
     this.decor(jobs, 'bonesSmall', 1.4, -7.3, -13.6, { fit: 'width', rotY: 2.2 });
     this.decor(jobs, 'vases', 1.2, -8.3, -15.2, { rotY: E });
     this.decor(jobs, 'chain', 1.6, -9.3, -4.0, { rotY: E, y: 1.6 });
-    // The defenders' camp.
     this.decor(jobs, 'brazier', 1.0, -7.2, 2.9, { flame: 1.15 });
-    this.decor(jobs, 'weaponRack', 1.5, -3.4, 5.6);
-    this.decor(jobs, 'table', 2.6, 2.4, 5.8, { fit: 'width' });
-    this.decor(jobs, 'stool', 0.6, 1.2, 4.9, { rotY: 0.5 });
-    this.decor(jobs, 'crate', 1.1, 4.6, 5.6, { rotY: 0.3 });
-    this.decor(jobs, 'barrel', 1.1, 5.6, 4.9);
-    this.decor(jobs, 'rug', 5.0, 0, 3.6, { fit: 'width', rotY: E });
-    // The mercenaries' supply camp behind them, up to the hall's entrance.
-    this.decor(jobs, 'tentOpen', 3.0, -2.4, 9.4, { rotY: 0.2 });
-    this.decor(jobs, 'warTable', 2.2, -2.4, 9.4, { rotY: 0.2, fit: 'width' });
-    this.decor(jobs, 'bench', 0.7, 0.4, 8.2, { rotY: Math.PI / 2 });
-    this.decor(jobs, 'battleBanner', 2.6, -4.4, 6.9);
-    this.decor(jobs, 'battleBanner', 2.6, 3.6, 7.2);
-    this.decor(jobs, 'arrowBarrel', 1.4, -5.2, 7.4);
-    this.decor(jobs, 'crateStack', 2.2, -7.6, 8.6, { rotY: E });
-    this.decor(jobs, 'sacks', 1.1, -6.2, 10.6, { rotY: 0.6 });
-    this.decor(jobs, 'barrelStack', 2.0, -8.2, 11.8, { rotY: E });
-    this.decor(jobs, 'woodPile', 0.8, -4.6, 13.0);
-    this.decor(jobs, 'campRack', 2.0, 5.2, 7.8, { rotY: -0.3 });
-    this.decor(jobs, 'brazier', 1.0, 4.6, 10.2, { flame: 1.15 });
-    this.decor(jobs, 'anvil', 0.6, 3.2, 9.8, { rotY: 0.4 });
-    this.decor(jobs, 'dummy', 2.2, 1.4, 12.2, { rotY: Math.PI });
-    this.decor(jobs, 'target', 1.4, 4.2, 12.8, { rotY: Math.PI });
-    this.decor(jobs, 'cart', 1.8, 5.8, 11.8, { rotY: 1.2 });
     // The crypt in front of the gate.
     this.decor(jobs, 'brazier', 1.0, -2.9, -15.7, { flame: 1.15 });
     this.decor(jobs, 'brazier', 1.0, 2.9, -15.7, { flame: 1.15 });
@@ -457,34 +436,6 @@ export class Board {
     this.decor(jobs, 'fern', 1.1, -7.6, -13.2, { rotY: 1.2 });
     this.decor(jobs, 'flowers', 0.8, -7.2, -14.6);
     this.decor(jobs, 'ruinPillar', 1.8, -8.6, -15.8, { rotY: 0.5 });
-    // The defenders' camp.
-    this.decor(jobs, 'chest', 1.0, -4.8, 6.2, { rotY: 0.3 });
-    this.decor(jobs, 'roadSign', 2.2, -6.8, 6.6, { rotY: 0.6 });
-    this.decor(jobs, 'fence', 3.0, 3.0, 6.6, { fit: 'width' });
-    this.decor(jobs, 'plant', 1.0, 4.8, 5.0);
-    // The mercenaries' camp behind the defenders: tents, a cooking fire, the war table.
-    this.decor(jobs, 'tentLarge', 3.6, -6.8, 11.6, { rotY: 0.3 });
-    this.decor(jobs, 'tentRound', 3.6, -1.6, 14.0);
-    this.decor(jobs, 'tentSquare', 3.4, 4.4, 12.2, { rotY: -0.3 });
-    this.decor(jobs, 'tentOpen', 3.0, -2.2, 8.4, { rotY: 0.2 });
-    this.decor(jobs, 'warTable', 2.2, -2.2, 8.4, { rotY: 0.2, fit: 'width' });
-    this.decor(jobs, 'firepit', 0.55, 2.0, 8.4, { flame: 0.45 });
-    this.decor(jobs, 'cookingRack', 2.0, 2.0, 8.4);
-    this.decor(jobs, 'bench', 0.7, 2.0, 9.9);
-    this.decor(jobs, 'bench', 0.7, 3.6, 8.2, { rotY: Math.PI / 2 });
-    this.decor(jobs, 'battleBanner', 2.6, -4.2, 6.8);
-    this.decor(jobs, 'battleBanner', 2.6, 3.4, 6.9);
-    this.decor(jobs, 'arrowBarrel', 1.4, -3.6, 6.6);
-    this.decor(jobs, 'barrelStack', 2.0, -4.8, 7.6, { rotY: 0.4 });
-    this.decor(jobs, 'sacks', 1.1, -5.6, 8.4, { rotY: 0.6 });
-    this.decor(jobs, 'cart', 1.8, -9.2, 7.8, { rotY: 0.8 });
-    this.decor(jobs, 'hayBale', 1.2, 5.4, 7.6, { rotY: 0.3 });
-    this.decor(jobs, 'hayPile', 1.8, 5.6, 9.2);
-    this.decor(jobs, 'campRack', 2.0, 0.6, 11.0, { rotY: Math.PI });
-    this.decor(jobs, 'crateStack', 2.2, -9.4, 12.6, { rotY: 0.5 });
-    this.decor(jobs, 'woodPile', 0.8, 1.6, 13.6);
-    this.decor(jobs, 'target', 1.4, -9.8, 4.6, { rotY: E });
-    this.decor(jobs, 'dummy', 2.2, -9.0, 9.6, { rotY: E });
     // The enemy's end.
     this.decor(jobs, 'rockPile', 2.0, -5.6, -15.4, { fit: 'width', rotY: 0.8 });
     this.decor(jobs, 'mushroomsRed', 0.7, 2.6, -15.4);
@@ -499,6 +450,133 @@ export class Board {
     this.decor(jobs, 'grassTuft', 0.6, 7.7, -11.0, { keep: true });
     this.decor(jobs, 'rockSmall', 0.6, 8.5, -13.2, { rotY: 1.4, keep: true });
     this.decor(jobs, 'flowers', 0.7, 7.6, -14.8, { keep: true });
+  }
+
+  /** Shows the scenery behind the defenders for a stage, building it the first time. */
+  async setStageScenery(stage: number) {
+    if (this.sceneryStage === stage) return;
+    let group = this.sceneries.get(stage);
+    if (!group) {
+      group = new THREE.Group();
+      this.sceneries.set(stage, group);
+      this.scene.add(group);
+      const prev = this.building;
+      this.building = group;
+      const jobs: Promise<unknown>[] = [];
+      this.buildScenery(stage, jobs);
+      this.building = prev;
+      await Promise.all(jobs);
+    }
+    for (const [s, g] of this.sceneries) g.visible = s === stage;
+    this.sceneryStage = stage;
+  }
+
+  private nature(jobs: Promise<unknown>[], kind: NatureKind, size: number, x: number, z: number, rotY = 0, variant = 0, fit: 'height' | 'width' = 'height') {
+    const g = this.building;
+    jobs.push(naturePiece(kind, size, variant, fit).then((o) => {
+      o.position.set(x, 0, z);
+      o.rotation.y = rotY;
+      g.add(o);
+    }));
+  }
+
+  /** A shallow glowing pool on the floor (the slime swamp). */
+  private puddle(x: number, z: number, r: number, color: number) {
+    const m = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 20).rotateX(-Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.75, depthWrite: false }),
+    );
+    m.position.set(x, 0.03, z);
+    m.scale.set(1, 1, 0.7);
+    this.building.add(m);
+  }
+
+  /**
+   * The ground behind the defenders (z 6–14), dressed for each stage's concept. Pieces stay within
+   * x ≤ 6 so the side camera keeps them, and stay low near the board so the isometric one sees past them.
+   */
+  private buildScenery(stage: number, jobs: Promise<unknown>[]) {
+    // Layouts are written for z 6–14; pull them in right behind the hero (z ≈ 4.6–9.4) so the side
+    // camera shows them, keep the hero's own spot clear, and cap heights near the board so the
+    // isometric camera (from the +x/+z corner) still sees the front row.
+    const at = (x: number, z: number) => {
+      const zz = 4.6 + (z - 6) * 0.6;
+      return [Math.abs(x) < 1.8 && zz < 6.4 ? Math.sign(x || 1) * 1.8 : x, zz] as const;
+    };
+    const cap = (size: number, x: number, z: number, fit: 'height' | 'width' = 'height') => (fit === 'height' && x > -3 ? Math.min(size, Math.max(1, z - 1.8)) : size);
+    const d = (kind: DecorKind, size: number, x: number, z: number, o: Parameters<Board['decor']>[5] = {}) => {
+      const [xx, zz] = at(x, z);
+      this.decor(jobs, kind, cap(size, xx, zz, o.fit), xx, zz, o);
+    };
+    const n = (kind: NatureKind, size: number, x: number, z: number, rotY = 0, variant = 0, fit: 'height' | 'width' = 'height') => {
+      const [xx, zz] = at(x, z);
+      this.nature(jobs, kind, cap(size, xx, zz, fit), xx, zz, rotY, variant, fit);
+    };
+    const flame = (x: number, y: number, z: number) => {
+      const [xx, zz] = at(x, z);
+      this.addFlame(new THREE.Vector3(xx, y, zz), 1.0);
+    };
+    const pool = (x: number, z: number, r: number, color: number) => {
+      const [xx, zz] = at(x, z);
+      this.puddle(xx, zz, r, color);
+    };
+    const E = Math.PI / 2;
+    switch (stage) {
+      case 0: // 1-1 숲 어귀 — the wolves' woods: dense pines, boulders, gnawed bones.
+        n('pine', 7, -5.2, 10.5, 0.3, 0); n('pine', 6, -1.4, 12.6, 1.2, 1); n('pine', 7.5, 3.4, 11.2, 2.1, 2); n('pineSmall', 3.5, 5.4, 8.6, 0.5);
+        n('pine', 6.5, -8.4, 13.4, 0.8, 1); n('pineSmall', 3, -3.2, 8.4, 1.4);
+        n('boulder', 1.6, -2.4, 7.4, 0.4); n('boulder', 1.2, 2.6, 7.2, 2.2); n('rockPile', 3.2, -6.6, 7.6, 0.6, 0, 'width');
+        n('log', 3, 1.4, 9.4, 1.2, 0, 'width'); n('stump', 0.8, -0.8, 8.8, 0.3);
+        d('bonesSmall', 1.4, 0.4, 7.4, { fit: 'width', rotY: 0.8 }); d('beastSkull', 0.8, -1.2, 7.0, { rotY: 2.4 });
+        d('fern', 1.1, -4.2, 7.0, { rotY: 0.4 }); d('fern', 1.0, 4.4, 7.8, { rotY: 2.6 }); d('grass', 0.8, 2.2, 8.2);
+        break;
+      case 1: // 1-2 이끼 늪 — the slime bog: glowing pools, giant mushrooms, swamp trees.
+        pool(-2.6, 8.2, 1.4, 0x5fd16a); pool(2.8, 9.6, 1.2, 0x7ae07a); pool(-5.6, 11.2, 1.1, 0x4fc060);
+        n('swamp', 6.5, -6.4, 9.0, 0.6); n('swamp', 7, 3.8, 12.6, 2.2);
+        d('mushroomGiant', 3.2, -1.2, 11.6, { rotY: 0.4 }); d('mushroomGiant', 2.4, 5.0, 8.8, { rotY: 2.0 }); d('mushroomSmall', 1.4, -3.6, 9.8);
+        d('mushroomSmall', 1.1, 1.0, 8.0, { rotY: 1.2 }); d('mushroomsRed', 0.8, -4.4, 7.2); d('mushroomsRed', 0.7, 3.4, 7.0); d('mushroomsRed', 0.7, -0.4, 13.4);
+        n('rock', 1, 1.2, 10.6, 0.5, 1); n('rock', 0.8, -7.8, 7.4, 1.8); d('fern', 1.2, -7.2, 12.6); d('plant', 1, 0.2, 7.4, { rotY: 0.6 });
+        break;
+      case 2: // 1-3 버려진 사냥터 — the dead hunters' ground: graves, skeletons, broken pillars, a dead tree.
+        for (const [x, z, r] of [[-4.2, 8.0, 0.2], [-1.8, 8.4, -0.1], [0.8, 8.1, 0.15], [3.2, 8.6, -0.2], [-3.0, 10.8, 0.1], [1.8, 11.0, -0.15]] as const) n('grave', 1.2, x, z, r);
+        n('bigTree', 7.5, -6.6, 11.6, 1.0); n('stump', 0.9, 4.8, 10.4, 0.6); n('pillar', 2.6, 5.2, 13.2, 0.4); n('pillar', 2.0, -2.0, 13.6, 2.1);
+        d('skeletonGround', 1.8, -0.4, 9.8, { fit: 'width', rotY: 0.6 }); d('skeletonGround', 1.6, 4.4, 8.0, { fit: 'width', rotY: 2.4 });
+        d('arrow', 0.9, 0.0, 9.4, { rotY: 0.3 }); d('arrow', 0.9, 4.0, 7.6, { rotY: 1.9 }); d('roadSign', 2.2, -6.2, 7.0, { rotY: 0.5 });
+        d('ruinPillar', 1.6, 2.6, 12.8, { rotY: 0.8 }); n('torchStick', 2.4, -0.4, 12.4); flame(-0.4, 2.5, 12.4);
+        break;
+      case 3: // 2-1 무너진 성문 — the fallen gate: rubble, broken pillars, scattered bones.
+        d('pillarRubble', 2.4, -3.6, 8.0, { fit: 'width', rotY: 0.6 }); d('pillarRubble', 2.0, 3.2, 10.6, { fit: 'width', rotY: 2.2 });
+        d('pillarStump', 1.6, -5.8, 10.4, { rotY: 0.3 }); d('pillarStump', 2.2, 4.8, 7.6, { rotY: 1.4 }); d('pillarStump', 1.2, -1.0, 12.4);
+        d('brickRubble', 1.4, 1.6, 8.2, { fit: 'width' }); d('brickRubble', 1.2, -2.0, 10.8, { fit: 'width', rotY: 1 }); d('brickRubble', 1.0, 0.4, 13.0, { fit: 'width' });
+        d('barrelBroken', 0.9, -7.2, 7.4, { rotY: 0.8 }); d('bonesSmall2', 1.3, 2.4, 12.6, { fit: 'width' }); d('vaseBroken', 0.5, 5.2, 12.8);
+        break;
+      case 4: // 2-2 횃불의 회랑 — the torch-lit corridor: braziers in pairs, weapon racks, guardian statues.
+        for (const z of [7.2, 10.4, 13.2]) { d('brazier', 1.0, -3.4, z, { flame: 1.15 }); d('brazier', 1.0, 3.4, z, { flame: 1.15 }); }
+        d('statue2', 3.0, -6.6, 9.0, { rotY: E }); d('statue2', 3.0, 5.6, 11.8, { rotY: -E });
+        d('weaponRack', 1.6, -6.6, 12.6, { rotY: E }); d('weaponRack', 1.6, 5.6, 8.0, { rotY: -E });
+        d('wallBanner', 3.2, -2.0, 14.2, { rotY: Math.PI, y: 0.6 }); d('wallBanner', 3.2, 2.0, 14.2, { rotY: Math.PI, y: 0.6 });
+        break;
+      case 5: // 2-3 주술사의 서고 — the sorcerer's library: bookcases, a reading table, a bubbling cauldron.
+        for (const [x, z, r] of [[-6.6, 8.0, E], [-6.6, 10.0, E], [-6.6, 12.0, E], [5.4, 8.4, -E], [5.4, 10.4, -E], [-2.0, 13.8, Math.PI], [1.4, 13.8, Math.PI]] as const) {
+          d(x < 0 && z < 11 ? 'bookcase' : 'bookcase2', 2.4, x, z, { rotY: r });
+        }
+        d('roundTable', 1.0, -2.4, 9.0); d('candlesTable', 0.4, -2.4, 9.0, { y: 0.95 }); d('candleStand', 1.6, -4.4, 8.0);
+        d('cauldron', 1.1, 2.0, 9.6, { flame: 0.25 }); d('candles', 0.5, 3.4, 8.4); d('chain', 1.6, 0.4, 14.3, { y: 1.6 });
+        break;
+      case 6: // 3-1 뼈의 납골당 — the ossuary in the caves: coffins, bone heaps, bone spikes, stalagmites.
+        d('coffin', 2.4, -4.0, 8.2, { fit: 'width', rotY: 0.2 }); d('coffin', 2.4, -0.6, 9.2, { fit: 'width', rotY: -0.1 }); d('coffin', 2.4, 3.0, 8.4, { fit: 'width', rotY: 0.15 });
+        d('bonePileBig', 3.2, -5.8, 11.8, { fit: 'width', rotY: 0.6 }); d('bonePile', 2.2, 2.6, 12.0, { fit: 'width', rotY: 2 });
+        d('boneSpike', 2.4, -1.6, 12.4, { rotY: 0.4 }); d('boneSpike', 2.0, 5.2, 10.2, { rotY: 2.6 }); d('beastSkull', 1, 0.8, 11.2, { rotY: 3 });
+        d('stalagmiteTall', 3.4, -7.6, 8.4); d('stalagmite', 2.0, 5.6, 13.4); d('rockSpike', 2.6, -3.4, 13.6); d('candles', 0.5, 1.2, 7.4);
+        break;
+      case 7: // 3-2 군주의 왕좌 — the lord's throne hall deep underground: a long carpet, statues, obelisks, crystals.
+        d('rug', 8.0, 0, 9.0, { fit: 'width', rotY: E });
+        d('statue', 3.6, -4.6, 8.6, { rotY: E }); d('statue', 3.6, 4.0, 8.6, { rotY: -E });
+        d('obelisk', 3.4, -4.6, 12.6, { rotY: 0.2 }); d('obelisk', 3.4, 4.0, 12.6, { rotY: -0.2 });
+        d('brazier', 1.0, -2.0, 13.4, { flame: 1.15 }); d('brazier', 1.0, 2.0, 13.4, { flame: 1.15 });
+        d('gemSpike', 2.6, -7.6, 10.8, { rotY: 0.5 }); d('gem', 1.6, 5.6, 7.2, { rotY: 1.2 }); d('stalagmiteTall', 3.0, -7.8, 7.0); d('rockPillar', 3.4, 5.8, 13.6);
+        break;
+    }
   }
 
   /** A burning flame sprite (campfires, torch poles). */
