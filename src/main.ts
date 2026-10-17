@@ -297,6 +297,7 @@ class App {
         this.board.syncTraps([]);
         this.board.syncZones([]);
         await this.board.setEnvironment(CHAPTERS[chapter].env);
+        sound.setTrack(e.stage === STAGES.length - 1 ? 'boss' : (['forest', 'dungeon', 'cave'] as const)[chapter]);
         await this.setupEnemyHero();
         this.heroHp = { player: s.sides.player.hero.health, enemy: s.sides.enemy.hero.health };
         this.writeSave();
@@ -321,7 +322,10 @@ class App {
         await this.banner('상대의 차례', '', 0.6, 'enemy');
         return;
       case 'reshuffle':
-        if (e.side === 'player') this.fx.floatText(HERO_POS.clone().setY(2), '덱을 다시 섞음', 'info');
+        if (e.side === 'player') {
+          this.fx.floatText(HERO_POS.clone().setY(2), '덱을 다시 섞음', 'info');
+          sound.play('shuffle');
+        }
         return;
       case 'burn':
         if (e.side === 'player') this.fx.floatText(HERO_POS.clone().setY(2), `손패 가득! ${card(e.card.defId).name} 소멸`, 'info');
@@ -1631,6 +1635,7 @@ class App {
   }
 
   private showTitle() {
+    sound.setTrack('title');
     const m = this.openModal(`
       <h1>카드 서바이벌</h1>
       <p>해골 군단이 왕국을 덮쳤습니다. 왕국은 금화를 걸고 용병을 모집했고, 당신은 그 계약을 받아들인 용병대장입니다. 오염된 숲을 지나 던전과 그 아래 동굴까지, 여덟 지휘관과 1:1로 맞붙어 쓰러뜨리고 보수를 받으세요.</p>
@@ -1644,7 +1649,7 @@ class App {
       </div>
       <button class="btn" id="start-btn">출정</button>
       <button class="btn secondary" id="book-open">카드북</button>
-      <p class="credits"><a href="grip.html" target="_blank" rel="noopener">무기 위치 편집기</a> · 주문 그림: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (Lorc, Delapouite 외, CC BY 3.0) · 효과음: <a href="https://kenney.nl" target="_blank" rel="noopener">Kenney</a> (CC0)</p>`);
+      <p class="credits"><a href="grip.html" target="_blank" rel="noopener">무기 위치 편집기</a> · 주문 그림: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (Lorc, Delapouite 외, CC BY 3.0) · 소리·음악: <a href="https://kenney.nl" target="_blank" rel="noopener">Kenney</a>, <a href="https://opengameart.org" target="_blank" rel="noopener">OpenGameArt</a> 작가들 (CC0)</p>`);
     m.querySelector('#book-open')!.addEventListener('click', () => this.cardBook.open());
     const raw = this.readSave();
     const save = raw && migrateSave(raw);

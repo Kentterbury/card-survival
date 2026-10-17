@@ -84,11 +84,10 @@
 
 ## 사운드
 
-효과음은 Kenney(CC0) 샘플을 쓰고, 맞는 샘플이 없는 소리와 배경음은 WebAudio로 실시간 합성한다(`src/audio/sound.ts`).
-- 샘플(`public/assets/sfx/`, 34개 · 약 220KB, `node tools/build-sfx.mjs <kenney 팩 폴더>`로 다시 만든다): 클릭·오류·내 턴(Interface Sounds), 카드 내기(책 놓기)·카드 뽑기(책장 넘김)·칼 휘두르기·금화(RPG Audio), 소환·타격·영웅 피격·보호막 깨짐·쓰러짐(Impact Sounds), 스테이지 클리어·최종 승리·패배(Music Jingles 피치카토). 같은 소리도 여러 변형 중 무작위로, 피치를 조금씩 흔들어 낸다.
-- 합성으로 남은 소리: 사격, 주문 종류별(불꽃·서리·번개·충격파·치유·강화·저주), 폭발, 불사, 상대 턴. 샘플을 다 받기 전에는 합성음이 대신 난다.
-- 효과음: 카드 사용, 소환, 근접·사격·저주 공격, 피격, 영웅 피격, 주문 종류별(불꽃·서리·번개·충격파·치유·강화·저주), 보호막 깨짐, 폭발, 죽음, 불사, 턴 시작, 금화, 승리/패배.
-- 배경음: 라단조 4화음(Am–F–Dm–E) 패드 + 베이스 + 아르페지오 + 낮은 북, 80bpm 반복.
+효과음과 배경음악은 무료 CC0 녹음을 쓰고(Kenney, OpenGameArt — 출처는 `public/assets/LICENSES.md`), 맞는 녹음이 없는 소리만 WebAudio로 실시간 합성한다(`src/audio/sound.ts`). 파일은 `node tools/build-sfx.mjs <폴더>`로 다시 만든다(효과음 53개 · 약 440KB, 음악 5곡 · 약 4.9MB). 녹음을 다 받기 전에는 합성음이 대신 난다.
+- 녹음 효과음: 클릭·오류·내 턴(Kenney Interface), 카드 내기·카드 뽑기·덱 섞기(Kenney Casino의 진짜 카드 소리), 금화(Kenney RPG), 소환·타격·영웅 피격·보호막 깨짐·쓰러짐(Kenney Impact), 칼 휘두르기(RPG Sound Pack), 주문: 불꽃(80 CC0 RPG SFX·Fireball)·얼음(Ice spells·Freeze)·치유(Cure magic)·마법(Magic Spell SFX)·저주(Dark Magic)·강화(80 CC0 RPG SFX), 스테이지 클리어·최종 승리·패배(Kenney 피치카토 징글). 같은 소리는 여러 변형 중 무작위로, 피치를 조금씩 흔들어 낸다.
+- 합성으로 남은 소리: 사격, 번개, 충격파, 폭발, 불사, 상대 턴.
+- 배경음악(반복, 바뀔 때 교차 페이드): 타이틀 「The Bard's Tale」, 1장 숲 「Dark Forest Theme」, 2장 던전 「Dungeon Theme」, 3장 동굴 「Going Deep」, 최종 결전(3-2) 「Epic Boss Battle」.
 - 왼쪽 위 버튼으로 배경음/효과음을 따로 끌 수 있고, 설정은 브라우저에 저장된다. 브라우저 정책상 첫 터치/클릭 후에 소리가 난다.
 
 ## 얼음 · 주문 마법 · 부패 (새 개념)

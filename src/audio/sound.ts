@@ -1,14 +1,19 @@
 /**
- * Sound effects are Kenney samples (CC0, public/assets/sfx/, built by tools/build-sfx.mjs)
- * where a fitting one exists; the rest (spells, music) are synthesized with WebAudio: short
- * envelopes over oscillators and filtered noise, and a slow, quiet minor-key loop. A sound
- * also falls back to its synthesized version until its samples have loaded.
+ * Sound effects and music are free CC0 recordings (Kenney and OpenGameArt; public/assets/sfx/ and
+ * public/assets/music/, built by tools/build-sfx.mjs). Sounds without a recording (shots, lightning,
+ * explosions, …) are synthesized with WebAudio from short envelopes over oscillators and filtered
+ * noise. Until a recording has loaded, its synthesized version plays instead (for the music: a slow,
+ * quiet minor-key loop).
  */
 
 export type SfxName =
   | 'click' | 'card' | 'draw' | 'summon' | 'swing' | 'hit' | 'heroHit' | 'shoot' | 'magic' | 'curse'
   | 'fire' | 'frost' | 'zap' | 'whoosh' | 'explosion' | 'heal' | 'buff' | 'wardBreak' | 'death'
-  | 'myTurn' | 'enemyTurn' | 'coin' | 'stageClear' | 'victory' | 'defeat' | 'error' | 'revive';
+  | 'myTurn' | 'enemyTurn' | 'coin' | 'stageClear' | 'victory' | 'defeat' | 'error' | 'revive' | 'shuffle';
+
+/** Background music moods (one recording each). */
+export type TrackName = 'title' | 'forest' | 'dungeon' | 'cave' | 'boss';
+const TRACK_VOL = 0.6;
 
 interface ToneOpts {
   type?: OscillatorType;
@@ -37,10 +42,11 @@ const PREFS_KEY = 'card-survival-audio-v1';
 /** Sampled sounds: how many variants (<name>_<n>.mp3) and how loud. Keep in step with tools/build-sfx.mjs. */
 const SAMPLES: Partial<Record<SfxName, { count: number; vol: number; vary?: boolean }>> = {
   click: { count: 3, vol: 0.35 },
-  card: { count: 3, vol: 0.55, vary: true },
-  draw: { count: 3, vol: 0.35, vary: true },
+  card: { count: 3, vol: 0.6, vary: true },
+  draw: { count: 3, vol: 0.4, vary: true },
+  shuffle: { count: 1, vol: 0.45 },
   summon: { count: 3, vol: 0.6, vary: true },
-  swing: { count: 2, vol: 0.45, vary: true },
+  swing: { count: 3, vol: 0.5, vary: true },
   hit: { count: 3, vol: 0.55, vary: true },
   heroHit: { count: 3, vol: 0.75, vary: true },
   wardBreak: { count: 3, vol: 0.45, vary: true },
@@ -48,6 +54,12 @@ const SAMPLES: Partial<Record<SfxName, { count: number; vol: number; vary?: bool
   coin: { count: 2, vol: 0.55 },
   error: { count: 2, vol: 0.4 },
   myTurn: { count: 1, vol: 0.45 },
+  fire: { count: 4, vol: 0.5, vary: true },
+  frost: { count: 3, vol: 0.5, vary: true },
+  heal: { count: 3, vol: 0.45, vary: true },
+  magic: { count: 3, vol: 0.45, vary: true },
+  curse: { count: 2, vol: 0.5, vary: true },
+  buff: { count: 2, vol: 0.45, vary: true },
   stageClear: { count: 1, vol: 0.6 },
   victory: { count: 1, vol: 0.65 },
   defeat: { count: 1, vol: 0.6 },
@@ -72,6 +84,10 @@ export class Sound {
   private noiseBuffer!: AudioBuffer;
   private lastPlayed = new Map<SfxName, number>();
   private samples = new Map<SfxName, AudioBuffer[]>();
+  private wantedTrack: TrackName | null = null;
+  private tracks = new Map<TrackName, AudioBuffer>();
+  private trackLoading = new Set<TrackName>();
+  private current: { name: TrackName; src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private musicTimer = 0;
   private nextBeatTime = 0;
   private beat = 0;
@@ -112,6 +128,50 @@ export class Sound {
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
     if (this.musicOn) this.startMusic();
+    this.updateTrack();
+  }
+
+  /** Switches the background music (cross-fading once the recording has loaded). */
+  setTrack(name: TrackName) {
+    this.wantedTrack = name;
+    this.updateTrack();
+  }
+
+  private updateTrack() {
+    const ctx = this.ctx;
+    const name = this.wantedTrack;
+    if (!ctx || !name || this.current?.name === name) return;
+    const buffer = this.tracks.get(name);
+    if (!buffer) {
+      void this.loadTrack(ctx, name);
+      return;
+    }
+    const old = this.current;
+    if (old) {
+      old.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.6);
+      old.src.stop(ctx.currentTime + 4);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.gain.setTargetAtTime(TRACK_VOL, ctx.currentTime, 0.8);
+    src.connect(gain).connect(this.musicBus);
+    src.start();
+    this.current = { name, src, gain };
+  }
+
+  private async loadTrack(ctx: AudioContext, name: TrackName) {
+    if (this.trackLoading.has(name)) return;
+    this.trackLoading.add(name);
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}assets/music/${name}.mp3`);
+      if (res.ok) this.tracks.set(name, await ctx.decodeAudioData(await res.arrayBuffer()));
+    } catch {
+      // Keep the synthesized loop.
+    }
+    this.updateTrack();
   }
 
   setSfx(on: boolean) {
@@ -240,6 +300,7 @@ export class Sound {
         [392, 349.23, 311.13, 261.63].forEach((f, i) => t(f, i === 3 ? 1 : 0.32, { type: 'sawtooth', vol: 0.08, cutoff: 1100, delay: i * 0.3 }));
         break;
       case 'error': t(110, 0.14, { type: 'square', vol: 0.08, cutoff: 800 }); break;
+      case 'shuffle': for (let i = 0; i < 5; i++) n(0.06, { vol: 0.1, filter: 'highpass', freq: 2500, delay: i * 0.07 }); break;
     }
   }
 
@@ -334,7 +395,8 @@ export class Sound {
       return;
     }
     while (this.nextBeatTime < ctx.currentTime + 0.6) {
-      this.musicBeat(this.beat, this.nextBeatTime);
+      // The synthesized loop only fills in until a recorded track plays.
+      if (!this.current) this.musicBeat(this.beat, this.nextBeatTime);
       this.nextBeatTime += BEAT;
       this.beat++;
     }
