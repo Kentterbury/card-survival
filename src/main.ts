@@ -1644,7 +1644,7 @@ class App {
       </div>
       <button class="btn" id="start-btn">출정</button>
       <button class="btn secondary" id="book-open">카드북</button>
-      <p class="credits"><a href="grip.html" target="_blank" rel="noopener">무기 위치 편집기</a> · 주문 그림: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (Lorc, Delapouite 외, CC BY 3.0)</p>`);
+      <p class="credits"><a href="grip.html" target="_blank" rel="noopener">무기 위치 편집기</a> · 주문 그림: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (Lorc, Delapouite 외, CC BY 3.0) · 효과음: <a href="https://kenney.nl" target="_blank" rel="noopener">Kenney</a> (CC0)</p>`);
     m.querySelector('#book-open')!.addEventListener('click', () => this.cardBook.open());
     const raw = this.readSave();
     const save = raw && migrateSave(raw);

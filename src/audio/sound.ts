@@ -1,7 +1,8 @@
 /**
- * All sound is synthesized with WebAudio at runtime — no audio files to ship or license.
- * Effects are short envelopes over oscillators and filtered noise; the music is a slow,
- * quiet minor-key loop scheduled ahead of time.
+ * Sound effects are Kenney samples (CC0, public/assets/sfx/, built by tools/build-sfx.mjs)
+ * where a fitting one exists; the rest (spells, music) are synthesized with WebAudio: short
+ * envelopes over oscillators and filtered noise, and a slow, quiet minor-key loop. A sound
+ * also falls back to its synthesized version until its samples have loaded.
  */
 
 export type SfxName =
@@ -33,6 +34,25 @@ interface NoiseOpts {
 
 const PREFS_KEY = 'card-survival-audio-v1';
 
+/** Sampled sounds: how many variants (<name>_<n>.mp3) and how loud. Keep in step with tools/build-sfx.mjs. */
+const SAMPLES: Partial<Record<SfxName, { count: number; vol: number; vary?: boolean }>> = {
+  click: { count: 3, vol: 0.35 },
+  card: { count: 3, vol: 0.55, vary: true },
+  draw: { count: 3, vol: 0.35, vary: true },
+  summon: { count: 3, vol: 0.6, vary: true },
+  swing: { count: 2, vol: 0.45, vary: true },
+  hit: { count: 3, vol: 0.55, vary: true },
+  heroHit: { count: 3, vol: 0.75, vary: true },
+  wardBreak: { count: 3, vol: 0.45, vary: true },
+  death: { count: 3, vol: 0.6, vary: true },
+  coin: { count: 2, vol: 0.55 },
+  error: { count: 2, vol: 0.4 },
+  myTurn: { count: 1, vol: 0.45 },
+  stageClear: { count: 1, vol: 0.6 },
+  victory: { count: 1, vol: 0.65 },
+  defeat: { count: 1, vol: 0.6 },
+};
+
 /** A minor progression (Am – F – Dm – E), as root frequencies and chord tones. */
 const CHORDS: { bass: number; tones: number[] }[] = [
   { bass: 55.0, tones: [220.0, 261.63, 329.63] },
@@ -51,6 +71,7 @@ export class Sound {
   private musicBus!: GainNode;
   private noiseBuffer!: AudioBuffer;
   private lastPlayed = new Map<SfxName, number>();
+  private samples = new Map<SfxName, AudioBuffer[]>();
   private musicTimer = 0;
   private nextBeatTime = 0;
   private beat = 0;
@@ -87,6 +108,7 @@ export class Sound {
       this.noiseBuffer = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
       const data = this.noiseBuffer.getChannelData(0);
       for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      void this.loadSamples(this.ctx);
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
     if (this.musicOn) this.startMusic();
@@ -122,6 +144,11 @@ export class Sound {
     const now = performance.now();
     if (now - (this.lastPlayed.get(name) ?? 0) < 45) return;
     this.lastPlayed.set(name, now);
+    const sampled = this.samples.get(name);
+    if (sampled?.length) {
+      this.playSample(ctx, name, sampled[Math.floor(Math.random() * sampled.length)]);
+      return;
+    }
     const t = (f: number, d: number, o?: ToneOpts) => this.tone(f, d, o);
     const n = (d: number, o?: NoiseOpts) => this.noise(d, o);
     switch (name) {
@@ -214,6 +241,35 @@ export class Sound {
         break;
       case 'error': t(110, 0.14, { type: 'square', vol: 0.08, cutoff: 800 }); break;
     }
+  }
+
+  /** Fetches and decodes the sampled sounds in the background (a failed one stays synthesized). */
+  private async loadSamples(ctx: AudioContext) {
+    const base = `${import.meta.env.BASE_URL}assets/sfx/`;
+    await Promise.all(Object.entries(SAMPLES).map(async ([name, spec]) => {
+      const buffers = await Promise.all(Array.from({ length: spec.count }, async (_, i) => {
+        try {
+          const res = await fetch(`${base}${name}_${i}.mp3`);
+          return res.ok ? await ctx.decodeAudioData(await res.arrayBuffer()) : null;
+        } catch {
+          return null;
+        }
+      }));
+      const ok = buffers.filter((b): b is AudioBuffer => !!b);
+      if (ok.length) this.samples.set(name as SfxName, ok);
+    }));
+  }
+
+  private playSample(ctx: AudioContext, name: SfxName, buffer: AudioBuffer) {
+    const spec = SAMPLES[name]!;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    // A little pitch spread so repeated hits do not sound identical.
+    if (spec.vary) src.playbackRate.value = 0.92 + Math.random() * 0.16;
+    const gain = ctx.createGain();
+    gain.gain.value = spec.vol;
+    src.connect(gain).connect(this.sfxBus);
+    src.start();
   }
 
   private tone(freq: number, dur: number, o: ToneOpts = {}) {
