@@ -577,18 +577,18 @@ export class Board {
     this.heroMarker.position.set(ENEMY_HERO_POS.x, 0.09, ENEMY_HERO_POS.z);
     this.heroMarker.renderOrder = 1;
     this.scene.add(this.heroMarker);
-    // Faint lines marking each side's home row.
-    for (const [z, color] of [[-ROW_D / 2, 0xffc46b], [-(LAST_ROW - 0.5) * ROW_D, 0x7dff9a]] as const) {
+    // Lines marking each side's home row: ours green, the enemy's yellow.
+    for (const [z, color] of [[-ROW_D / 2, 0x4dff7a], [-(LAST_ROW - 0.5) * ROW_D, 0xffd23a]] as const) {
       const line = new THREE.Mesh(
-        new THREE.PlaneGeometry(LANE_W * LANES, 0.08).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 }),
+        new THREE.PlaneGeometry(LANE_W * LANES, 0.13).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, toneMapped: false }),
       );
       line.position.set(0, 0.08, z);
       this.scene.add(line);
     }
     // Lane dividers running down the hall.
     const depth = ROW_D * ROWS;
-    const dividerMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false });
+    const dividerMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.38, depthWrite: false });
     for (let i = 0; i <= LANES; i++) {
       const d = new THREE.Mesh(new THREE.PlaneGeometry(0.06, depth).rotateX(-Math.PI / 2), dividerMat);
       d.position.set(laneX(i) - LANE_W / 2, 0.075, -depth / 2 + ROW_D / 2);
@@ -734,7 +734,7 @@ export class Board {
       valid: [0x5cf2a3, 0.22],
       hover: [0xfff27a, 0.45],
       danger: [0xff4a3d, 0.2],
-      enemyHome: [0x7dff9a, 0.06],
+      enemyHome: [0xffd23a, 0.07],
     };
     mat.color.setHex(style[kind][0]);
     mat.opacity = style[kind][1];
