@@ -13,7 +13,7 @@ export interface HeroPower {
 
 export const POWERS: Record<string, HeroPower> = {
   guard: {
-    id: 'guard', name: '방패 명령', cost: 1, target: 'ally',
+    id: 'guard', name: '방패 명령', cost: 6, target: 'ally',
     text: '아군 하수인 하나에게 <b>보호막</b>을 부여합니다.',
     cast: (api, t) => { if (t.kind === 'unit') api.grantKeyword(t.uid, 'ward'); },
   },
@@ -23,7 +23,7 @@ export const POWERS: Record<string, HeroPower> = {
     cast: (api, t) => api.damage(t, 1),
   },
   charge: {
-    id: 'charge', name: '돌격 명령', cost: 8, target: 'ally',
+    id: 'charge', name: '돌격 명령', cost: 6, target: 'ally',
     text: '아군 하수인 하나에게 +1/+1을 주고 한 칸 전진시킵니다.',
     cast: (api, t) => { if (t.kind === 'unit') { api.buff(t.uid, 1, 1); api.advance(t.uid, 1); } },
   },

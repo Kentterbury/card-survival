@@ -18,6 +18,10 @@ export interface ChangeEntry {
 
 export const CARD_CHANGES: ChangeEntry[] = [
   {
+    title: '지휘술 비용 조정',
+    summary: '수비대장의 방패 명령 1 → 6마나, 전쟁 족장의 돌격 명령 8 → 6마나.',
+  },
+  {
     title: '해골 군주의 위엄 · 적 지휘관 카드 뽑기',
     summary: '해골 군주에게 강력한 불 주문 지옥불·업화구와 새 전설 등급 주문 「군주의 종언」을 줬습니다. 전설 주문은 크게 보여 준 뒤 모든 줄에 불덩이가 떨어집니다. 모든 적 지휘관 덱에 카드 뽑기 카드를 넣었습니다.',
     added: ['e_hellfire', 'e_inferno_orb', 'e_lord_doom'],

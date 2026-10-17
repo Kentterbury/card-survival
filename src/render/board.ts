@@ -21,8 +21,8 @@ const NEAR_SIDE_X = 6.2;
 
 /** Sky, fog and light colours per board. */
 const MOOD: Record<EnvName, { bg: number; fogNear: number; fogFar: number; sky: number; ground: number; hemi: number; moon: number; moonI: number }> = {
-  dungeon: { bg: 0x0d0a10, fogNear: 18, fogFar: 38, sky: 0xb8c4ff, ground: 0x2a1a12, hemi: 0.85, moon: 0xffe2c0, moonI: 1.6 },
-  forest: { bg: 0x0a1410, fogNear: 20, fogFar: 42, sky: 0xa8c8ff, ground: 0x1c2a14, hemi: 1.0, moon: 0xd8e6ff, moonI: 1.7 },
+  dungeon: { bg: 0x141018, fogNear: 22, fogFar: 46, sky: 0xc8d2ff, ground: 0x4a3424, hemi: 1.45, moon: 0xffe8cc, moonI: 2.3 },
+  forest: { bg: 0x101c16, fogNear: 24, fogFar: 50, sky: 0xbcd6ff, ground: 0x34482a, hemi: 1.6, moon: 0xe4eeff, moonI: 2.4 },
 };
 
 export const LANE_W = 2.6;
@@ -82,7 +82,7 @@ export class Board {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.2;
 
     this.scene.background = new THREE.Color(0x0d0a10);
     this.scene.fog = new THREE.Fog(0x0d0a10, 18, 38);
